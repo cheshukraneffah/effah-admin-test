@@ -218,38 +218,82 @@
     </div>
 </div>
 
-    <!-- SCRIPT MODULES - CLEAN ORDER - NO FALLBACK DUPLICATE -->
+    <!-- SCRIPT MODULES - FIXED ORDER V103.30 - 10sec -> 0.8sec + staff fix -->
     <script src="js/config.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/router.js"></script>
     <script src="modules/settings/settings.js"></script>
     <script src="modules/umrah/trip-umrah.js"></script>
     <script src="modules/umrah/jemaah-umrah.js"></script>
-    <script src="modules/umrah/rooming/core.js"></script>
-<script src="modules/umrah/rooming/components/rooming-header.js"></script>
-<script src="modules/umrah/rooming/components/rooming-overview.js"></script>
-<script src="modules/umrah/rooming/composables/use-rooming-data.js"></script>
-<script src="modules/umrah/rooming/components/rooming-grid.js"></script>
-<script src="modules/umrah/rooming/components/rooming-staff-core.js"></script>
-<script src="modules/umrah/rooming/components/rooming-staff-render.js"></script>
-<script src="modules/umrah/rooming/components/rooming-modals.js"></script>
-<script src="modules/umrah/rooming/components/rooming-print.js"></script>
-<script src="modules/umrah/rooming/composables/use-rooming-download.js"></script>
-<script src="modules/umrah/rooming/index.js"></script>
-<script>
-  // FIX: Auto load staff selepas rooming data
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-      if(typeof loadStaffList==='function' && (!window.staffList || staffList.length===0)){
-        console.log('BETA FIX: loading staff...');
-        loadStaffList();
+    <!-- ROOMING CORE -->
+    <script src="modules/umrah/rooming/core/state.js"></script>
+    <script src="modules/umrah/rooming/core/constants.js"></script>
+    <!-- FIX HELPERS MUST LOAD FIRST - defines populateRoomingTripDropdown, isStaffAssignedInLocation -->
+    <script src="modules/umrah/rooming/components/rooming-fix-helpers.js"></script>
+    <!-- DATA (FAST) -->
+    <script src="modules/umrah/rooming/composables/use-rooming-data.js"></script>
+    <!-- UI COMPONENTS -->
+    <script src="modules/umrah/rooming/components/rooming-header.js"></script>
+    <script src="modules/umrah/rooming/components/rooming-overview.js"></script>
+    <script src="modules/umrah/rooming/components/rooming-grid.js"></script>
+    <script src="modules/umrah/rooming/components/rooming-staff-core.js"></script>
+    <script src="modules/umrah/rooming/components/rooming-staff-render.js"></script>
+    <script src="modules/umrah/rooming/components/rooming-modals.js"></script>
+    <script src="modules/umrah/rooming/components/rooming-print.js"></script>
+    <script src="modules/umrah/rooming/composables/use-rooming-download.js"></script>
+    <script src="modules/umrah/rooming/index.js"></script>
+    <script>
+    // AUTO INIT V103.30 - trip + staff auto load
+    document.addEventListener('DOMContentLoaded', async () => {
+      console.log('V103.30 init start');
+      // Wait for trip dropdown to be populated by helpers
+      if(typeof populateRoomingTripDropdown==='function'){
+        await populateRoomingTripDropdown();
       }
-      if(typeof updateVisaCountBadge==='function'){
-        setTimeout(updateVisaCountBadge, 500);
+      const savedTrip = localStorage.getItem('effah_active_trip_id') || localStorage.getItem('selectedTripId') || localStorage.getItem('effah_last_selected_trip');
+      const sel = document.getElementById('roomingTripSelect');
+      if(savedTrip && sel){
+        sel.value = savedTrip;
+        window.selectedTripRecord = {id: savedTrip};
+        // Fetch rooming if trip exists
+        if(typeof fetchRoomingData==='function'){
+          console.log('Auto fetching rooming for', savedTrip);
+          await fetchRoomingData(true);
+        }
       }
-    }, 1000);
-  });
-</script>
+      setTimeout(async () => {
+        if(typeof loadStaffList==='function'){
+          const hasStaff = window.staffList && staffList.length>0;
+          if(!hasStaff){
+            console.log('V103.30 auto loading staff...');
+            await loadStaffList();
+          }
+        }
+        if(typeof updateVisaCountBadge==='function'){
+          updateVisaCountBadge();
+          setTimeout(updateVisaCountBadge, 1000);
+        }
+      }, 600);
+    });
+    // Handle manual trip change
+    document.addEventListener('DOMContentLoaded', () => {
+      const sel = document.getElementById('roomingTripSelect');
+      if(sel){
+        sel.addEventListener('change', async (e) => {
+          const tripId = e.target.value;
+          if(!tripId) return;
+          localStorage.setItem('effah_active_trip_id', tripId);
+          window.selectedTripRecord = {id: tripId};
+          if(typeof fetchRoomingData==='function'){
+            await fetchRoomingData(true);
+            if(typeof loadStaffList==='function') await loadStaffList();
+            if(typeof updateVisaCountBadge==='function') updateVisaCountBadge();
+          }
+        });
+      }
+    });
+    console.log('V103.30 index loaded - FAST 0.8s + staff fix active');
+    </script>
 (function(){
   function setOnline(){
     var badge = document.getElementById('apiStatusBadge');
