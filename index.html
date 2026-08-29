@@ -237,6 +237,19 @@
 <script src="modules/umrah/rooming/composables/use-rooming-download.js"></script>
 <script src="modules/umrah/rooming/index.js"></script>
 <script>
+  // FIX: Auto load staff selepas rooming data
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+      if(typeof loadStaffList==='function' && (!window.staffList || staffList.length===0)){
+        console.log('BETA FIX: loading staff...');
+        loadStaffList();
+      }
+      if(typeof updateVisaCountBadge==='function'){
+        setTimeout(updateVisaCountBadge, 500);
+      }
+    }, 1000);
+  });
+</script>
 (function(){
   function setOnline(){
     var badge = document.getElementById('apiStatusBadge');
