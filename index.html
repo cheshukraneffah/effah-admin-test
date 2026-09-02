@@ -295,12 +295,13 @@
     console.log('V103.30 index loaded - FAST 0.8s + staff fix active');
     </script>
 (function(){
+  // V103.37 PROXY ONLY - no PAT check
   function setOnline(){
     var badge = document.getElementById('apiStatusBadge');
     if(!badge) return;
-    var pat = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat');
-    var base = window.AIRTABLE_BASE_ID || localStorage.getItem('effah_base_id');
-    if(pat && base){
+    var proxy = window.PROXY_URL || 'https://effah-proxy.cheshukran-effah.workers.dev/api';
+    var base = window.AIRTABLE_BASE_ID || 'appSsn4JyQD4DnYu0';
+    if(proxy && base){
       badge.textContent = 'Online';
       badge.className = 'text-[10px] px-2.5 py-1 rounded-full bg-emerald-400/20 text-emerald-200 border border-emerald-500/30';
       badge.style.background = '#dcfce7';
