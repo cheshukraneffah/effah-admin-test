@@ -1,7 +1,4 @@
-// V103.29 FAST - Fix 10 sec loading -> 0.8 sec
-// CHANGE 1: Use filterByFormula to fetch ONLY this trip (35 records, not 1000)
-// CHANGE 2: Parallel fetch + fields[] to reduce payload
-
+// V103.36 PROXY FAST - uses effah-proxy + TABLE_IDS
 async function fetchRoomingData_FAST(forceReload=false){
   try{
     let tripId=window.selectedTripRecord?.id||localStorage.getItem('effah_active_trip_id')||localStorage.getItem('effah_last_selected_trip')||localStorage.getItem('selectedTripId')||'';
@@ -33,46 +30,37 @@ async function fetchRoomingData_FAST(forceReload=false){
       window._roomingIsLoading=false;
       return; 
     }
-    const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); 
-    const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
-    if(!base||!pat){ 
-      const el=document.getElementById('namelistContainer');
-      if(el) el.innerHTML='<div class="p-6 text-center text-[11px] text-red-400">Airtable config missing</div>';
-      if(typeof hideRoomingLoading==='function') hideRoomingLoading();
-      window._roomingIsLoading=false;
-      return;
-    }
+    const base=window.AIRTABLE_BASE_ID||window.DEFAULT_BASE_ID||'appSsn4JyQD4DnYu0'; 
+    const proxy=window.PROXY_URL||'https://effah-proxy.cheshukran-effah.workers.dev/api';
+    const tbl=window.TABLE_IDS||{ ROOMING:'tblENHq0C677SoO8O', PAX:'tblsiSgXa9DxX3z9v', STAFF:'tblssYikTs4GOndyf', TRIP:'tbl5Pbn2HkVsev5Uy' };
 
     // FAST FILTER: Only fetch records for this trip
     const filterFormula = `FIND("${tripId}", ARRAYJOIN({TRIP}))`;
-    // Only fetch needed fields to reduce payload 70%
-    const fieldsRooming = ['TRIP','LOKASI / CITY','HOTEL','BILIK','JEMAAH','STAFF','CATATAN'].map(f=>`fields%5B%5D=${encodeURIComponent(f)}`).join('&');
-    const fieldsJemaah = ['TRIP','NAMA','NO PASPORT','FULLBOARD','BOARD BASIS','INSURAN','TRAIN','PAKEJ','STATUS VISA','VISA COPY','PASSPORT COPY'].map(f=>`fields%5B%5D=${encodeURIComponent(f)}`).join('&');
+    const fieldsRooming = ['TRIP','LOKASI / CITY','HOTEL NAME','HOTEL','BILIK','JEMAAH','STAFF LIST (ROOMING)','CATATAN BILIK','KAPASITI'].map(f=>`fields%5B%5D=${encodeURIComponent(f)}`).join('&');
+    const fieldsJemaah = ['TRIP','NAME','PASSPORT NO.','FULLBOARD','BOARD BASIS','INSURAN','TRAIN','PAKEJ','STATUS VISA','VISA COPY','PASSPORT COPY','GENDER'].map(f=>`fields%5B%5D=${encodeURIComponent(f)}`).join('&');
 
-    console.log('FAST FETCH START', tripId, new Date().toISOString());
+    console.log('FAST FETCH PROXY START', tripId, new Date().toISOString());
     const startTime = performance.now();
 
-    // PARALLEL FETCH - 3 calls at once, not sequential
     const fetchWithRetry = async (url, retries=3) => {
       for(let i=0;i<retries;i++){
-        const res = await fetch(url, {headers:{Authorization:`Bearer ${pat}`}});
+        const res = await fetch(url);
         if(res.status===429){
           const wait = 1000 * Math.pow(2,i);
           console.log(`429 rate limit, retry in ${wait}ms`);
           await new Promise(r=>setTimeout(r, wait));
           continue;
         }
-        if(!res.ok) throw new Error(`HTTP ${res.status}`);
+        if(!res.ok) throw new Error(`HTTP ${res.status} - ${await res.text()}`);
         return res.json();
       }
       throw new Error('Max retries');
     };
 
-    const roomingUrl = `https://api.airtable.com/v0/${base}/ROOMING%20LIST?filterByFormula=${encodeURIComponent(filterFormula)}&pageSize=100&${fieldsRooming}`;
-    const jemaahUrl = `https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH?filterByFormula=${encodeURIComponent(filterFormula)}&pageSize=100&${fieldsJemaah}`;
-    const staffUrl = `https://api.airtable.com/v0/${base}/STAFF%20LIST%20%28ROOMING%29?filterByFormula=${encodeURIComponent(filterFormula)}&pageSize=100`;
+    const roomingUrl = `${proxy}/${base}/${tbl.ROOMING}?filterByFormula=${encodeURIComponent(filterFormula)}&pageSize=100&${fieldsRooming}`;
+    const jemaahUrl = `${proxy}/${base}/${tbl.PAX}?filterByFormula=${encodeURIComponent(filterFormula)}&pageSize=100&${fieldsJemaah}`;
+    const staffUrl = `${proxy}/${base}/${tbl.STAFF}?filterByFormula=${encodeURIComponent(filterFormula)}&pageSize=100`;
 
-    // Fetch all 3 in parallel - this is the 10sec -> 0.8sec fix
     let allRoomsData, allJemsData, allStaffData;
     try{
       [allRoomsData, allJemsData, allStaffData] = await Promise.all([
@@ -82,21 +70,17 @@ async function fetchRoomingData_FAST(forceReload=false){
       ]);
     }catch(e){
       console.error('Parallel fetch failed, fallback to sequential', e);
-      // Fallback to old method if filter fails
       allRoomsData = await fetchWithRetry(roomingUrl).catch(()=>({records:[]}));
       allJemsData = await fetchWithRetry(jemaahUrl).catch(()=>({records:[]}));
       allStaffData = await fetchWithRetry(staffUrl).catch(()=>({records:[]}));
     }
 
-    // Handle pagination if needed (for trips >100 records, rare)
     let allRooms = allRoomsData.records || [];
     let allJems = allJemsData.records || [];
     let allStaffRaw = allStaffData.records || [];
 
-    // If offset exists, fetch remaining pages (only for large trips)
     if(allRoomsData.offset || allJemsData.offset){
       console.log('Pagination needed - large trip');
-      // Fetch remaining in parallel too
       const fetchRemaining = async (baseUrl, initialData) => {
         let records = initialData.records || [];
         let offset = initialData.offset;
@@ -114,13 +98,11 @@ async function fetchRoomingData_FAST(forceReload=false){
     const elapsed = ((performance.now()-startTime)/1000).toFixed(2);
     console.log(`FAST FETCH DONE: rooms ${allRooms.length} jemaah ${allJems.length} staff ${allStaffRaw.length} in ${elapsed}s`);
 
-    // No need client-side filter - already filtered by Airtable
     window.allRoomingRecords = allRooms;
     window.allRoomingJemaah = allJems;
     allRoomingRecords = allRooms;
     allRoomingJemaah = allJems;
 
-    // Staff processing
     try{
       window.staffList = allStaffRaw.map(r=>({
         id:r.id,
@@ -145,7 +127,6 @@ async function fetchRoomingData_FAST(forceReload=false){
     window._roomingFirstLoadDone = true;
     window._roomingIsLoading = false;
 
-    // Render in batch - use requestAnimationFrame to avoid blocking
     requestAnimationFrame(()=>{
       try{ renderLocationTabs(); }catch(e){}
       try{ renderRoomingOverview(allRoomingRecords.filter(r=>(r.fields['LOKASI / CITY']||'MEKAH').toUpperCase()=== (window.activeLocation||'MEKAH').toUpperCase())); }catch(e){ console.warn('overview', e); }
@@ -164,7 +145,6 @@ async function fetchRoomingData_FAST(forceReload=false){
   }
 }
 
-// Replace global
 window.fetchRoomingData = fetchRoomingData_FAST;
 if(typeof fetchRoomingData !== 'undefined') fetchRoomingData = fetchRoomingData_FAST;
-console.log('V103.29 FAST loaded - 10sec -> 0.8sec fix active');
+console.log('V103.36 PROXY FAST loaded - proxy + table IDs');
