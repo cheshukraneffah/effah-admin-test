@@ -1,4 +1,9 @@
 // CORE - globals, helpers, constants - extracted from rooming.js v35
+// CORE - PROXY FIXED V103.36 - FULL 410 LINES - PRESERVED
+function getProxy(){ return window.PROXY_URL || 'https://effah-proxy.cheshukran-effah.workers.dev/api'; }
+function getBase(){ return window.AIRTABLE_BASE_ID || window.DEFAULT_BASE_ID || 'appSsn4JyQD4DnYu0'; }
+function getTableIds(){ return window.TABLE_IDS || { STAFF: 'tblssYikTs4GOndyf', ROOMING: 'tblENHq0C677SoO8O', PAX: 'tblsiSgXa9DxX3z9v', TRIP: 'tbl5Pbn2HkVsev5Uy' }; }
+
 // Auto-generated modular split - keep window.* exports
 
 console.log('ROOMING V103.15 FINAL - VISA CLEAR FIX'); console.log('V103.15 CLEAN VISA');
@@ -48,13 +53,13 @@ function saveStaffList(){ try{ localStorage.setItem(getStaffStorageKey(), JSON.s
 
 async function loadStaffList(){
   try{
-    const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
-    const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
+    const base=getBase();
+    // PAT removed - using proxy
     const tripId=window.selectedTripRecord?.id||localStorage.getItem('effah_active_trip_id')||localStorage.getItem('selectedTripId')||'';
     if(!base||!pat){ staffList=JSON.parse(localStorage.getItem(getStaffStorageKey())||'[]'); renderStaffList(); return; }
     let allStaff=[],offset='';
     do{
-      const res=await fetch(`https://api.airtable.com/v0/${base}/STAFF%20LIST%20%28ROOMING%29?pageSize=100${offset?`&offset=${offset}`:''}`,{headers:{Authorization:`Bearer ${pat}`}});
+      const res=await fetch(`${getProxy()}/${base}/${getTableIds().STAFF}?pageSize=100${offset?`&offset=${offset}`:''}`);
       const data=await res.json();
       if(data.records) allStaff=allStaff.concat(data.records);
       offset=data.offset||'';
@@ -107,9 +112,9 @@ async function addNewStaff(){
     if(base&&pat){
       const fields = {'NAME': name, 'TRAIN': false, 'SORT NUMBER': staffList.length+1};
       if(tripId) fields['TRIP']=[tripId];
-      const res=await fetch(`https://api.airtable.com/v0/${base}/STAFF%20LIST%20%28ROOMING%29`,{
+      const res=await fetch(`${getProxy()}/${base}/${getTableIds().STAFF}`,{
         method:'POST',
-        headers:{'Authorization':`Bearer ${pat}`,'Content-Type':'application/json'},
+        headers:{'Content-Type':'application/json'},
         body: JSON.stringify({fields})
       });
       const data=await res.json();
@@ -138,9 +143,9 @@ async function updateStaffField(staffId, field, value){
     const payloadValue = (value==='' || value===null) ? null : value;
     const bodyFields = {};
     if(payloadValue===null){ bodyFields[airtableField]=null; } else { bodyFields[airtableField]=value; }
-    await fetch(`https://api.airtable.com/v0/${base}/STAFF%20LIST%20%28ROOMING%29/${s.airtableId}`,{
+    await fetch(`${getProxy()}/${base}/${getTableIds().STAFF}/${s.airtableId}`,{
       method:'PATCH',
-      headers:{'Authorization':`Bearer ${pat}`,'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json'},
       body: JSON.stringify({fields: bodyFields})
     });
   }catch(e){ console.error('updateStaffField failed', e); }
@@ -160,9 +165,9 @@ async function assignStaffToRoom(staffId,roomId){
   console.log('Assigning staff', staffId, 'to rooms', staff.roomIds);
   try{
     let fieldName = 'ROOMING LIST';
-    let res = await fetch(`https://api.airtable.com/v0/${base}/STAFF%20LIST%20%28ROOMING%29/${staff.airtableId}`,{
+    let res = await fetch(`${getProxy()}/${base}/${getTableIds().STAFF}/${staff.airtableId}`,{
       method:'PATCH',
-      headers:{'Authorization':`Bearer ${pat}`,'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json'},
       body: JSON.stringify({fields:{[fieldName]: staff.roomIds}})
     });
     let data = await res.json();
@@ -172,15 +177,15 @@ async function assignStaffToRoom(staffId,roomId){
       // Airtable sometimes rejects if field is still single-link - try overwrite with full array again after clearing
       if(data.error.type==='INVALID_VALUE_FOR_COLUMN' || data.error.message?.includes('422')){
         // Attempt to clear then set
-        await fetch(`https://api.airtable.com/v0/${base}/STAFF%20LIST%20%28ROOMING%29/${staff.airtableId}`,{
+        await fetch(`${getProxy()}/${base}/${getTableIds().STAFF}/${staff.airtableId}`,{
           method:'PATCH',
-          headers:{'Authorization':`Bearer ${pat}`,'Content-Type':'application/json'},
+          headers:{'Content-Type':'application/json'},
           body: JSON.stringify({fields:{[fieldName]: []}})
         });
         await new Promise(r=>setTimeout(r,300));
-        res = await fetch(`https://api.airtable.com/v0/${base}/STAFF%20LIST%20%28ROOMING%29/${staff.airtableId}`,{
+        res = await fetch(`${getProxy()}/${base}/${getTableIds().STAFF}/${staff.airtableId}`,{
           method:'PATCH',
-          headers:{'Authorization':`Bearer ${pat}`,'Content-Type':'application/json'},
+          headers:{'Content-Type':'application/json'},
           body: JSON.stringify({fields:{[fieldName]: staff.roomIds}})
         });
         data = await res.json();
@@ -188,17 +193,17 @@ async function assignStaffToRoom(staffId,roomId){
           console.error('Still fails after clear:', data.error);
           // fallback to ROOM field
           fieldName = 'ROOM';
-          await fetch(`https://api.airtable.com/v0/${base}/STAFF%20LIST%20%28ROOMING%29/${staff.airtableId}`,{
+          await fetch(`${getProxy()}/${base}/${getTableIds().STAFF}/${staff.airtableId}`,{
             method:'PATCH',
-            headers:{'Authorization':`Bearer ${pat}`,'Content-Type':'application/json'},
+            headers:{'Content-Type':'application/json'},
             body: JSON.stringify({fields:{[fieldName]: staff.roomIds}})
           });
         }
       } else {
         fieldName = 'ROOM';
-        await fetch(`https://api.airtable.com/v0/${base}/STAFF%20LIST%20%28ROOMING%29/${staff.airtableId}`,{
+        await fetch(`${getProxy()}/${base}/${getTableIds().STAFF}/${staff.airtableId}`,{
           method:'PATCH',
-          headers:{'Authorization':`Bearer ${pat}`,'Content-Type':'application/json'},
+          headers:{'Content-Type':'application/json'},
           body: JSON.stringify({fields:{[fieldName]: staff.roomIds}})
         });
       }
@@ -219,7 +224,7 @@ async function deleteStaff(staffId){
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
   const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
   if(base&&pat&&s?.airtableId){
-    try{ await fetch(`https://api.airtable.com/v0/${base}/STAFF%20LIST%20%28ROOMING%29/${s.airtableId}`,{method:'DELETE', headers:{'Authorization':`Bearer ${pat}`}}); }catch(e){ console.error(e); }
+    try{ await fetch(`${getProxy()}/${base}/${getTableIds().STAFF}/${s.airtableId}`,{method:'DELETE', headers:{'Authorization':`Bearer ${pat}`}}); }catch(e){ console.error(e); }
   }
   staffList=staffList.filter(x=>x.id!==staffId&&x.airtableId!==staffId);
   saveStaffList(); renderStaffList();
@@ -315,8 +320,8 @@ function clearStaffBoardMulti(staffId){
   const base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
   const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
   if(base&&pat&&s.airtableId){
-    fetch(`https://api.airtable.com/v0/${base}/STAFF%20LIST%20%28ROOMING%29/${s.airtableId}`,{
-      method:'PATCH', headers:{'Authorization':`Bearer ${pat}`,'Content-Type':'application/json'},
+    fetch(`${getProxy()}/${base}/${getTableIds().STAFF}/${s.airtableId}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({fields:{'BOARD BASIS': []}})
     }).then(r=>r.json()).then(d=>console.log('Clear staff board OK', d.id)).catch(e=>console.error(e));
   }
