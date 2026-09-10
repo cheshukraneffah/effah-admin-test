@@ -256,7 +256,7 @@
     </div>
     <div class="flex gap-2 justify-end mt-5">
       <button onclick="document.getElementById('newEjenModal').classList.add('hidden')" class="px-5 py-2.5 rounded-full border border-slate-200 text-[11px] font-bold">Batal</button>
-      <button onclick="addNewEjen()" class="px-6 py-2.5 rounded-full bg-[#7A0C2E] text-white text-[11px] font-bold">Simpan Ejen</button>
+      <button id="btnSimpanEjen" onclick="addNewEjen()" class="px-6 py-2.5 rounded-full bg-[#7A0C2E] text-white text-[11px] font-bold">Simpan Ejen</button>
     </div>
   </div>
 </div>
@@ -499,31 +499,48 @@ function updateEjenBadge(n){
   if(b) b.textContent = n + ' Ejen';
 }
 
+
 async function addNewEjen(){
   const nameInput=document.getElementById('newEjenName');
   const telInput=document.getElementById('newEjenTel');
   const statusInput=document.getElementById('newEjenStatus');
   const catatanInput=document.getElementById('newEjenCatatan');
-  if(!nameInput) return;
+  if(!nameInput) { console.error('newEjenName input not found'); return; }
   const name = nameInput.value.trim().toUpperCase();
-  if(!name){ alert('Nama ejen wajib isi'); return; }
+  if(!name){ alert('Nama ejen wajib isi'); nameInput.focus(); return; }
+  const btn = document.getElementById('btnSimpanEjen') || document.querySelector('#newEjenModal button[onclick="addNewEjen()"]');
+  if(btn){ btn.textContent='Menyimpan...'; btn.disabled=true; }
   try{
+    console.log('[EJEN] creating', name);
     const fields = {
       'NAMA EJEN': name,
       'NO TELEFON': telInput?.value.trim() || '',
       'STATUS': statusInput?.value || 'Aktif',
       'CATATAN': catatanInput?.value.trim() || ''
     };
-    const res = await effahCreateEjen('EJEN', fields);
-    if(res.id){
-      allEjenRecords.push(res);
+    const res = await effahCreateEjen('EJEN LIST', fields);
+    console.log('[EJEN] create res', res);
+    let rec = null;
+    if(res && res.id) rec = res;
+    else if(res && res.records && res.records[0]) rec = res.records[0];
+    if(rec){
+      allEjenRecords.push(rec);
       renderEjenList();
-      // clear
-      nameInput.value=''; telInput.value=''; catatanInput.value='';
+      nameInput.value=''; 
+      if(telInput) telInput.value=''; 
+      if(catatanInput) catatanInput.value='';
       document.getElementById('newEjenModal')?.classList.add('hidden');
+    } else {
+      throw new Error('Response takde ID: '+JSON.stringify(res).slice(0,600));
     }
-  }catch(e){ console.error('addNewEjen', e); alert('Gagal tambah ejen: '+e.message); }
+  }catch(e){ 
+    console.error('addNewEjen FAILED', e); 
+    alert('Gagal tambah ejen: '+e.message+'\n\nCheck Airtable field NAMA EJEN, NO TELEFON, STATUS, CATATAN wujud');
+  } finally {
+    if(btn){ btn.textContent='Simpan Ejen'; btn.disabled=false; }
+  }
 }
+
 
 async function editEjen(ejenId){
   const rec = allEjenRecords.find(r=>r.id===ejenId);
