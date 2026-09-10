@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Effah Travel - Portal Pengurusan</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <link rel="icon" type="image/png" href="assets/favicon.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Plus Jakarta Sans', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            dark: '#0F172A',
+                            maroon: '#800020',
+                            accent: '#10B981',
+                            bg: '#F8FAFC'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+    aside, #sidebar, .sidebar, nav.p-4 {
+        position: sticky !important;
+        top: 0 !important;
+        height: 100vh !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+    }
+    aside::-webkit-scrollbar, #sidebar::-webkit-scrollbar { width: 4px; }
+    aside::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    #statusApiBadge, #statApiStatus { transition: all 0.3s; }
+    header, .topbar, #topbar, .main-header, main > div:first-child.bg-white\/80,
+    #mainPortalWrapper > main > div:first-child, .sticky.top-0 {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 40 !important;
+        background: rgba(255,255,255,0.92) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+    }
+    main { overflow-y: auto !important; height: 100vh !important; }
+    #apiStatusBadge.offline { background: #fee2e2 !important; color: #dc2626 !important; }
+    #apiStatusBadge.online { background: #dcfce7 !important; color: #16a34a !important; }
+    #apiStatusBadge { transition: all 0.3s ease; }
+    </style>
+</head>
+<body class="bg-brand-bg font-sans text-slate-800 antialiased selection:bg-brand-maroon selection:text-white">
+
+    <div id="loginOverlay" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center border border-slate-100">
+            <div class="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto mb-4 p-2 shadow-xs border border-rose-100/50">
+                <img src="assets/logo-effah.png" alt="Effah Travel Logo" class="w-full h-full object-contain" onerror="this.outerHTML='<i class=\'fa-solid fa-kaaba text-2xl text-brand-maroon\'></i>'">
+            </div>
+            <h2 class="text-xl font-extrabold text-slate-900 tracking-tight">EFFAH TRAVEL</h2>
+            <p class="text-xs text-slate-500 mt-1 mb-6">Portal Pengurusan Operasi Dalaman</p>
+            <form onsubmit="verifyPin(event)" class="space-y-4">
+                <div>
+                    <input type="password" id="pinInput" maxlength="6" placeholder="• • • • • •" required
+                        class="w-full text-center text-2xl font-extrabold tracking-widest border border-slate-200 rounded-2xl p-3 focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50">
+                </div>
+                <p id="pinErrorMsg" class="text-xs text-rose-600 hidden font-bold"><i class="fa-solid fa-circle-exclamation mr-1"></i> Security PIN Salah!</p>
+                <button type="submit" class="w-full bg-brand-maroon text-white font-bold py-3.5 rounded-2xl hover:bg-rose-900 transition shadow-lg shadow-rose-950/20 text-sm">
+                    Masuk Portal
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="mainPortalWrapper" class="hidden min-h-screen flex">
+        <aside id="sidebar" class="w-64 bg-slate-900 text-slate-300 flex-shrink-0 flex flex-col justify-between min-h-screen fixed md:static inset-y-0 left-0 transform md:translate-x-0 transition-all duration-300 ease-in-out z-40">
+            <div>
+                <div class="p-6 flex items-center space-x-3 border-b border-slate-800">
+                    <div class="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-white/5 p-1 border border-slate-700/50">
+                        <img src="assets/logo-effah.png" alt="Effah Travel" class="w-full h-full object-contain" onerror="this.outerHTML='<i class=\'fa-solid fa-kaaba text-amber-300 text-lg\'></i>'">
+                    </div>
+                    <div>
+                        <h1 class="font-extrabold text-white text-base tracking-tight leading-none">Effah Travel</h1>
+                        <span class="text-[10px] text-slate-400 font-medium">Portal Pengurusan</span>
+                    </div>
+                </div>
+                <nav class="p-4 space-y-1.5 text-xs font-semibold">
+                    <a href="#" onclick="switchTab('home')" id="nav-home" class="nav-link flex items-center space-x-3 px-3.5 py-3 rounded-xl transition text-white bg-slate-800/80">
+                        <i class="fa-solid fa-house w-5 text-emerald-400"></i>
+                        <span>Utama & Overview</span>
+                    </a>
+                    <div class="pt-4 pb-1 px-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pakej Umrah</div>
+                    <a href="#" onclick="switchTab('pakej-umrah')" id="nav-pakej-umrah" class="nav-link flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition">
+                        <i class="fa-solid fa-kaaba w-5"></i>
+                        <span>Trip Umrah</span>
+                    </a>
+                    <a href="#" onclick="switchTab('jemaah-umrah')" id="nav-jemaah-umrah" class="nav-link flex items-center space-x-3 pl-9 pr-3.5 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition text-[11px]">
+                        <i class="fa-solid fa-users w-4"></i>
+                        <span>Maklumat Jemaah</span>
+                    </a>
+                    <a href="#" onclick="switchTab('rooming')" id="nav-rooming" class="nav-link flex items-center space-x-3 pl-9 pr-3.5 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition text-[11px]">
+                        <i class="fa-solid fa-bed w-4"></i>
+                        <span>Rooming List</span>
+                    </a>
+                    <div class="pt-4 pb-1 px-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pakej Trip Luar</div>
+                    <a href="#" onclick="switchTab('trip-luar')" id="nav-trip-luar" class="nav-link flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition">
+                        <i class="fa-solid fa-plane-departure w-5"></i>
+                        <span>Trip Luar Negara</span>
+                    </a>
+                    <a href="#" onclick="switchTab('peserta-luar')" id="nav-peserta-luar" class="nav-link flex items-center space-x-3 pl-9 pr-3.5 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition text-[11px]">
+                        <i class="fa-solid fa-passport w-4"></i>
+                        <span>Maklumat Peserta</span>
+                    </a>
+                    <div class="pt-4 pb-1 px-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Operasi & Sistem</div>
+                    <a href="#" onclick="switchTab('ejen')" id="nav-ejen" class="nav-link flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition">
+                        <i class="fa-solid fa-user-tie w-5"></i>
+                        <span>Ejen Tracker</span>
+                    </a>
+                    <a href="#" onclick="switchTab('settings')" id="nav-settings" class="nav-link flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition">
+                        <i class="fa-solid fa-gear w-5"></i>
+                        <span>Settings API</span>
+                    </a>
+                </nav>
+            </div>
+            <div class="p-4 border-t border-slate-800">
+                <div class="bg-slate-950/60 p-3 rounded-xl flex items-center justify-between text-xs">
+                    <span class="text-slate-400 text-[11px]">Status API:</span>
+                    <span id="apiStatusBadge" class="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-0.5 rounded-full font-bold text-[10px]">Offline</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col min-w-0 overflow-y-auto">
+            <header class="bg-white border-b border-slate-200/80 px-6 py-4 flex items-center justify-between sticky top-0 z-30" style="position:sticky;top:0;z-index:40;background:rgba(255,255,255,0.95);backdrop-filter:blur(16px);border-bottom:1px solid #e2e8f0;">
+                <div class="flex items-center space-x-3">
+                    <button id="sidebarToggleBtn" onclick="toggleSidebar()" class="text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 w-9 h-9 rounded-xl flex items-center justify-center transition focus:outline-none" title="Sorok/Tunjuk Sidebar">
+                        <i class="fa-solid fa-bars-staggered"></i>
+                    </button>
+                    <div class="text-xs font-semibold text-slate-400 flex items-center space-x-2">
+                        <span>Sistem Effah Travel</span>
+                        <span>/</span>
+                        <span id="breadcrumbCurrent" class="text-slate-800 font-bold">Overview</span>
+                    </div>
+                </div>
+                <button onclick="logoutPortal()" class="text-xs bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 px-3 py-1.5 rounded-xl font-bold transition">
+                    <i class="fa-solid fa-lock mr-1"></i> Kunci
+                </button>
+            </header>
+
+            <div class="p-6 md:p-8 space-y-6 max-w-7xl w-full mx-auto">
+                <section id="modul-home" class="tab-content">
+                    <div class="bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 text-white rounded-3xl p-8 md:p-10 shadow-xl relative overflow-hidden mb-8 border border-slate-800">
+                        <div class="max-w-2xl relative z-10">
+                            <span class="bg-white/10 text-white border border-white/20 text-[10px] font-bold px-3.5 py-1.5 rounded-full uppercase tracking-[0.15em]" style="color:#ffffff !important; letter-spacing:0.12em; background: rgba(255,255,255,0.12) !important;">Portal Operasi Effah Travel</span>
+                            <h1 class="text-3xl md:text-5xl font-black mt-5 mb-2 tracking-tight leading-[1.1] text-white" style="color:#ffffff !important;">Effah Travel Sdn. Bhd.</h1>
+                            <p class="text-sm md:text-lg italic font-medium tracking-wide mb-4" style="color:#ffffff !important; opacity:0.9; font-family: 'Plus Jakarta Sans', sans-serif;">"Your journey is our destiny"</p>
+                            <p class="text-sm md:text-sm leading-relaxed mb-6 max-w-xl" style="color: rgba(255,255,255,0.85) !important;">Platform pengurusan berpusat Effah Travel untuk pemantauan pendaftaran pelanggan, pengurusan trip dan analitik ejen secara menyeluruh.</p>
+                            <div class="flex flex-wrap gap-3">
+                                <button onclick="switchTab('pakej-umrah')" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold px-5 py-2.5 rounded-xl text-xs transition flex items-center shadow-md">Lihat Senarai Trip <i class="fa-solid fa-arrow-right ml-2"></i></button>
+                                <button onclick="switchTab('jemaah-umrah')" class="bg-slate-800 hover:bg-slate-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition border border-slate-700">Cari Data Jemaah</button>
+                            </div>
+                        </div>
+                        <!-- Logo watermark samar -->
+                        <div class="absolute right-0 top-1/2 -translate-y-1/2 opacity-[0.12] pointer-events-none select-none hidden md:block" style="right:-10px;">
+                            <img src="assets/logo-effah.png" alt="Effah Logo" class="w-[420px] h-[420px] object-contain" style="filter: brightness(1.2) drop-shadow(0 0 10px rgba(255,255,255,0.1));" />
+                        </div>
+                        <div class="absolute right-6 top-6 opacity-[0.06] md:hidden pointer-events-none">
+                            <img src="assets/logo-effah.png" alt="Effah Logo" class="w-[180px] h-[180px] object-contain" />
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                        <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                            <div><p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Trip Umrah</p><h3 class="text-3xl font-black text-slate-900 mt-2" id="statUmrahCount">0</h3><p class="text-[11px] text-emerald-600 font-semibold mt-1"><i class="fa-solid fa-circle-check text-[9px] mr-1"></i> Rekod Terdaftar</p></div>
+                            <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center text-xl"><i class="fa-solid fa-kaaba"></i></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                            <div><p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Trip Luar</p><h3 class="text-3xl font-black text-slate-900 mt-2" id="statLuarCount">0</h3><p class="text-[11px] text-blue-600 font-semibold mt-1"><i class="fa-solid fa-plane text-[9px] mr-1"></i> Pakej Pelancongan</p></div>
+                            <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-xl"><i class="fa-solid fa-earth-americas"></i></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                            <div><p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Jemaah Umrah</p><h3 class="text-3xl font-black text-slate-900 mt-2" id="statJemaahUmrahCount">0</h3><p class="text-[11px] text-brand-maroon font-semibold mt-1"><i class="fa-solid fa-users text-[9px] mr-1"></i> Total Peserta</p></div>
+                            <div class="w-12 h-12 bg-rose-50 text-brand-maroon rounded-2xl flex items-center justify-center text-xl"><i class="fa-solid fa-user-group"></i></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                            <div><p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Peserta Trip Luar</p><h3 class="text-3xl font-black text-slate-900 mt-2" id="statPesertaLuarCount">0</h3><p class="text-[11px] text-amber-600 font-semibold mt-1"><i class="fa-solid fa-passport text-[9px] mr-1"></i> Total Peserta</p></div>
+                            <div class="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center text-xl"><i class="fa-solid fa-suitcase-rolling"></i></div>
+                        </div>
+                    </div>
+                </section>
+                <section id="modul-pakej-umrah" class="tab-content hidden"></section>
+                <section id="modul-jemaah-umrah" class="tab-content hidden"></section>
+                <section id="modul-trip-luar" class="tab-content hidden"></section>
+                <section id="modul-peserta-luar" class="tab-content hidden"></section>
+                <section id="modul-rooming" class="tab-content hidden"></section>
+                <section id="modul-ejen" class="tab-content hidden"></section>
+                <section id="modul-settings" class="tab-content hidden"></section>
+            </div>
+        </main>
+    </div>
+
+<div id="attachmentPreviewModal" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm hidden p-4" onclick="if(event.target===this) closePreviewModal()">
+    <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-200 shrink-0">
+            <h3 id="previewTitle" class="text-sm font-bold text-slate-800 truncate flex-1 mr-3">Pratonton Lampiran</h3>
+            <div class="flex items-center gap-2 shrink-0">
+                <a id="downloadAttachmentBtn" href="#" download target="_blank" class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition"><i class="fa-solid fa-download text-xs"></i>Muat Turun</a>
+                <button onclick="closePreviewModal()" type="button" class="text-slate-400 hover:text-slate-700 p-2 rounded-lg hover:bg-slate-100 transition"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+        </div>
+        <div class="flex-1 bg-black flex justify-center items-start overflow-auto relative p-2" style="min-height:0;">
+            <img id="previewImage" src="" alt="" class="hidden max-w-full h-auto object-contain mx-auto my-auto" style="max-width: 100%; display:none;" />
+            <iframe id="previewPdf" src="" class="hidden w-full h-full border-0 bg-white min-h-[70vh]"></iframe>
+        </div>
+    </div>
+</div>
+
+    <!-- SCRIPT MODULES - CLEAN ORDER - NO FALLBACK DUPLICATE -->
+    <script src="js/config.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/router.js"></script>
+    <script src="modules/settings/settings.js"></script>
+    <script src="modules/umrah/trip-umrah.js"></script>
+    <script src="modules/umrah/jemaah-umrah.js"></script>
+    <script src="modules/umrah/rooming.js"></script>
+
+<script>
+(function(){
+  function setOnline(){
+    var badge = document.getElementById('apiStatusBadge');
+    if(!badge) return;
+    var pat = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat');
+    var base = window.AIRTABLE_BASE_ID || localStorage.getItem('effah_base_id');
+    if(pat && base){
+      badge.textContent = 'Online';
+      badge.className = 'text-[10px] px-2.5 py-1 rounded-full bg-emerald-400/20 text-emerald-200 border border-emerald-500/30';
+      badge.style.background = '#dcfce7';
+      badge.style.color = '#16a34a';
+      badge.style.borderColor = '#86efac';
+    }
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(setOnline, 500);
+    setTimeout(setOnline, 1500);
+  });
+  setInterval(setOnline, 3000);
+  window.setApiOnline = setOnline;
+  window.addEventListener('tripLoaded', setOnline);
+  window.addEventListener('jemaahLoaded', setOnline);
+})();
+</script>
+
+<script>
+(function(){
+  function getGlobalModal(){
+    const all = document.querySelectorAll('#attachmentPreviewModal');
+    if(all.length === 0) return null;
+    for(let m of all){ if(!m.closest('#modul-jemaah-umrah')) return m; }
+    return all[0];
+  }
+  window.openTripPreviewModal = function(url, title){
+    const modal = getGlobalModal();
+    if(!modal){ window.open(url, '_blank'); return; }
+    const img = modal.querySelector('#previewImage');
+    const pdf = modal.querySelector('#previewPdf');
+    const titleEl = modal.querySelector('#previewTitle');
+    const dlBtn = modal.querySelector('#downloadAttachmentBtn');
+    if(titleEl) titleEl.textContent = title || 'Preview';
+    if(dlBtn) dlBtn.href = url;
+    const lowerUrl = (url||'').toLowerCase();
+    const lowerTitle = (title||'').toLowerCase();
+    let pdfMode = false;
+    const isImageExt = lowerUrl.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/);
+    const isPdfExt = lowerUrl.includes('.pdf') || lowerTitle.includes('.pdf');
+    if(isPdfExt) pdfMode = true;
+    else if(isImageExt) pdfMode = false;
+    else if(lowerTitle.includes('passport copy') || lowerTitle.includes('picture') || lowerTitle.includes('gambar') || lowerTitle.includes('ic') || lowerTitle.includes('mofa')) pdfMode = false;
+    else if(lowerTitle.includes('visa')) pdfMode = true;
+    else pdfMode = false;
+    if(img){ img.classList.add('hidden'); img.style.display='none'; img.removeAttribute('src'); }
+    if(pdf){ pdf.classList.add('hidden'); pdf.style.display='none'; pdf.src='about:blank'; }
+    if(pdfMode){ if(pdf){ pdf.src = url; pdf.classList.remove('hidden'); pdf.style.display='block'; pdf.style.width='100%'; pdf.style.height='100%'; pdf.style.minHeight='70vh'; } }
+    else { if(img){ img.src = url; img.classList.remove('hidden'); img.style.display='block'; img.style.maxWidth='100%'; img.style.height='auto'; img.style.objectFit='contain'; img.style.margin='auto'; img.onerror = function(){ this.style.display='none'; if(pdf){ pdf.src = url; pdf.classList.remove('hidden'); pdf.style.display='block'; } }; } }
+    modal.classList.remove('hidden'); modal.style.display = 'flex'; document.body.style.overflow = 'hidden';
+  };
+  window.closePreviewModal = function(){
+    document.querySelectorAll('#attachmentPreviewModal').forEach(m=>{
+      m.classList.add('hidden'); m.style.display = 'none';
+      const img = m.querySelector('#previewImage'); const pdf = m.querySelector('#previewPdf');
+      if(img){ img.removeAttribute('src'); img.classList.add('hidden'); img.style.display='none'; }
+      if(pdf){ pdf.src='about:blank'; pdf.classList.add('hidden'); pdf.style.display='none'; }
+    });
+    document.body.style.overflow = '';
+  };
+  window.openPreviewModal = function(url, title){ return window.openTripPreviewModal(url, title); };
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape'){ const open = Array.from(document.querySelectorAll('#attachmentPreviewModal')).some(m=> !m.classList.contains('hidden')); if(open) window.closePreviewModal(); } });
+  console.log('✅ V21.1 Modal - Tall passport fix');
+})();
+</script>
+
+</body>
+</html>
