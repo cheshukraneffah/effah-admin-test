@@ -124,9 +124,8 @@ function renderEjenList(){
   if(search){
     filtered = filtered.filter(r=> {
       const name = (r.fields['NAMA EJEN']||'').toLowerCase();
-      const kod = (r.fields['KOD EJEN']||'').toLowerCase();
       const tel = (r.fields['NO TELEFON']||'').toLowerCase();
-      return name.includes(search) || kod.includes(search) || tel.includes(search);
+      return name.includes(search) || tel.includes(search);
     });
   }
   
@@ -158,7 +157,7 @@ function renderEjenList(){
       <div class="flex justify-between items-start gap-2">
         <div class="flex-1">
           <div class="font-bold text-[12px] text-slate-800">${name}</div>
-          <div class="text-[10px] text-slate-500 mt-0.5">${tel} ${r.fields['KOD EJEN']? '• '+r.fields['KOD EJEN'] : ''}</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">${tel} </div>
           ${catatan ? `<div class="text-[10px] text-slate-400 mt-1 italic">${catatan}</div>` : ''}
         </div>
         <span class="text-[9px] px-2 py-0.5 rounded-full border ${statusColor} font-bold">${status}</span>
@@ -191,7 +190,6 @@ function updateEjenBadge(n){
 async function addNewEjen(){
   const nameInput=document.getElementById('newEjenName');
   const telInput=document.getElementById('newEjenTel');
-  const kodInput=document.getElementById('newEjenKod');
   const statusInput=document.getElementById('newEjenStatus');
   const catatanInput=document.getElementById('newEjenCatatan');
   if(!nameInput) return;
@@ -201,7 +199,6 @@ async function addNewEjen(){
     const fields = {
       'NAMA EJEN': name,
       'NO TELEFON': telInput?.value.trim() || '',
-      'KOD EJEN': kodInput?.value.trim().toUpperCase() || '',
       'STATUS': statusInput?.value || 'Aktif',
       'CATATAN': catatanInput?.value.trim() || ''
     };
@@ -210,7 +207,7 @@ async function addNewEjen(){
       allEjenRecords.push(res);
       renderEjenList();
       // clear
-      nameInput.value=''; telInput.value=''; kodInput.value=''; catatanInput.value='';
+      nameInput.value=''; telInput.value=''; catatanInput.value='';
       document.getElementById('newEjenModal')?.classList.add('hidden');
     }
   }catch(e){ console.error('addNewEjen', e); alert('Gagal tambah ejen: '+e.message); }

@@ -210,7 +210,7 @@
   <div class="flex gap-2 mb-4">
     <div class="relative flex-1">
       <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[11px]"></i>
-      <input id="searchEjen" placeholder="Cari nama ejen, kod, telefon..." class="w-full text-[12px] border border-slate-200 rounded-full pl-9 pr-3 py-2.5 bg-white" oninput="filterEjenList(this.value)">
+      <input id="searchEjen" placeholder="Cari nama ejen, telefon..." class="w-full text-[12px] border border-slate-200 rounded-full pl-9 pr-3 py-2.5 bg-white" oninput="filterEjenList(this.value)">
     </div>
     <div class="text-[11px] px-3 py-2.5 bg-white border border-slate-200 rounded-full font-bold text-slate-600" id="ejenCountBadge">0 Ejen</div>
   </div>
@@ -250,10 +250,7 @@
     </div>
     <div class="space-y-2.5">
       <input id="newEjenName" placeholder="Nama Ejen *" class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[12px]">
-      <div class="grid grid-cols-2 gap-2">
-        <input id="newEjenKod" placeholder="Kod Ejen (EJN001)" class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[12px]">
-        <input id="newEjenTel" placeholder="No Telefon" class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[12px]">
-      </div>
+      <input id="newEjenTel" placeholder="No Telefon" class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[12px]">
       <select id="newEjenStatus" class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[12px] bg-white"><option value="Aktif">Aktif</option><option value="Tidak Aktif">Tidak Aktif</option><option value="Blacklist">Blacklist</option></select>
       <textarea id="newEjenCatatan" placeholder="Catatan (optional)" rows="2" class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[12px]"></textarea>
     </div>
