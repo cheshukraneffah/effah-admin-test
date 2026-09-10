@@ -1,6 +1,3 @@
-// ROUTER - adjusted for modular - extracted from rooming.js v35
-// Auto-generated modular split - keep window.* exports
-
 
 const STORAGE_TAB_KEY='effah_active_tab';
 const STORAGE_TIME_KEY='effah_last_active_time';
@@ -27,8 +24,8 @@ function switchTab(tabName,saveState=true){
   if(activeTab) activeTab.classList.remove('hidden');
   if(activeNav){ activeNav.classList.remove('text-slate-400'); activeNav.classList.add('text-white','bg-slate-800/80','font-bold'); }
   const bc=document.getElementById('breadcrumbCurrent');
-  if(bc){ const names={'home':'Overview','pakej-umrah':'Trip Umrah','jemaah-umrah':'Maklumat Jemaah Umrah','trip-luar':'Trip Luar Negara','peserta-luar':'Maklumat Peserta Luar','rooming':'Rooming List','rooming-v2':'Rooming List v2 (Modular)','ejen':'Ejen Tracker','settings':'Settings API'}; bc.textContent=names[tabName]||'Overview'; }
-  if(tabName==='rooming' || tabName==='rooming-v2'){
+  if(bc){ const names={'home':'Overview','pakej-umrah':'Trip Umrah','jemaah-umrah':'Maklumat Jemaah Umrah','trip-luar':'Trip Luar Negara','peserta-luar':'Maklumat Peserta Luar','rooming':'Rooming List','ejen':'Ejen Tracker','settings':'Settings API'}; bc.textContent=names[tabName]||'Overview'; }
+  if(tabName==='rooming'){
     if(typeof renderRoomingHTML==='function') renderRoomingHTML();
     if(typeof fetchRoomingData==='function') fetchRoomingData();
   }
@@ -64,4 +61,3 @@ function toggleSidebar(){
     if(outside) outside.classList.add('hidden');
   }
 }
-

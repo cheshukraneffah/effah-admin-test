@@ -218,90 +218,23 @@
     </div>
 </div>
 
-    <!-- SCRIPT MODULES - FIXED ORDER V103.30 - 10sec -> 0.8sec + staff fix -->
+    <!-- SCRIPT MODULES - CLEAN ORDER - NO FALLBACK DUPLICATE -->
     <script src="js/config.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/router.js"></script>
     <script src="modules/settings/settings.js"></script>
     <script src="modules/umrah/trip-umrah.js"></script>
     <script src="modules/umrah/jemaah-umrah.js"></script>
-    <!-- ROOMING CORE -->
-    <script src="modules/umrah/rooming/core/state.js"></script>
-    <script src="modules/umrah/rooming/core/constants.js"></script>
-    <!-- FIX HELPERS MUST LOAD FIRST - defines populateRoomingTripDropdown, isStaffAssignedInLocation -->
-    <script src="modules/umrah/rooming/components/rooming-fix-helpers.js"></script>
-    <!-- DATA (FAST) -->
-    <script src="modules/umrah/rooming/composables/use-rooming-data.js"></script>
-    <!-- UI COMPONENTS -->
-    <script src="modules/umrah/rooming/components/rooming-header.js"></script>
-    <script src="modules/umrah/rooming/components/rooming-overview.js"></script>
-    <script src="modules/umrah/rooming/components/rooming-grid.js"></script>
-    <script src="modules/umrah/rooming/components/rooming-staff-core.js"></script>
-    <script src="modules/umrah/rooming/components/rooming-staff-render.js"></script>
-    <script src="modules/umrah/rooming/components/rooming-modals.js"></script>
-    <script src="modules/umrah/rooming/components/rooming-print.js"></script>
-    <script src="modules/umrah/rooming/composables/use-rooming-download.js"></script>
-    <script src="modules/umrah/rooming/index.js"></script>
-    <script>
-    // AUTO INIT V103.30 - trip + staff auto load
-    document.addEventListener('DOMContentLoaded', async () => {
-      console.log('V103.30 init start');
-      // Wait for trip dropdown to be populated by helpers
-      if(typeof populateRoomingTripDropdown==='function'){
-        await populateRoomingTripDropdown();
-      }
-      const savedTrip = localStorage.getItem('effah_active_trip_id') || localStorage.getItem('selectedTripId') || localStorage.getItem('effah_last_selected_trip');
-      const sel = document.getElementById('roomingTripSelect');
-      if(savedTrip && sel){
-        sel.value = savedTrip;
-        window.selectedTripRecord = {id: savedTrip};
-        // Fetch rooming if trip exists
-        if(typeof fetchRoomingData==='function'){
-          console.log('Auto fetching rooming for', savedTrip);
-          await fetchRoomingData(true);
-        }
-      }
-      setTimeout(async () => {
-        if(typeof loadStaffList==='function'){
-          const hasStaff = window.staffList && staffList.length>0;
-          if(!hasStaff){
-            console.log('V103.30 auto loading staff...');
-            await loadStaffList();
-          }
-        }
-        if(typeof updateVisaCountBadge==='function'){
-          updateVisaCountBadge();
-          setTimeout(updateVisaCountBadge, 1000);
-        }
-      }, 600);
-    });
-    // Handle manual trip change
-    document.addEventListener('DOMContentLoaded', () => {
-      const sel = document.getElementById('roomingTripSelect');
-      if(sel){
-        sel.addEventListener('change', async (e) => {
-          const tripId = e.target.value;
-          if(!tripId) return;
-          localStorage.setItem('effah_active_trip_id', tripId);
-          window.selectedTripRecord = {id: tripId};
-          if(typeof fetchRoomingData==='function'){
-            await fetchRoomingData(true);
-            if(typeof loadStaffList==='function') await loadStaffList();
-            if(typeof updateVisaCountBadge==='function') updateVisaCountBadge();
-          }
-        });
-      }
-    });
-    console.log('V103.30 index loaded - FAST 0.8s + staff fix active');
-    </script>
+    <script src="modules/umrah/rooming.js"></script>
+
+<script>
 (function(){
-  // V103.37 PROXY ONLY - no PAT check
   function setOnline(){
     var badge = document.getElementById('apiStatusBadge');
     if(!badge) return;
-    var proxy = window.PROXY_URL || 'https://effah-proxy.cheshukran-effah.workers.dev/api';
-    var base = window.AIRTABLE_BASE_ID || 'appSsn4JyQD4DnYu0';
-    if(proxy && base){
+    var pat = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat');
+    var base = window.AIRTABLE_BASE_ID || localStorage.getItem('effah_base_id');
+    if(pat && base){
       badge.textContent = 'Online';
       badge.className = 'text-[10px] px-2.5 py-1 rounded-full bg-emerald-400/20 text-emerald-200 border border-emerald-500/30';
       badge.style.background = '#dcfce7';
