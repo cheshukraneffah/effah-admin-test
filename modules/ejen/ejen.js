@@ -244,7 +244,7 @@ async function deleteEjen(ejenId){
   }catch(e){ alert('Gagal padam: '+e.message); }
 }
 
-function viewEjenJemaah(ejenId, ejenName){
+function viewEjenJemaah_OLD(ejenId, ejenName){
   const jemaah = allJemaahForEjen.filter(j=> (j.fields['EJEN']||[]).includes(ejenId));
   if(jemaah.length===0){ alert(`Tiada jemaah untuk ${ejenName} dalam trip ini.`); return; }
   const list = jemaah.map((j,i)=> `${i+1}. ${j.fields['NAMA PENUH']||j.fields['NAMA']||'-'} - ${j.fields['NO TELEFON']||''}`).join('\n');
@@ -280,3 +280,97 @@ window.deleteEjen=deleteEjen;
 window.viewEjenJemaah=viewEjenJemaah;
 window.onEjenTripChange=onEjenTripChange;
 window.filterEjenList=filterEjenList;
+
+
+// === NEW: Assign jemaah to ejen directly from portal ===
+var allUnassignedJemaahCache = [];
+
+async function openAssignJemaahModal(ejenId, ejenName){
+  const modal = document.getElementById('assignJemaahModal');
+  if(!modal){ alert('Modal assign tak jumpa'); return; }
+  modal.classList.remove('hidden');
+  document.getElementById('assignEjenName').textContent = ejenName;
+  document.getElementById('assignEjenId').value = ejenId;
+  // Load unassigned jemaah in current trip + also jemaah already assigned to this ejen
+  const listCont = document.getElementById('assignJemaahList');
+  listCont.innerHTML = '<div class="text-[11px] text-slate-400 py-4 text-center">Memuatkan jemaah...</div>';
+  try{
+    const tripId = document.getElementById('ejenTripSelect')?.value || activeEjenTripId || '';
+    let filter = tripId ? `FIND("${tripId}", ARRAYJOIN({TRIP}))` : '';
+    // Get jemaah in this trip
+    const allInTrip = await effahGetAllEjen('PAX', filter);
+    // Filter unassigned OR already assigned to this ejen
+    const available = allInTrip.filter(j=>{
+      const ejenIds = j.fields['EJEN'] || [];
+      return ejenIds.length===0 || ejenIds.includes(ejenId);
+    });
+    allUnassignedJemaahCache = available;
+    if(available.length===0){
+      listCont.innerHTML = '<div class="text-[11px] text-slate-400 py-6 text-center">Tiada jemaah kosong dalam trip ini. Semua jemaah dah ada ejen lain.</div>';
+      return;
+    }
+    listCont.innerHTML = available.map(j=>{
+      const name = j.fields['NAMA PENUH'] || j.fields['NAMA'] || '-';
+      const isAssigned = (j.fields['EJEN']||[]).includes(ejenId);
+      return `<label class="flex items-center gap-2.5 p-2.5 border border-slate-100 rounded-xl hover:bg-slate-50 cursor-pointer">
+        <input type="checkbox" value="${j.id}" ${isAssigned?'checked':''} class="assignCheck w-4 h-4 rounded border-slate-300 text-[#7A0C2E]">
+        <div class="flex-1">
+          <div class="text-[11px] font-bold text-slate-800">${name}</div>
+          <div class="text-[10px] text-slate-500">${j.fields['NO TELEFON']||''} ${j.fields['NO PASSPORT']?'• '+j.fields['NO PASSPORT']:''}</div>
+        </div>
+        <span class="text-[9px] px-2 py-0.5 rounded-full ${isAssigned?'bg-emerald-50 text-emerald-700':'bg-slate-100 text-slate-500'}">${isAssigned?'Sudah Link':'Belum'}</span>
+      </label>`;
+    }).join('');
+  }catch(e){
+    listCont.innerHTML = `<div class="text-[11px] text-red-500">Gagal load: ${e.message}</div>`;
+  }
+}
+
+async function saveAssignJemaah(){
+  const ejenId = document.getElementById('assignEjenId')?.value;
+  if(!ejenId) return;
+  const checks = document.querySelectorAll('#assignJemaahList .assignCheck');
+  const btn = document.getElementById('btnSaveAssign');
+  if(btn){ btn.textContent='Menyimpan...'; btn.disabled=true; }
+  let success=0, fail=0;
+  for(let cb of checks){
+    const jemaahId = cb.value;
+    const shouldAssign = cb.checked;
+    const jRec = allUnassignedJemaahCache.find(j=>j.id===jemaahId);
+    const currentlyAssigned = (jRec?.fields['EJEN']||[]).includes(ejenId);
+    if(shouldAssign===currentlyAssigned) continue; // no change
+    try{
+      if(shouldAssign){
+        // Assign to this ejen (single ejen per jemaah, so replace array with [ejenId])
+        await effahUpdateEjen('PAX', jemaahId, {'EJEN':[ejenId]});
+      }else{
+        // Unassign
+        await effahUpdateEjen('PAX', jemaahId, {'EJEN':[]});
+      }
+      success++;
+    }catch(e){ console.error('assign fail', jemaahId, e); fail++; }
+  }
+  if(btn){ btn.textContent='Simpan Link'; btn.disabled=false; }
+  document.getElementById('assignJemaahModal')?.classList.add('hidden');
+  alert(`Selesai: ${success} berjaya, ${fail} gagal.`);
+  await fetchEjenData(); // refresh count
+}
+
+function closeAssignModal(){
+  document.getElementById('assignJemaahModal')?.classList.add('hidden');
+}
+
+// Override viewEjenJemaah to open assign modal instead of alert
+async function viewEjenJemaah(ejenId, ejenName){
+  // Keep old alert for quick view but also offer assign button - we will open assign modal directly for better UX
+  const count = window._ejenCountMap?.[ejenId] || 0;
+  if(confirm(`Ejen ${ejenName} ada ${count} jemaah dalam trip ini.\n\nKlik OK untuk manage/link jemaah, Cancel untuk lihat senarai sahaja.`)){
+    openAssignJemaahModal(ejenId, ejenName);
+  }else{
+    const jemaah = allJemaahForEjen.filter(j=> (j.fields['EJEN']||[]).includes(ejenId));
+    if(jemaah.length===0){ alert(`Tiada jemaah untuk ${ejenName} dalam trip ini.`); return; }
+    const list = jemaah.map((j,i)=> `${i+1}. ${j.fields['NAMA PENUH']||j.fields['NAMA']||'-'} - ${j.fields['NO TELEFON']||''}`).join('\n');
+    alert(`Jemaah bawah ${ejenName} (${jemaah.length}):\n\n${list}`);
+  }
+}
+
