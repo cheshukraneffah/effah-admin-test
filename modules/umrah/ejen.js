@@ -1,5 +1,5 @@
-// ejen.js - EJEN LIST + EJEN TRACKER V1.1 - FIX 403 SORT + USE CACHE
-console.log('EJEN V1.1 loaded - FIX 403');
+// ejen.js - EJEN LIST + EJEN TRACKER V1.1 - FIX TABLE NAME PAKEJ UMRAH SORT + USE CACHE
+console.log('EJEN V1.2 - PAKEJ UMRAH loaded - FIX TABLE NAME PAKEJ UMRAH');
 
 var allEjenRecords = window.allEjenRecords || [];
 var allEjenJemaahRecords = window.allEjenJemaahRecords || [];
@@ -261,17 +261,17 @@ async function fetchTripForEjenDropdown(){
     // 2. Fallback fetch WITHOUT sort (sort caused 403)
     const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT;
     if(!base||!pat) return;
-    console.log('Fetching TRIP UMRAH without sort...');
+    console.log('Fetching PAKEJ UMRAH without sort...');
     let all=[],offset='';
     do{
-      const url=`https://api.airtable.com/v0/${base}/TRIP%20UMRAH?pageSize=100${offset?`&offset=${offset}`:''}`;
+      const url=`https://api.airtable.com/v0/${base}/PAKEJ%20UMRAH?pageSize=100${offset?`&offset=${offset}`:''}`;
       const res=await fetch(url,{headers:{Authorization:`Bearer ${pat}`}});
       const data=await res.json();
       if(data.error){
-        console.error('TRIP UMRAH fetch error', data.error);
+        console.error('PAKEJ UMRAH fetch error', data.error);
         if(data.error.type==='INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND'){
           // Try alternative table names
-          throw new Error('Table TRIP UMRAH not found / no permission. Check table name exact.');
+          throw new Error('Table PAKEJ UMRAH not found / no permission. Check table name exact.');
         }
         throw new Error(data.error.message);
       }
