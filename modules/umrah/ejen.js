@@ -1,13 +1,13 @@
-// ejen.js V2.6 - OPTIMIZED LOADING (filterByFormula for trip, cache, no full download)
-console.log('EJEN V2.6 - FAST LOADING');
+// ejen.js V2.3 - ADD CATATAN COLUMN + RENAME TELEFON->NO TELEFON + AKSI->TINDAKAN
+console.log('EJEN V2.3 - CATATAN COLUMN');
 
 var allEjenRecords = window.allEjenRecords || [];
 var allEjenJemaahRecords = window.allEjenJemaahRecords || [];
+var allJemaahForFilter = [];
 var ejenMode = window.ejenMode || localStorage.getItem('effah_ejen_mode') || 'senarai';
 var ejenTripCache = window.ejenTripCache || [];
 var ejenActiveTripId = window.ejenActiveTripId || localStorage.getItem('effah_ejen_active_trip') || '';
 var ejenSearchQuery = '';
-var ejenTripFetchDone = false;
 
 var AIRTABLE_PAT = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat') || window.DEFAULT_PAT;
 var AIRTABLE_BASE_ID = window.AIRTABLE_BASE_ID || localStorage.getItem('effah_base_id') || window.DEFAULT_BASE_ID;
@@ -20,11 +20,7 @@ function setEjenMode(mode){
   try{ localStorage.setItem('effah_ejen_mode', mode); }catch(e){}
   renderEjenHTML();
   if(mode==='senarai') fetchEjenData();
-  if(mode==='tracker'){ 
-    if(!ejenTripFetchDone) fetchTripForEjenDropdown(); 
-    else populateEjenTripDropdown();
-    if(ejenActiveTripId) fetchJemaahForEjenTracker(ejenActiveTripId); 
-  }
+  if(mode==='tracker'){ fetchTripForEjenDropdown(); if(ejenActiveTripId) fetchJemaahForEjenTracker(ejenActiveTripId); }
 }
 
 function renderEjenHTML(){
@@ -44,7 +40,7 @@ function renderEjenHTML(){
         <div class="flex items-center gap-2">
           <div class="relative"><i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-[11px]"></i><input id="searchEjenInput" type="text" value="${ejenSearchQuery}" onkeyup="handleEjenSearch(this.value)" placeholder="${isTracker?'Cari jemaah...':'Cari ejen...'}" class="w-64 text-xs pl-8 pr-3 py-2 border border-slate-300 rounded-xl bg-slate-50"></div>
           ${!isTracker ? `<button onclick="openAddEjenModal()" class="bg-brand-maroon text-white font-bold px-4 py-2 rounded-xl text-xs"><i class="fa-solid fa-plus mr-1.5"></i> Tambah Ejen</button>` : ''}
-          <button onclick="${isTracker ? 'fetchJemaahForEjenTracker(ejenActiveTripId,true)' : 'fetchEjenData(true)'}" class="p-2 border rounded-xl bg-white" title="Refresh"><i id="iconRefreshEjen" class="fa-solid fa-rotate"></i></button>
+          <button onclick="${isTracker ? 'fetchJemaahForEjenTracker(ejenActiveTripId,true)' : 'fetchEjenData(true)'}" class="p-2 border rounded-xl bg-white"><i id="iconRefreshEjen" class="fa-solid fa-rotate"></i></button>
         </div>
       </div>
       ${isTracker ? `
@@ -53,7 +49,7 @@ function renderEjenHTML(){
           <select id="ejenTripSelect" onchange="onEjenTripChange(this.value)" class="min-w-[500px] border border-slate-300 rounded-xl px-3 py-2.5 text-xs bg-white font-bold text-slate-900"><option value="">-- Pilih Trip Umrah --</option></select>
           <span id="ejenTrackerStats" class="ml-auto text-[11px] text-slate-500"></span>
         </div>
-        <div id="ejenTrackerContainer" class="bg-white rounded-2xl border border-slate-300 overflow-hidden"><div class="p-8 text-center text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Pilih trip untuk lihat jemaah...</div></div>
+        <div id="ejenTrackerContainer" class="bg-white rounded-2xl border border-slate-300 overflow-hidden"><div class="p-8 text-center text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Pilih trip...</div></div>
       ` : `
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div class="bg-white rounded-2xl border p-3.5"><div class="text-[10px] font-bold text-slate-500 uppercase">Total Ejen</div><div class="text-xl font-extrabold">${allEjenRecords.length}</div></div>
@@ -64,7 +60,7 @@ function renderEjenHTML(){
         <div id="ejenListContainer" class="bg-white rounded-2xl border overflow-hidden"><div class="p-8 text-center text-slate-400 text-xs">Memuat ejen...</div></div>
       `}
     </div>
-    <div id="ejenModal" class="hidden fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4"><div class="bg-white rounded-2xl border shadow-2xl w-full max-w-md overflow-hidden"><div class="p-4 border-b flex justify-between"><h3 id="ejenModalTitle" class="font-bold text-sm">Tambah Ejen</h3><button onclick="closeEjenModal()"><i class="fa-solid fa-xmark"></i></button></div><div class="p-4 space-y-3"><div><label class="text-[11px] font-bold uppercase">Nama Ejen *</label><input id="ejenInputNama" type="text" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs"></div><div><label class="text-[11px] font-bold uppercase">No Telefon</label><input id="ejenInputPhone" type="text" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs"></div><div><label class="text-[11px] font-bold uppercase">Status</label><select id="ejenInputStatus" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs bg-white"><option value="AKTIF">AKTIF</option><option value="TIDAK AKTIF">TIDAK AKTIF</option></select></div><div><label class="text-[11px] font-bold uppercase">Catatan</label><textarea id="ejenInputCatatan" rows="3" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs" placeholder="Contoh: MELAKA, KL"></textarea></div><input type="hidden" id="ejenInputId"></div><div class="p-3 bg-slate-50 border-t flex justify-end gap-2"><button onclick="closeEjenModal()" class="px-4 py-2 rounded-xl text-xs font-bold border bg-white">Batal</button><button onclick="saveEjen()" class="px-5 py-2 rounded-xl text-xs font-bold bg-brand-maroon text-white">Simpan</button></div></div></div>
+    <div id="ejenModal" class="hidden fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4"><div class="bg-white rounded-2xl border shadow-2xl w-full max-w-md overflow-hidden"><div class="p-4 border-b flex justify-between"><h3 id="ejenModalTitle" class="font-bold text-sm">Tambah Ejen</h3><button onclick="closeEjenModal()"><i class="fa-solid fa-xmark"></i></button></div><div class="p-4 space-y-3"><div><label class="text-[11px] font-bold uppercase">Nama Ejen *</label><input id="ejenInputNama" type="text" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs"></div><div><label class="text-[11px] font-bold uppercase">No Telefon</label><input id="ejenInputPhone" type="text" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs"></div><div><label class="text-[11px] font-bold uppercase">Status</label><select id="ejenInputStatus" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs bg-white"><option value="AKTIF">AKTIF</option><option value="TIDAK AKTIF">TIDAK AKTIF</option></select></div><div><label class="text-[11px] font-bold uppercase">Catatan</label><textarea id="ejenInputCatatan" rows="3" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs" placeholder="Contoh: MELAKA, KL, etc"></textarea></div><input type="hidden" id="ejenInputId"></div><div class="p-3 bg-slate-50 border-t flex justify-end gap-2"><button onclick="closeEjenModal()" class="px-4 py-2 rounded-xl text-xs font-bold border bg-white">Batal</button><button onclick="saveEjen()" class="px-5 py-2 rounded-xl text-xs font-bold bg-brand-maroon text-white">Simpan</button></div></div></div>
   `;
   populateEjenTripDropdown();
   if(ejenActiveTripId){ const sel=document.getElementById('ejenTripSelect'); if(sel) sel.value=ejenActiveTripId; }
@@ -93,7 +89,11 @@ async function fetchEjenData(){
 function renderSenaraiEjenGrid(){
   const c=document.getElementById('ejenListContainer'); if(!c) return;
   let f=[...allEjenRecords];
-  if(ejenSearchQuery) f=f.filter(r=>{ const name = String(r.fields['NAMA EJEN']||'').toLowerCase(); const catatan = String(r.fields['CATATAN']||'').toLowerCase(); return name.includes(ejenSearchQuery) || catatan.includes(ejenSearchQuery); });
+  if(ejenSearchQuery) f=f.filter(r=>{
+    const name = String(r.fields['NAMA EJEN']||'').toLowerCase();
+    const catatan = String(r.fields['CATATAN']||'').toLowerCase();
+    return name.includes(ejenSearchQuery) || catatan.includes(ejenSearchQuery);
+  });
   f.sort((a,b)=>String(a.fields['NAMA EJEN']||'').localeCompare(String(b.fields['NAMA EJEN']||'')));
   if(!f.length){ c.innerHTML=`<div class="p-10 text-center text-slate-400 text-xs">Tiada ejen.</div>`; return; }
   let h=`<div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-slate-50 border-b text-[10px] font-bold uppercase tracking-wide"><tr><th class="text-left px-4 py-3 w-10">#</th><th class="text-left px-4 py-3">NAMA EJEN</th><th class="text-left px-4 py-3 w-[140px]">NO TELEFON</th><th class="text-left px-4 py-3 w-[90px]">STATUS</th><th class="text-left px-4 py-3 w-[70px]">JEMAAH</th><th class="text-left px-4 py-3 w-[180px]">CATATAN</th><th class="text-right px-4 py-3 w-[110px]">TINDAKAN</th></tr></thead><tbody>`;
@@ -111,8 +111,8 @@ function renderSenaraiEjenGrid(){
       <td class="px-4 py-3 text-slate-600 max-w-[180px] truncate" title="${escapeHtml(catatan)}">${escapeHtml(catatan)}</td>
       <td class="px-4 py-3 text-right">
         <div class="inline-flex gap-1.5">
-          <button onclick="openEditEjenModal('${r.id}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 text-[11px] font-semibold"><i class="fa-solid fa-pen text-[10px]"></i> Edit</button>
-          <button onclick="deleteEjen('${r.id}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-600 text-[11px] font-semibold"><i class="fa-solid fa-trash text-[10px]"></i> Padam</button>
+          <button onclick="openEditEjenModal('${r.id}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 text-[11px] font-semibold" title="Edit"><i class="fa-solid fa-pen text-[10px]"></i> Edit</button>
+          <button onclick="deleteEjen('${r.id}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-600 text-[11px] font-semibold" title="Padam"><i class="fa-solid fa-trash text-[10px]"></i> Padam</button>
         </div>
       </td>
     </tr>`;
@@ -126,31 +126,41 @@ function closeEjenModal(){ document.getElementById('ejenModal').classList.add('h
 async function saveEjen(){ const id=document.getElementById('ejenInputId').value.trim(); const nama=document.getElementById('ejenInputNama').value.trim().toUpperCase(); const phone=document.getElementById('ejenInputPhone').value.trim(); const status=document.getElementById('ejenInputStatus').value; const catatan=document.getElementById('ejenInputCatatan').value.trim(); if(!nama){ alert('Nama wajib'); return; } const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT; const fields={'NAMA EJEN':nama,'NO TELEFON':phone||null,'STATUS':status,'CATATAN':catatan||null}; let url=`https://api.airtable.com/v0/${base}/EJEN%20LIST`, method='POST', body={fields}; if(id){ url+=`/${id}`; method='PATCH'; } const res=await fetch(url,{method,headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify(id?{fields}:body)}); const d=await res.json(); if(d.error){ alert(d.error.message); return; } closeEjenModal(); fetchEjenData(); }
 async function deleteEjen(id){ if(!confirm('Padam ejen ini?')) return; const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT; await fetch(`https://api.airtable.com/v0/${base}/EJEN%20LIST/${id}`,{method:'DELETE',headers:{Authorization:`Bearer ${pat}`}}); allEjenRecords=allEjenRecords.filter(r=>r.id!==id); renderSenaraiEjenGrid(); }
 
-function cleanTripName(raw){ if(!raw) return ''; let s = String(raw).trim(); s = s.replace(/^\d{1,2}\/\d{1,2}\s*\|\s*/,'').trim(); return s || raw; }
+function cleanTripName(raw){
+  if(!raw) return '';
+  let s = String(raw).trim();
+  s = s.replace(/^\d{1,2}\/\d{1,2}\s*\|\s*/,'').trim();
+  return s || raw;
+}
 function parseTripDateForSort(record){
   const f=record.fields||{};
   const dateFields = ['Mula Pakej','TRIP DATE','DATE','TARIKH','Tamat Pakej'];
-  for(const key of dateFields){ let d = f[key]; if(d && typeof d === 'string'){ const parsed = new Date(d); if(!isNaN(parsed.getTime()) && parsed.getFullYear()>2020) return parsed.getTime(); } }
+  for(const key of dateFields){
+    let d = f[key];
+    if(d && typeof d === 'string'){
+      const parsed = new Date(d);
+      if(!isNaN(parsed.getTime()) && parsed.getFullYear()>2020) return parsed.getTime();
+    }
+  }
   const tripName = f['Trip'] || '';
   const yearMatch = tripName.match(/(202[5-9]|203\d)/);
   const year = yearMatch ? parseInt(yearMatch[0]) : 0;
   const months = {'JANUARI':1,'FEBRUARI':2,'MAC':3,'APRIL':4,'MEI':5,'JUN':6,'JULAI':7,'OGOS':8,'SEPTEMBER':9,'OKTOBER':10,'NOVEMBER':11,'DISEMBER':12};
-  let month = 0; const upper = tripName.toUpperCase(); for(const [k,v] of Object.entries(months)){ if(upper.includes(k)){ month=v; break; } }
+  let month = 0;
+  const upper = tripName.toUpperCase();
+  for(const [k,v] of Object.entries(months)){ if(upper.includes(k)){ month=v; break; } }
   const dayMatch = tripName.match(/^(\d{1,2})\s*-/) || tripName.match(/(\d{1,2})\s*-\s*\d{1,2}/);
   const day = dayMatch ? parseInt(dayMatch[1]) : 1;
   if(year && month) return new Date(year, month-1, day).getTime();
   if(tripName.toUpperCase().includes('TBC')) return 9999999999999;
   return 0;
 }
-
 async function fetchTripForEjenDropdown(){
-  if(ejenTripFetchDone && ejenTripCache.length>0){ populateEjenTripDropdown(); return; }
   try{
     const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT;
     let all=[],off='';
-    const start = Date.now();
     do{
-      const res=await fetch(`https://api.airtable.com/v0/${base}/PAKEJ%20UMRAH?pageSize=100&fields%5B%5D=Trip&fields%5B%5D=Mula%20Pakej&fields%5B%5D=Status${off?`&offset=${off}`:''}`,{headers:{Authorization:`Bearer ${pat}`}});
+      const res=await fetch(`https://api.airtable.com/v0/${base}/PAKEJ%20UMRAH?pageSize=100${off?`&offset=${off}`:''}`,{headers:{Authorization:`Bearer ${pat}`}});
       const data=await res.json();
       if(data.error) throw new Error(data.error.message);
       if(data.records) all=all.concat(data.records);
@@ -158,13 +168,11 @@ async function fetchTripForEjenDropdown(){
     }while(off);
     if(all.length>0){
       all.sort((a,b)=>parseTripDateForSort(a)-parseTripDateForSort(b));
-      ejenTripCache=all; window.ejenTripCache=all; ejenTripFetchDone=true;
-      console.log(`✅ PAKEJ UMRAH loaded ${all.length} in ${Date.now()-start}ms`);
+      ejenTripCache=all; window.ejenTripCache=all;
     }
     populateEjenTripDropdown();
-  }catch(e){ console.error('fetchTripForEjenDropdown failed', e); }
+  }catch(e){ console.error(e); }
 }
-
 function populateEjenTripDropdown(){
   const sel=document.getElementById('ejenTripSelect'); if(!sel) return;
   const trips=ejenTripCache||[];
@@ -181,68 +189,21 @@ function populateEjenTripDropdown(){
   sel.innerHTML = html;
   if(ejenActiveTripId) sel.value=ejenActiveTripId;
 }
-
 function onEjenTripChange(tripId){
   ejenActiveTripId=tripId; window.ejenActiveTripId=tripId;
   try{ localStorage.setItem('effah_ejen_active_trip', tripId); }catch(e){}
-  if(!tripId){ document.getElementById('ejenTrackerContainer').innerHTML=`<div class="p-8 text-center text-slate-400 text-xs">Pilih trip untuk lihat jemaah...</div>`; return; }
+  if(!tripId){ document.getElementById('ejenTrackerContainer').innerHTML=`<div class="p-8 text-center text-slate-400 text-xs">Pilih trip...</div>`; return; }
   fetchJemaahForEjenTracker(tripId);
 }
-
-// OPTIMIZED: Only fetch jemaah for selected trip using filterByFormula, not all records
-async function fetchJemaahForEjenTracker(tripId, force=false){
-  if(!tripId) return;
+async function fetchJemaahForEjenTracker(tripId){
   const container=document.getElementById('ejenTrackerContainer');
-  if(container) container.innerHTML=`<div class="p-8 text-center text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Memuatkan jemaah untuk trip ini... <span class="text-[10px]">(optimized)</span></div>`;
+  if(container) container.innerHTML=`<div class="p-8 text-center text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Memuatkan jemaah...</div>`;
   try{
     const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT;
-    const start = Date.now();
-    let all=[],off='';
-    // Use filterByFormula to only get jemaah for this trip - HUGE SPEEDUP
-    // TRIP is linked record field, we search for tripId inside it
-    const formula = `FIND("${tripId}", ARRAYJOIN({TRIP} & ""))`;
-    const encodedFormula = encodeURIComponent(formula);
-    
-    do{
-      // Only request needed fields to make it faster
-      const url=`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH?pageSize=100&filterByFormula=${encodedFormula}&fields%5B%5D=NAME&fields%5B%5D=TRIP&fields%5B%5D=EJEN&fields%5B%5D=NO%20PASPORT${off?`&offset=${off}`:''}`;
-      const res=await fetch(url,{headers:{Authorization:`Bearer ${pat}`}});
-      const data=await res.json();
-      if(data.error) {
-        console.warn('Filter failed, fallback to full fetch', data.error);
-        // Fallback: if filter fails, use old method with cached data
-        throw new Error('FILTER_FAILED');
-      }
-      if(data.records) all=all.concat(data.records);
-      off=data.offset||'';
-    }while(off);
-
-    console.log(`✅ Filtered ${all.length} jemaah for trip ${tripId} in ${Date.now()-start}ms (vs full download)`);
-    
-    allEjenJemaahRecords = all.sort((a,b)=>String(a.fields['NAME']||'').localeCompare(String(b.fields['NAME']||'')));
-    window.allEjenJemaahRecords = allEjenJemaahRecords;
-
-    if(allEjenRecords.length===0) await fetchEjenData();
-    renderEjenTrackerGrid();
-  }catch(e){
-    console.error('Optimized fetch failed, using cached fallback', e);
-    // Fallback to cached global if available
-    try{
-      if((window.allJemaahUmrahRecords?.length||0) > 0){
-        const allJemaah = window.allJemaahUmrahRecords;
-        const filtered = allJemaah.filter(j=>{
-          const f=j.fields||{};
-          const tripField = f['TRIP'] || f['PAKEJ UMRAH'] || f['PAKEJ'] || [];
-          if(Array.isArray(tripField)) return tripField.includes(tripId);
-          return false;
-        });
-        allEjenJemaahRecords = filtered.sort((a,b)=>String(a.fields['NAME']||'').localeCompare(String(b.fields['NAME']||'')));
-        window.allEjenJemaahRecords = allEjenJemaahRecords;
-        renderEjenTrackerGrid();
-        return;
-      }
-      // Last resort: full fetch but only once
-      const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT;
+    let allJemaah = [];
+    if((window.allJemaahUmrahRecords?.length||0) > 100){
+      allJemaah = window.allJemaahUmrahRecords;
+    } else {
       let all=[],off='';
       do{
         const url=`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH?pageSize=100${off?`&offset=${off}`:''}`;
@@ -252,133 +213,73 @@ async function fetchJemaahForEjenTracker(tripId, force=false){
         if(data.records) all=all.concat(data.records);
         off=data.offset||'';
       }while(off);
-      const filtered = all.filter(j=>{
-        const f=j.fields||{};
-        const tripField = f['TRIP'] || f['PAKEJ UMRAH'] || f['PAKEJ'] || [];
-        if(Array.isArray(tripField)) return tripField.includes(tripId);
-        return false;
-      });
-      allEjenJemaahRecords = filtered.sort((a,b)=>String(a.fields['NAME']||'').localeCompare(String(b.fields['NAME']||'')));
-      window.allEjenJemaahRecords = all;
-      renderEjenTrackerGrid();
-    }catch(err2){
-      console.error(err2);
-      if(container) container.innerHTML=`<div class="p-6 text-xs text-red-500">${err2.message}</div>`;
+      allJemaah = all;
+      window.allJemaahUmrahRecords = all;
     }
+    allJemaahForFilter = allJemaah;
+    const filtered = allJemaah.filter(j=>{
+      const f=j.fields||{};
+      const tripField = f['TRIP'] || f['PAKEJ UMRAH'] || f['PAKEJ'] || [];
+      if(Array.isArray(tripField)) return tripField.includes(tripId);
+      return false;
+    });
+    allEjenJemaahRecords = filtered.sort((a,b)=>String(a.fields['NAME']||'').localeCompare(String(b.fields['NAME']||'')));
+    window.allEjenJemaahRecords = allEjenJemaahRecords;
+    if(allEjenRecords.length===0) await fetchEjenData();
+    renderEjenTrackerGrid();
+  }catch(e){
+    console.error(e);
+    if(container) container.innerHTML=`<div class="p-6 text-xs text-red-500">${e.message}</div>`;
   }
 }
-
-function getEjenNamesForJemaah(jemaah){
-  const linked = jemaah.fields['EJEN'] || [];
-  if(!Array.isArray(linked) || linked.length===0) return [];
-  return linked.map(id=>{
-    const rec = allEjenRecords.find(r=>r.id===id);
-    return rec ? {id, name: rec.fields['NAMA EJEN']||id} : {id, name: id};
-  });
-}
-
 function renderEjenTrackerGrid(){
   const container=document.getElementById('ejenTrackerContainer'); const statsEl=document.getElementById('ejenTrackerStats');
   if(!container) return;
   let filtered=[...allEjenJemaahRecords];
   if(ejenSearchQuery) filtered=filtered.filter(r=>String(r.fields['NAME']||'').toLowerCase().includes(ejenSearchQuery));
-  
-  const ejenMap={}; const unassigned=[]; const sharedList=[];
+  const eField = 'EJEN';
+  const ejenMap={}; const unassigned=[];
   filtered.forEach(j=>{
-    const linked=j.fields['EJEN'] || [];
-    if(!Array.isArray(linked) || linked.length===0){
-      unassigned.push(j);
-    } else if(linked.length>=2){
-      sharedList.push(j);
-      linked.forEach(eid=>{ if(!ejenMap[eid]) ejenMap[eid]=[]; ejenMap[eid].push(j); });
-    } else {
-      const eid = linked[0];
-      if(!ejenMap[eid]) ejenMap[eid]=[];
-      ejenMap[eid].push(j);
-    }
+    const linked=j.fields[eField] || [];
+    const ejenId=Array.isArray(linked)&&linked.length>0?linked[0]:null;
+    if(!ejenId) unassigned.push(j); else { if(!ejenMap[ejenId]) ejenMap[ejenId]=[]; ejenMap[ejenId].push(j); }
   });
-
-  if(statsEl){ statsEl.textContent=`${filtered.length} Jemaah | ${filtered.length-unassigned.length-sharedList.length} Single | ${sharedList.length} Share | ${unassigned.length} Tiada Ejen`; }
-
+  if(statsEl){ statsEl.textContent=`${filtered.length} Jemaah | ${filtered.length-unassigned.length} Ada Ejen | ${unassigned.length} Tiada Ejen`; }
   const aktifEjen=allEjenRecords.filter(r=>(r.fields['STATUS']||'').toUpperCase()==='AKTIF').sort((a,b)=>String(a.fields['NAMA EJEN']||'').localeCompare(String(b.fields['NAMA EJEN']||'')));
-  const ejenOptions=`<option value="">-- Pilih Ejen --</option>`+aktifEjen.map(e=>`<option value="${e.id}">${escapeHtml(e.fields['NAMA EJEN']||'')}</option>`).join('');
-
-  let html=`<div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-slate-50 border-b text-[10px] font-bold uppercase sticky top-0"><tr><th class="text-left px-4 py-2.5 w-12">#</th><th class="text-left px-4 py-2.5">Nama Jemaah</th><th class="text-left px-4 py-2.5 w-[320px]">Ejen</th></tr></thead><tbody>`;
+  const ejenOptions=`<option value="">-- Tiada Ejen --</option>`+aktifEjen.map(e=>`<option value="${e.id}">${escapeHtml(e.fields['NAMA EJEN']||'')}</option>`).join('');
+  let html=`<div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-slate-50 border-b text-[10px] font-bold uppercase sticky top-0"><tr><th class="text-left px-4 py-2.5 w-12">#</th><th class="text-left px-4 py-2.5">Nama Jemaah</th><th class="text-left px-4 py-2.5 w-[260px]">Ejen (grouped)</th></tr></thead><tbody>`;
   let idx=1;
-
-  if(sharedList.length>0){
-    html+=`<tr class="bg-purple-50 border-y border-purple-200"><td colspan="3" class="px-4 py-2.5 font-extrabold text-purple-900"><i class="fa-solid fa-handshake mr-2"></i>KOMISEN BERKONGSI (2 EJEN) <span class="ml-2 bg-white border px-2 py-0.5 rounded-full text-[10px]">${sharedList.length} org</span></td></tr>`;
-    sharedList.forEach(j=>{
-      const ejenList = getEjenNamesForJemaah(j);
-      const badges = ejenList.map(e=>`<span class="inline-flex items-center gap-1 bg-purple-100 border border-purple-200 text-purple-800 px-2 py-0.5 rounded-full text-[10px] font-bold">${escapeHtml(e.name)} <button onclick="removeEjenFromJemaah('${j.id}','${e.id}')" class="ml-1 w-3 h-3 bg-purple-200 rounded-full flex items-center justify-center hover:bg-purple-300">×</button></span>`).join(' ');
-      html+=`<tr class="border-b bg-purple-50/30 hover:bg-purple-50"><td class="px-4 py-2">${idx++}</td><td class="px-4 py-2 font-semibold">${escapeHtml(j.fields['NAME']||'-')} <span class="ml-2 bg-purple-600 text-white text-[9px] px-1.5 py-0.5 rounded">SHARED</span></td><td class="px-4 py-2"><div class="flex flex-wrap items-center gap-1.5 mb-1">${badges}</div><select onchange="addEjenToJemaah('${j.id}',this.value); this.value=''" class="w-full border border-purple-300 rounded-lg px-2 py-1 text-[11px] bg-white"><option value="">+ Tambah ejen kedua...</option>${ejenOptions}</select></td></tr>`;
-    });
-  }
-
   Object.entries(ejenMap).sort((a,b)=>String(allEjenRecords.find(r=>r.id===a[0])?.fields['NAMA EJEN']||'').localeCompare(String(allEjenRecords.find(r=>r.id===b[0])?.fields['NAMA EJEN']||''))).forEach(([eid,list])=>{
     const ename=allEjenRecords.find(r=>r.id===eid)?.fields['NAMA EJEN']||'EJEN';
-    const singleList = list.filter(j=> (j.fields['EJEN']||[]).length===1 );
-    if(singleList.length===0 && sharedList.length>0) return;
-    html+=`<tr class="bg-slate-100 border-y"><td colspan="3" class="px-4 py-2 font-extrabold"><i class="fa-solid fa-user-tag mr-2 text-brand-maroon"></i>${escapeHtml(ename)} <span class="ml-2 bg-white border px-2 py-0.5 rounded-full text-[10px]">${singleList.length} org</span></td></tr>`;
-    singleList.forEach(j=>{
-      const ejenList = getEjenNamesForJemaah(j);
-      const badges = ejenList.map(e=>`<span class="inline-flex items-center gap-1 bg-slate-900 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">${escapeHtml(e.name)} <button onclick="removeEjenFromJemaah('${j.id}','${e.id}')" class="ml-1 w-3 h-3 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30">×</button></span>`).join(' ');
-      html+=`<tr class="border-b hover:bg-slate-50"><td class="px-4 py-2">${idx++}</td><td class="px-4 py-2 font-semibold">${escapeHtml(j.fields['NAME']||'-')}</td><td class="px-4 py-2"><div class="flex flex-wrap items-center gap-1.5 mb-1">${badges}</div><select onchange="addEjenToJemaah('${j.id}',this.value); this.value=''" class="w-full border rounded-lg px-2 py-1 text-[11px] bg-white"><option value="">+ Tambah ejen share...</option>${ejenOptions}</select></td></tr>`;
-    });
+    html+=`<tr class="bg-slate-100 border-y"><td colspan="3" class="px-4 py-2 font-extrabold"><i class="fa-solid fa-user-tag mr-2 text-brand-maroon"></i>${escapeHtml(ename)} <span class="ml-2 bg-white border px-2 py-0.5 rounded-full text-[10px]">${list.length} org</span></td></tr>`;
+    list.forEach(j=>{ const curr=Array.isArray(j.fields[eField])?j.fields[eField][0]:''; html+=`<tr class="border-b hover:bg-slate-50"><td class="px-4 py-2">${idx++}</td><td class="px-4 py-2 font-semibold">${escapeHtml(j.fields['NAME']||'-')}</td><td class="px-4 py-2"><select onchange="updateJemaahEjen('${j.id}',this.value)" class="w-full border rounded-lg px-2 py-1.5 text-xs bg-white">${ejenOptions.replace(`value="${curr}"`, `value="${curr}" selected`)}</select></td></tr>`; });
   });
-
   if(unassigned.length>0){
     html+=`<tr class="bg-amber-50 border-y border-amber-200"><td colspan="3" class="px-4 py-2 font-extrabold text-amber-800">TIADA EJEN <span class="ml-2 bg-white border px-2 py-0.5 rounded-full text-[10px]">${unassigned.length} org</span></td></tr>`;
-    unassigned.forEach(j=>{
-      html+=`<tr class="border-b hover:bg-amber-50/50"><td class="px-4 py-2">${idx++}</td><td class="px-4 py-2 font-semibold">${escapeHtml(j.fields['NAME']||'-')}</td><td class="px-4 py-2"><select onchange="addEjenToJemaah('${j.id}',this.value)" class="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-xs bg-white"><option value="">-- Pilih Ejen --</option>${ejenOptions.replace('-- Pilih Ejen --','-- Assign Ejen --')}</select></td></tr>`;
-    });
+    unassigned.forEach(j=>{ html+=`<tr class="border-b hover:bg-amber-50/50"><td class="px-4 py-2">${idx++}</td><td class="px-4 py-2 font-semibold">${escapeHtml(j.fields['NAME']||'-')}</td><td class="px-4 py-2"><select onchange="updateJemaahEjen('${j.id}',this.value)" class="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-xs bg-white">${ejenOptions}</select></td></tr>`; });
   }
   if(!filtered.length) html+=`<tr><td colspan="3" class="p-10 text-center text-slate-400">Tiada jemaah untuk trip ni.</td></tr>`;
   html+=`</tbody></table></div>`; container.innerHTML=html;
 }
-
-async function addEjenToJemaah(jId,eId){
-  if(!eId) return;
+async function updateJemaahEjen(jId,eId){
   const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT;
   const eField = 'EJEN';
-  const rec=allEjenJemaahRecords.find(r=>r.id===jId);
-  let current = rec ? (rec.fields[eField]||[]) : [];
-  if(!Array.isArray(current)) current=[];
-  if(current.includes(eId)){ alert('Ejen ni dah ada'); return; }
-  if(current.length>=2){ if(!confirm('Dah ada 2 ejen (max). Replace?')) return; current = [eId]; } else { current = [...current, eId]; }
-  if(rec) rec.fields[eField]=current;
+  const rec=allEjenJemaahRecords.find(r=>r.id===jId); if(rec) rec.fields[eField]=eId?[eId]:[];
   try{
     const url=`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jId}`;
-    const fields = {[eField]: current};
+    const fields = eId ? {[eField]:[eId]} : {[eField]:[]};
     const res=await fetch(url,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields})});
     const data=await res.json();
     if(data.error) throw new Error(data.error.message);
     renderEjenTrackerGrid();
-  }catch(e){ console.error(e); alert('Gagal: '+e.message); }
+  }catch(e){
+    console.error(e);
+    alert('Gagal: '+e.message);
+  }
 }
-
-async function removeEjenFromJemaah(jId,eId){
-  if(!confirm('Buang ejen ni?')) return;
-  const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT;
-  const eField = 'EJEN';
-  const rec=allEjenJemaahRecords.find(r=>r.id===jId);
-  let current = rec ? (rec.fields[eField]||[]) : [];
-  current = current.filter(id=>id!==eId);
-  if(rec) rec.fields[eField]=current;
-  try{
-    const url=`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jId}`;
-    const fields = {[eField]: current};
-    const res=await fetch(url,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields})});
-    const data=await res.json();
-    if(data.error) throw new Error(data.error.message);
-    renderEjenTrackerGrid();
-  }catch(e){ console.error(e); alert('Gagal: '+e.message); }
-}
-
-async function updateJemaahEjen(jId,eId){ return addEjenToJemaah(jId,eId); }
 function viewJemaahByEjen(id){ const l=allEjenRecords.find(r=>r.id===id); alert(`Ejen ${l?.fields['NAMA EJEN']} - ${l?.fields['JUMLAH JEMAAH']||0} jemaah`); setEjenMode('tracker'); }
 function escapeHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-document.addEventListener('DOMContentLoaded',()=>{ setTimeout(()=>{ if(document.getElementById('modul-ejen')){ renderEjenHTML(); fetchEjenData(); fetchTripForEjenDropdown(); } },800); });
+document.addEventListener('DOMContentLoaded',()=>{ setTimeout(()=>{ if(document.getElementById('modul-ejen')){ renderEjenHTML(); fetchEjenData(); fetchTripForEjenDropdown(); } },1200); });
 
-window.renderEjenHTML=renderEjenHTML; window.fetchEjenData=fetchEjenData; window.fetchTripForEjenDropdown=fetchTripForEjenDropdown; window.populateEjenTripDropdown=populateEjenTripDropdown; window.fetchJemaahForEjenTracker=fetchJemaahForEjenTracker; window.setEjenMode=setEjenMode; window.updateJemaahEjen=updateJemaahEjen; window.addEjenToJemaah=addEjenToJemaah; window.removeEjenFromJemaah=removeEjenFromJemaah; window.handleEjenSearch=handleEjenSearch; window.onEjenTripChange=onEjenTripChange; window.openAddEjenModal=openAddEjenModal; window.openEditEjenModal=openEditEjenModal; window.closeEjenModal=closeEjenModal; window.saveEjen=saveEjen; window.deleteEjen=deleteEjen; window.viewJemaahByEjen=viewJemaahByEjen;
+window.renderEjenHTML=renderEjenHTML; window.fetchEjenData=fetchEjenData; window.fetchTripForEjenDropdown=fetchTripForEjenDropdown; window.populateEjenTripDropdown=populateEjenTripDropdown; window.fetchJemaahForEjenTracker=fetchJemaahForEjenTracker; window.setEjenMode=setEjenMode; window.updateJemaahEjen=updateJemaahEjen; window.handleEjenSearch=handleEjenSearch; window.onEjenTripChange=onEjenTripChange; window.openAddEjenModal=openAddEjenModal; window.openEditEjenModal=openEditEjenModal; window.closeEjenModal=closeEjenModal; window.saveEjen=saveEjen; window.deleteEjen=deleteEjen; window.viewJemaahByEjen=viewJemaahByEjen;
