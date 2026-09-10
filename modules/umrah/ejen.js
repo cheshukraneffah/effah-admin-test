@@ -1,5 +1,5 @@
 // ejen.js - EJEN LIST + EJEN TRACKER V1.1 - FIX TABLE NAME PAKEJ UMRAH SORT + USE CACHE
-console.log('EJEN V1.2 - PAKEJ UMRAH loaded - FIX TABLE NAME PAKEJ UMRAH');
+console.log('EJEN V1.3 - PAKEJ UMRAH loaded - FIX TABLE NAME PAKEJ UMRAH');
 
 var allEjenRecords = window.allEjenRecords || [];
 var allEjenJemaahRecords = window.allEjenJemaahRecords || [];
@@ -241,45 +241,41 @@ async function deleteEjen(recId){
 }
 
 // ===== FIXED TRIP DROPDOWN - NO SORT PARAM, USE CACHE FIRST =====
+
 async function fetchTripForEjenDropdown(){
   try{
-    // 1. Try cache from trip-umrah module (varies by version)
-    let cached = window.allTripUmrahRecords || window.allTripRecords || window.rawTripRecordsList || window.tripUmrahCache || window.tripCache || [];
-    if(window.tripMap && Object.keys(window.tripMap).length>0){
-      // tripMap is object id->record, convert to array
-      const fromMap = Object.values(window.tripMap);
-      if(fromMap.length>0) cached = fromMap;
-    }
-    if(cached && cached.length>0){
-      ejenTripCache = cached;
-      window.ejenTripCache = cached;
-      console.log('✅ ejenTripCache from existing cache', cached.length);
-      populateEjenTripDropdown();
-      return;
-    }
-
-    // 2. Fallback fetch WITHOUT sort (sort caused 403)
     const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT;
     if(!base||!pat) return;
-    console.log('Fetching PAKEJ UMRAH without sort...');
+    console.log('Fetching PAKEJ UMRAH for ejen dropdown...');
     let all=[],offset='';
     do{
+      // NO SORT to avoid 403, simple fetch
       const url=`https://api.airtable.com/v0/${base}/PAKEJ%20UMRAH?pageSize=100${offset?`&offset=${offset}`:''}`;
       const res=await fetch(url,{headers:{Authorization:`Bearer ${pat}`}});
       const data=await res.json();
       if(data.error){
         console.error('PAKEJ UMRAH fetch error', data.error);
-        if(data.error.type==='INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND'){
-          // Try alternative table names
-          throw new Error('Table PAKEJ UMRAH not found / no permission. Check table name exact.');
+        // fallback to cache if fails
+        let cached = window.allTripUmrahRecords || window.allTripRecords || window.rawTripRecordsList || window.tripUmrahCache || [];
+        if(cached && cached.length>0){
+          ejenTripCache=cached;
+          populateEjenTripDropdown();
+          return;
         }
         throw new Error(data.error.message);
       }
       if(data.records) all=all.concat(data.records);
       offset=data.offset||'';
     }while(offset);
+    // sort by date field if exists, client side
+    all.sort((a,b)=>{
+      const da = a.fields['TRIP DATE'] || a.fields['DATE'] || a.fields['TARIKH'] || '';
+      const db = b.fields['TRIP DATE'] || b.fields['DATE'] || b.fields['TARIKH'] || '';
+      return String(db).localeCompare(String(da));
+    });
     ejenTripCache=all;
     window.ejenTripCache=all;
+    console.log('✅ PAKEJ UMRAH loaded', all.length, all[0]?.fields);
     populateEjenTripDropdown();
   }catch(e){
     console.error('fetchTripForEjenDropdown failed', e);
@@ -288,16 +284,10 @@ async function fetchTripForEjenDropdown(){
   }
 }
 
-function populateEjenTripDropdown(){
-  const sel=document.getElementById('ejenTripSelect');
-  if(!sel) return;
-  const trips=ejenTripCache||[];
-  sel.innerHTML=`<option value="">-- Pilih Trip Umrah (${trips.length} trip) --</option>`+trips.map(t=>{
-    const name=t.fields['TRIP NAME']||t.fields['NAMA TRIP']||t.fields['TRIP']||t.fields['Name']||t.id;
-    return `<option value="${t.id}">${escapeHtml(String(name)).substring(0,80)}</option>`;
-  }).join('');
-  if(ejenActiveTripId) sel.value=ejenActiveTripId;
-}
+
+
+
+
 
 function onEjenTripChange(tripId){
   ejenActiveTripId=tripId;
@@ -310,6 +300,7 @@ function onEjenTripChange(tripId){
   fetchJemaahForEjenTracker(tripId);
 }
 
+
 async function fetchJemaahForEjenTracker(tripId, force=false){
   if(!tripId) return;
   const container=document.getElementById('ejenTrackerContainer');
@@ -317,15 +308,36 @@ async function fetchJemaahForEjenTracker(tripId, force=false){
   try{
     const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT;
     let all=[],offset='';
-    const filter=`FIND("${tripId}",ARRAYJOIN({TRIP}))`;
-    do{
-      const url=`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH?filterByFormula=${encodeURIComponent(filter)}&pageSize=100${offset?`&offset=${offset}`:''}`;
+    // Try filter with PAKEJ UMRAH first, fallback to TRIP, PAKEJ
+    const fieldsToTry = ['PAKEJ UMRAH','PAKEJ','TRIP'];
+    let successField = null;
+    for(const fieldName of fieldsToTry){
+      try{
+        all=[]; offset='';
+        const filter=`FIND("${tripId}",ARRAYJOIN({${fieldName}}))`;
+        console.log('Trying filter', fieldName, filter);
+        do{
+          const url=`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH?filterByFormula=${encodeURIComponent(filter)}&pageSize=100${offset?`&offset=${offset}`:''}`;
+          const res=await fetch(url,{headers:{Authorization:`Bearer ${pat}`}});
+          const data=await res.json();
+          if(data.error) throw new Error(data.error.message);
+          if(data.records) all=all.concat(data.records);
+          offset=data.offset||'';
+        }while(offset);
+        if(all.length>0){ successField=fieldName; console.log('✅ Found jemaah with field', fieldName, all.length); break; }
+      }catch(err){
+        console.log('Filter failed for', fieldName, err.message);
+        continue;
+      }
+    }
+    // if still 0, try without filter but log one record to see fields
+    if(all.length===0){
+      console.log('No jemaah with FIND, trying to fetch 1 sample to inspect fields...');
+      const url=`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH?pageSize=1`;
       const res=await fetch(url,{headers:{Authorization:`Bearer ${pat}`}});
       const data=await res.json();
-      if(data.error) throw new Error(data.error.message);
-      if(data.records) all=all.concat(data.records);
-      offset=data.offset||'';
-    }while(offset);
+      console.log('Sample jemaah record fields:', data.records?.[0]?.fields);
+    }
     all.sort((a,b)=> String(a.fields['NAME']||'').localeCompare(String(b.fields['NAME']||'')));
     allEjenJemaahRecords=all;
     window.allEjenJemaahRecords=all;
@@ -333,9 +345,11 @@ async function fetchJemaahForEjenTracker(tripId, force=false){
     renderEjenTrackerGrid();
   }catch(e){
     console.error('fetchJemaahForEjenTracker failed', e);
-    if(container) container.innerHTML=`<div class="p-6 text-xs text-red-500">Gagal load jemaah: ${e.message}</div>`;
+    const container=document.getElementById('ejenTrackerContainer');
+    if(container) container.innerHTML=`<div class="p-6 text-xs text-red-500">Gagal load jemaah: ${e.message}<br><br>Buka console (F12) untuk lihat sample fields.</div>`;
   }
 }
+
 
 function renderEjenTrackerGrid(){
   const container=document.getElementById('ejenTrackerContainer');
