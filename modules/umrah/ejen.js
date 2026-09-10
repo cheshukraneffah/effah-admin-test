@@ -1,13 +1,13 @@
-// ejen.js V2.5 - REMOVE SHARE KOMISEN BANNER + KEEP MULTI EJEN LOGIC
-console.log('EJEN V2.5 - NO BANNER, MULTI EJEN KEPT');
+// ejen.js V2.6 - OPTIMIZED LOADING (filterByFormula for trip, cache, no full download)
+console.log('EJEN V2.6 - FAST LOADING');
 
 var allEjenRecords = window.allEjenRecords || [];
 var allEjenJemaahRecords = window.allEjenJemaahRecords || [];
-var allJemaahForFilter = [];
 var ejenMode = window.ejenMode || localStorage.getItem('effah_ejen_mode') || 'senarai';
 var ejenTripCache = window.ejenTripCache || [];
 var ejenActiveTripId = window.ejenActiveTripId || localStorage.getItem('effah_ejen_active_trip') || '';
 var ejenSearchQuery = '';
+var ejenTripFetchDone = false;
 
 var AIRTABLE_PAT = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat') || window.DEFAULT_PAT;
 var AIRTABLE_BASE_ID = window.AIRTABLE_BASE_ID || localStorage.getItem('effah_base_id') || window.DEFAULT_BASE_ID;
@@ -20,7 +20,11 @@ function setEjenMode(mode){
   try{ localStorage.setItem('effah_ejen_mode', mode); }catch(e){}
   renderEjenHTML();
   if(mode==='senarai') fetchEjenData();
-  if(mode==='tracker'){ fetchTripForEjenDropdown(); if(ejenActiveTripId) fetchJemaahForEjenTracker(ejenActiveTripId); }
+  if(mode==='tracker'){ 
+    if(!ejenTripFetchDone) fetchTripForEjenDropdown(); 
+    else populateEjenTripDropdown();
+    if(ejenActiveTripId) fetchJemaahForEjenTracker(ejenActiveTripId); 
+  }
 }
 
 function renderEjenHTML(){
@@ -40,7 +44,7 @@ function renderEjenHTML(){
         <div class="flex items-center gap-2">
           <div class="relative"><i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-[11px]"></i><input id="searchEjenInput" type="text" value="${ejenSearchQuery}" onkeyup="handleEjenSearch(this.value)" placeholder="${isTracker?'Cari jemaah...':'Cari ejen...'}" class="w-64 text-xs pl-8 pr-3 py-2 border border-slate-300 rounded-xl bg-slate-50"></div>
           ${!isTracker ? `<button onclick="openAddEjenModal()" class="bg-brand-maroon text-white font-bold px-4 py-2 rounded-xl text-xs"><i class="fa-solid fa-plus mr-1.5"></i> Tambah Ejen</button>` : ''}
-          <button onclick="${isTracker ? 'fetchJemaahForEjenTracker(ejenActiveTripId,true)' : 'fetchEjenData(true)'}" class="p-2 border rounded-xl bg-white"><i id="iconRefreshEjen" class="fa-solid fa-rotate"></i></button>
+          <button onclick="${isTracker ? 'fetchJemaahForEjenTracker(ejenActiveTripId,true)' : 'fetchEjenData(true)'}" class="p-2 border rounded-xl bg-white" title="Refresh"><i id="iconRefreshEjen" class="fa-solid fa-rotate"></i></button>
         </div>
       </div>
       ${isTracker ? `
@@ -49,7 +53,7 @@ function renderEjenHTML(){
           <select id="ejenTripSelect" onchange="onEjenTripChange(this.value)" class="min-w-[500px] border border-slate-300 rounded-xl px-3 py-2.5 text-xs bg-white font-bold text-slate-900"><option value="">-- Pilih Trip Umrah --</option></select>
           <span id="ejenTrackerStats" class="ml-auto text-[11px] text-slate-500"></span>
         </div>
-        <div id="ejenTrackerContainer" class="bg-white rounded-2xl border border-slate-300 overflow-hidden"><div class="p-8 text-center text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Pilih trip...</div></div>
+        <div id="ejenTrackerContainer" class="bg-white rounded-2xl border border-slate-300 overflow-hidden"><div class="p-8 text-center text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Pilih trip untuk lihat jemaah...</div></div>
       ` : `
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div class="bg-white rounded-2xl border p-3.5"><div class="text-[10px] font-bold text-slate-500 uppercase">Total Ejen</div><div class="text-xl font-extrabold">${allEjenRecords.length}</div></div>
@@ -60,7 +64,7 @@ function renderEjenHTML(){
         <div id="ejenListContainer" class="bg-white rounded-2xl border overflow-hidden"><div class="p-8 text-center text-slate-400 text-xs">Memuat ejen...</div></div>
       `}
     </div>
-    <div id="ejenModal" class="hidden fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4"><div class="bg-white rounded-2xl border shadow-2xl w-full max-w-md overflow-hidden"><div class="p-4 border-b flex justify-between"><h3 id="ejenModalTitle" class="font-bold text-sm">Tambah Ejen</h3><button onclick="closeEjenModal()"><i class="fa-solid fa-xmark"></i></button></div><div class="p-4 space-y-3"><div><label class="text-[11px] font-bold uppercase">Nama Ejen *</label><input id="ejenInputNama" type="text" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs"></div><div><label class="text-[11px] font-bold uppercase">No Telefon</label><input id="ejenInputPhone" type="text" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs"></div><div><label class="text-[11px] font-bold uppercase">Status</label><select id="ejenInputStatus" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs bg-white"><option value="AKTIF">AKTIF</option><option value="TIDAK AKTIF">TIDAK AKTIF</option></select></div><div><label class="text-[11px] font-bold uppercase">Catatan</label><textarea id="ejenInputCatatan" rows="3" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs" placeholder="Contoh: MELAKA, KL, etc"></textarea></div><input type="hidden" id="ejenInputId"></div><div class="p-3 bg-slate-50 border-t flex justify-end gap-2"><button onclick="closeEjenModal()" class="px-4 py-2 rounded-xl text-xs font-bold border bg-white">Batal</button><button onclick="saveEjen()" class="px-5 py-2 rounded-xl text-xs font-bold bg-brand-maroon text-white">Simpan</button></div></div></div>
+    <div id="ejenModal" class="hidden fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4"><div class="bg-white rounded-2xl border shadow-2xl w-full max-w-md overflow-hidden"><div class="p-4 border-b flex justify-between"><h3 id="ejenModalTitle" class="font-bold text-sm">Tambah Ejen</h3><button onclick="closeEjenModal()"><i class="fa-solid fa-xmark"></i></button></div><div class="p-4 space-y-3"><div><label class="text-[11px] font-bold uppercase">Nama Ejen *</label><input id="ejenInputNama" type="text" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs"></div><div><label class="text-[11px] font-bold uppercase">No Telefon</label><input id="ejenInputPhone" type="text" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs"></div><div><label class="text-[11px] font-bold uppercase">Status</label><select id="ejenInputStatus" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs bg-white"><option value="AKTIF">AKTIF</option><option value="TIDAK AKTIF">TIDAK AKTIF</option></select></div><div><label class="text-[11px] font-bold uppercase">Catatan</label><textarea id="ejenInputCatatan" rows="3" class="w-full mt-1 border rounded-xl px-3 py-2 text-xs" placeholder="Contoh: MELAKA, KL"></textarea></div><input type="hidden" id="ejenInputId"></div><div class="p-3 bg-slate-50 border-t flex justify-end gap-2"><button onclick="closeEjenModal()" class="px-4 py-2 rounded-xl text-xs font-bold border bg-white">Batal</button><button onclick="saveEjen()" class="px-5 py-2 rounded-xl text-xs font-bold bg-brand-maroon text-white">Simpan</button></div></div></div>
   `;
   populateEjenTripDropdown();
   if(ejenActiveTripId){ const sel=document.getElementById('ejenTripSelect'); if(sel) sel.value=ejenActiveTripId; }
@@ -138,21 +142,29 @@ function parseTripDateForSort(record){
   if(tripName.toUpperCase().includes('TBC')) return 9999999999999;
   return 0;
 }
+
 async function fetchTripForEjenDropdown(){
+  if(ejenTripFetchDone && ejenTripCache.length>0){ populateEjenTripDropdown(); return; }
   try{
     const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT;
     let all=[],off='';
+    const start = Date.now();
     do{
-      const res=await fetch(`https://api.airtable.com/v0/${base}/PAKEJ%20UMRAH?pageSize=100${off?`&offset=${off}`:''}`,{headers:{Authorization:`Bearer ${pat}`}});
+      const res=await fetch(`https://api.airtable.com/v0/${base}/PAKEJ%20UMRAH?pageSize=100&fields%5B%5D=Trip&fields%5B%5D=Mula%20Pakej&fields%5B%5D=Status${off?`&offset=${off}`:''}`,{headers:{Authorization:`Bearer ${pat}`}});
       const data=await res.json();
       if(data.error) throw new Error(data.error.message);
       if(data.records) all=all.concat(data.records);
       off=data.offset||'';
     }while(off);
-    if(all.length>0){ all.sort((a,b)=>parseTripDateForSort(a)-parseTripDateForSort(b)); ejenTripCache=all; window.ejenTripCache=all; }
+    if(all.length>0){
+      all.sort((a,b)=>parseTripDateForSort(a)-parseTripDateForSort(b));
+      ejenTripCache=all; window.ejenTripCache=all; ejenTripFetchDone=true;
+      console.log(`✅ PAKEJ UMRAH loaded ${all.length} in ${Date.now()-start}ms`);
+    }
     populateEjenTripDropdown();
-  }catch(e){ console.error(e); }
+  }catch(e){ console.error('fetchTripForEjenDropdown failed', e); }
 }
+
 function populateEjenTripDropdown(){
   const sel=document.getElementById('ejenTripSelect'); if(!sel) return;
   const trips=ejenTripCache||[];
@@ -169,21 +181,68 @@ function populateEjenTripDropdown(){
   sel.innerHTML = html;
   if(ejenActiveTripId) sel.value=ejenActiveTripId;
 }
+
 function onEjenTripChange(tripId){
   ejenActiveTripId=tripId; window.ejenActiveTripId=tripId;
   try{ localStorage.setItem('effah_ejen_active_trip', tripId); }catch(e){}
-  if(!tripId){ document.getElementById('ejenTrackerContainer').innerHTML=`<div class="p-8 text-center text-slate-400 text-xs">Pilih trip...</div>`; return; }
+  if(!tripId){ document.getElementById('ejenTrackerContainer').innerHTML=`<div class="p-8 text-center text-slate-400 text-xs">Pilih trip untuk lihat jemaah...</div>`; return; }
   fetchJemaahForEjenTracker(tripId);
 }
-async function fetchJemaahForEjenTracker(tripId){
+
+// OPTIMIZED: Only fetch jemaah for selected trip using filterByFormula, not all records
+async function fetchJemaahForEjenTracker(tripId, force=false){
+  if(!tripId) return;
   const container=document.getElementById('ejenTrackerContainer');
-  if(container) container.innerHTML=`<div class="p-8 text-center text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Memuatkan jemaah...</div>`;
+  if(container) container.innerHTML=`<div class="p-8 text-center text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Memuatkan jemaah untuk trip ini... <span class="text-[10px]">(optimized)</span></div>`;
   try{
     const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT;
-    let allJemaah = [];
-    if((window.allJemaahUmrahRecords?.length||0) > 100){
-      allJemaah = window.allJemaahUmrahRecords;
-    } else {
+    const start = Date.now();
+    let all=[],off='';
+    // Use filterByFormula to only get jemaah for this trip - HUGE SPEEDUP
+    // TRIP is linked record field, we search for tripId inside it
+    const formula = `FIND("${tripId}", ARRAYJOIN({TRIP} & ""))`;
+    const encodedFormula = encodeURIComponent(formula);
+    
+    do{
+      // Only request needed fields to make it faster
+      const url=`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH?pageSize=100&filterByFormula=${encodedFormula}&fields%5B%5D=NAME&fields%5B%5D=TRIP&fields%5B%5D=EJEN&fields%5B%5D=NO%20PASPORT${off?`&offset=${off}`:''}`;
+      const res=await fetch(url,{headers:{Authorization:`Bearer ${pat}`}});
+      const data=await res.json();
+      if(data.error) {
+        console.warn('Filter failed, fallback to full fetch', data.error);
+        // Fallback: if filter fails, use old method with cached data
+        throw new Error('FILTER_FAILED');
+      }
+      if(data.records) all=all.concat(data.records);
+      off=data.offset||'';
+    }while(off);
+
+    console.log(`✅ Filtered ${all.length} jemaah for trip ${tripId} in ${Date.now()-start}ms (vs full download)`);
+    
+    allEjenJemaahRecords = all.sort((a,b)=>String(a.fields['NAME']||'').localeCompare(String(b.fields['NAME']||'')));
+    window.allEjenJemaahRecords = allEjenJemaahRecords;
+
+    if(allEjenRecords.length===0) await fetchEjenData();
+    renderEjenTrackerGrid();
+  }catch(e){
+    console.error('Optimized fetch failed, using cached fallback', e);
+    // Fallback to cached global if available
+    try{
+      if((window.allJemaahUmrahRecords?.length||0) > 0){
+        const allJemaah = window.allJemaahUmrahRecords;
+        const filtered = allJemaah.filter(j=>{
+          const f=j.fields||{};
+          const tripField = f['TRIP'] || f['PAKEJ UMRAH'] || f['PAKEJ'] || [];
+          if(Array.isArray(tripField)) return tripField.includes(tripId);
+          return false;
+        });
+        allEjenJemaahRecords = filtered.sort((a,b)=>String(a.fields['NAME']||'').localeCompare(String(b.fields['NAME']||'')));
+        window.allEjenJemaahRecords = allEjenJemaahRecords;
+        renderEjenTrackerGrid();
+        return;
+      }
+      // Last resort: full fetch but only once
+      const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT;
       let all=[],off='';
       do{
         const url=`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH?pageSize=100${off?`&offset=${off}`:''}`;
@@ -193,23 +252,19 @@ async function fetchJemaahForEjenTracker(tripId){
         if(data.records) all=all.concat(data.records);
         off=data.offset||'';
       }while(off);
-      allJemaah = all;
-      window.allJemaahUmrahRecords = all;
+      const filtered = all.filter(j=>{
+        const f=j.fields||{};
+        const tripField = f['TRIP'] || f['PAKEJ UMRAH'] || f['PAKEJ'] || [];
+        if(Array.isArray(tripField)) return tripField.includes(tripId);
+        return false;
+      });
+      allEjenJemaahRecords = filtered.sort((a,b)=>String(a.fields['NAME']||'').localeCompare(String(b.fields['NAME']||'')));
+      window.allEjenJemaahRecords = all;
+      renderEjenTrackerGrid();
+    }catch(err2){
+      console.error(err2);
+      if(container) container.innerHTML=`<div class="p-6 text-xs text-red-500">${err2.message}</div>`;
     }
-    allJemaahForFilter = allJemaah;
-    const filtered = allJemaah.filter(j=>{
-      const f=j.fields||{};
-      const tripField = f['TRIP'] || f['PAKEJ UMRAH'] || f['PAKEJ'] || [];
-      if(Array.isArray(tripField)) return tripField.includes(tripId);
-      return false;
-    });
-    allEjenJemaahRecords = filtered.sort((a,b)=>String(a.fields['NAME']||'').localeCompare(String(b.fields['NAME']||'')));
-    window.allEjenJemaahRecords = allEjenJemaahRecords;
-    if(allEjenRecords.length===0) await fetchEjenData();
-    renderEjenTrackerGrid();
-  }catch(e){
-    console.error(e);
-    if(container) container.innerHTML=`<div class="p-6 text-xs text-red-500">${e.message}</div>`;
   }
 }
 
@@ -235,10 +290,7 @@ function renderEjenTrackerGrid(){
       unassigned.push(j);
     } else if(linked.length>=2){
       sharedList.push(j);
-      linked.forEach(eid=>{
-        if(!ejenMap[eid]) ejenMap[eid]=[];
-        ejenMap[eid].push(j);
-      });
+      linked.forEach(eid=>{ if(!ejenMap[eid]) ejenMap[eid]=[]; ejenMap[eid].push(j); });
     } else {
       const eid = linked[0];
       if(!ejenMap[eid]) ejenMap[eid]=[];
@@ -246,9 +298,7 @@ function renderEjenTrackerGrid(){
     }
   });
 
-  if(statsEl){
-    statsEl.textContent=`${filtered.length} Jemaah | ${filtered.length-unassigned.length-sharedList.length} Single | ${sharedList.length} Share | ${unassigned.length} Tiada Ejen`;
-  }
+  if(statsEl){ statsEl.textContent=`${filtered.length} Jemaah | ${filtered.length-unassigned.length-sharedList.length} Single | ${sharedList.length} Share | ${unassigned.length} Tiada Ejen`; }
 
   const aktifEjen=allEjenRecords.filter(r=>(r.fields['STATUS']||'').toUpperCase()==='AKTIF').sort((a,b)=>String(a.fields['NAMA EJEN']||'').localeCompare(String(b.fields['NAMA EJEN']||'')));
   const ejenOptions=`<option value="">-- Pilih Ejen --</option>`+aktifEjen.map(e=>`<option value="${e.id}">${escapeHtml(e.fields['NAMA EJEN']||'')}</option>`).join('');
@@ -268,9 +318,8 @@ function renderEjenTrackerGrid(){
   Object.entries(ejenMap).sort((a,b)=>String(allEjenRecords.find(r=>r.id===a[0])?.fields['NAMA EJEN']||'').localeCompare(String(allEjenRecords.find(r=>r.id===b[0])?.fields['NAMA EJEN']||''))).forEach(([eid,list])=>{
     const ename=allEjenRecords.find(r=>r.id===eid)?.fields['NAMA EJEN']||'EJEN';
     const singleList = list.filter(j=> (j.fields['EJEN']||[]).length===1 );
-    const sharedForThisEjen = list.filter(j=> (j.fields['EJEN']||[]).length>=2 );
     if(singleList.length===0 && sharedList.length>0) return;
-    html+=`<tr class="bg-slate-100 border-y"><td colspan="3" class="px-4 py-2 font-extrabold"><i class="fa-solid fa-user-tag mr-2 text-brand-maroon"></i>${escapeHtml(ename)} <span class="ml-2 bg-white border px-2 py-0.5 rounded-full text-[10px]">${singleList.length} org (single) + ${sharedForThisEjen.length} share</span></td></tr>`;
+    html+=`<tr class="bg-slate-100 border-y"><td colspan="3" class="px-4 py-2 font-extrabold"><i class="fa-solid fa-user-tag mr-2 text-brand-maroon"></i>${escapeHtml(ename)} <span class="ml-2 bg-white border px-2 py-0.5 rounded-full text-[10px]">${singleList.length} org</span></td></tr>`;
     singleList.forEach(j=>{
       const ejenList = getEjenNamesForJemaah(j);
       const badges = ejenList.map(e=>`<span class="inline-flex items-center gap-1 bg-slate-900 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">${escapeHtml(e.name)} <button onclick="removeEjenFromJemaah('${j.id}','${e.id}')" class="ml-1 w-3 h-3 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30">×</button></span>`).join(' ');
@@ -295,8 +344,8 @@ async function addEjenToJemaah(jId,eId){
   const rec=allEjenJemaahRecords.find(r=>r.id===jId);
   let current = rec ? (rec.fields[eField]||[]) : [];
   if(!Array.isArray(current)) current=[];
-  if(current.includes(eId)){ alert('Ejen ni dah ada untuk jemaah ni'); return; }
-  if(current.length>=2){ if(!confirm('Jemaah ni dah ada 2 ejen (max). Nak replace dengan ejen baru?')) return; current = [eId]; } else { current = [...current, eId]; }
+  if(current.includes(eId)){ alert('Ejen ni dah ada'); return; }
+  if(current.length>=2){ if(!confirm('Dah ada 2 ejen (max). Replace?')) return; current = [eId]; } else { current = [...current, eId]; }
   if(rec) rec.fields[eField]=current;
   try{
     const url=`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jId}`;
@@ -305,11 +354,11 @@ async function addEjenToJemaah(jId,eId){
     const data=await res.json();
     if(data.error) throw new Error(data.error.message);
     renderEjenTrackerGrid();
-  }catch(e){ console.error(e); alert('Gagal: '+e.message+'\n\nPastikan field EJEN dalam DATA JEMAAH UMRAH dah ON "Allow linking to multiple records"'); }
+  }catch(e){ console.error(e); alert('Gagal: '+e.message); }
 }
 
 async function removeEjenFromJemaah(jId,eId){
-  if(!confirm('Buang ejen ni dari jemaah?')) return;
+  if(!confirm('Buang ejen ni?')) return;
   const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT;
   const eField = 'EJEN';
   const rec=allEjenJemaahRecords.find(r=>r.id===jId);
@@ -330,6 +379,6 @@ async function updateJemaahEjen(jId,eId){ return addEjenToJemaah(jId,eId); }
 function viewJemaahByEjen(id){ const l=allEjenRecords.find(r=>r.id===id); alert(`Ejen ${l?.fields['NAMA EJEN']} - ${l?.fields['JUMLAH JEMAAH']||0} jemaah`); setEjenMode('tracker'); }
 function escapeHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-document.addEventListener('DOMContentLoaded',()=>{ setTimeout(()=>{ if(document.getElementById('modul-ejen')){ renderEjenHTML(); fetchEjenData(); fetchTripForEjenDropdown(); } },1200); });
+document.addEventListener('DOMContentLoaded',()=>{ setTimeout(()=>{ if(document.getElementById('modul-ejen')){ renderEjenHTML(); fetchEjenData(); fetchTripForEjenDropdown(); } },800); });
 
 window.renderEjenHTML=renderEjenHTML; window.fetchEjenData=fetchEjenData; window.fetchTripForEjenDropdown=fetchTripForEjenDropdown; window.populateEjenTripDropdown=populateEjenTripDropdown; window.fetchJemaahForEjenTracker=fetchJemaahForEjenTracker; window.setEjenMode=setEjenMode; window.updateJemaahEjen=updateJemaahEjen; window.addEjenToJemaah=addEjenToJemaah; window.removeEjenFromJemaah=removeEjenFromJemaah; window.handleEjenSearch=handleEjenSearch; window.onEjenTripChange=onEjenTripChange; window.openAddEjenModal=openAddEjenModal; window.openEditEjenModal=openEditEjenModal; window.closeEjenModal=closeEjenModal; window.saveEjen=saveEjen; window.deleteEjen=deleteEjen; window.viewJemaahByEjen=viewJemaahByEjen;
