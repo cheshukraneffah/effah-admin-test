@@ -1,5 +1,5 @@
-// ejen.js V2.3 - ADD CATATAN COLUMN + RENAME TELEFON->NO TELEFON + AKSI->TINDAKAN
-console.log('EJEN V2.3 - CATATAN COLUMN');
+// ejen.js V2.5 - REMOVE SHARE KOMISEN BANNER + KEEP MULTI EJEN LOGIC
+console.log('EJEN V2.5 - NO BANNER, MULTI EJEN KEPT');
 
 var allEjenRecords = window.allEjenRecords || [];
 var allEjenJemaahRecords = window.allEjenJemaahRecords || [];
@@ -89,11 +89,7 @@ async function fetchEjenData(){
 function renderSenaraiEjenGrid(){
   const c=document.getElementById('ejenListContainer'); if(!c) return;
   let f=[...allEjenRecords];
-  if(ejenSearchQuery) f=f.filter(r=>{
-    const name = String(r.fields['NAMA EJEN']||'').toLowerCase();
-    const catatan = String(r.fields['CATATAN']||'').toLowerCase();
-    return name.includes(ejenSearchQuery) || catatan.includes(ejenSearchQuery);
-  });
+  if(ejenSearchQuery) f=f.filter(r=>{ const name = String(r.fields['NAMA EJEN']||'').toLowerCase(); const catatan = String(r.fields['CATATAN']||'').toLowerCase(); return name.includes(ejenSearchQuery) || catatan.includes(ejenSearchQuery); });
   f.sort((a,b)=>String(a.fields['NAMA EJEN']||'').localeCompare(String(b.fields['NAMA EJEN']||'')));
   if(!f.length){ c.innerHTML=`<div class="p-10 text-center text-slate-400 text-xs">Tiada ejen.</div>`; return; }
   let h=`<div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-slate-50 border-b text-[10px] font-bold uppercase tracking-wide"><tr><th class="text-left px-4 py-3 w-10">#</th><th class="text-left px-4 py-3">NAMA EJEN</th><th class="text-left px-4 py-3 w-[140px]">NO TELEFON</th><th class="text-left px-4 py-3 w-[90px]">STATUS</th><th class="text-left px-4 py-3 w-[70px]">JEMAAH</th><th class="text-left px-4 py-3 w-[180px]">CATATAN</th><th class="text-right px-4 py-3 w-[110px]">TINDAKAN</th></tr></thead><tbody>`;
@@ -111,8 +107,8 @@ function renderSenaraiEjenGrid(){
       <td class="px-4 py-3 text-slate-600 max-w-[180px] truncate" title="${escapeHtml(catatan)}">${escapeHtml(catatan)}</td>
       <td class="px-4 py-3 text-right">
         <div class="inline-flex gap-1.5">
-          <button onclick="openEditEjenModal('${r.id}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 text-[11px] font-semibold" title="Edit"><i class="fa-solid fa-pen text-[10px]"></i> Edit</button>
-          <button onclick="deleteEjen('${r.id}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-600 text-[11px] font-semibold" title="Padam"><i class="fa-solid fa-trash text-[10px]"></i> Padam</button>
+          <button onclick="openEditEjenModal('${r.id}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 text-[11px] font-semibold"><i class="fa-solid fa-pen text-[10px]"></i> Edit</button>
+          <button onclick="deleteEjen('${r.id}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-600 text-[11px] font-semibold"><i class="fa-solid fa-trash text-[10px]"></i> Padam</button>
         </div>
       </td>
     </tr>`;
@@ -126,29 +122,16 @@ function closeEjenModal(){ document.getElementById('ejenModal').classList.add('h
 async function saveEjen(){ const id=document.getElementById('ejenInputId').value.trim(); const nama=document.getElementById('ejenInputNama').value.trim().toUpperCase(); const phone=document.getElementById('ejenInputPhone').value.trim(); const status=document.getElementById('ejenInputStatus').value; const catatan=document.getElementById('ejenInputCatatan').value.trim(); if(!nama){ alert('Nama wajib'); return; } const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT; const fields={'NAMA EJEN':nama,'NO TELEFON':phone||null,'STATUS':status,'CATATAN':catatan||null}; let url=`https://api.airtable.com/v0/${base}/EJEN%20LIST`, method='POST', body={fields}; if(id){ url+=`/${id}`; method='PATCH'; } const res=await fetch(url,{method,headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify(id?{fields}:body)}); const d=await res.json(); if(d.error){ alert(d.error.message); return; } closeEjenModal(); fetchEjenData(); }
 async function deleteEjen(id){ if(!confirm('Padam ejen ini?')) return; const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT; await fetch(`https://api.airtable.com/v0/${base}/EJEN%20LIST/${id}`,{method:'DELETE',headers:{Authorization:`Bearer ${pat}`}}); allEjenRecords=allEjenRecords.filter(r=>r.id!==id); renderSenaraiEjenGrid(); }
 
-function cleanTripName(raw){
-  if(!raw) return '';
-  let s = String(raw).trim();
-  s = s.replace(/^\d{1,2}\/\d{1,2}\s*\|\s*/,'').trim();
-  return s || raw;
-}
+function cleanTripName(raw){ if(!raw) return ''; let s = String(raw).trim(); s = s.replace(/^\d{1,2}\/\d{1,2}\s*\|\s*/,'').trim(); return s || raw; }
 function parseTripDateForSort(record){
   const f=record.fields||{};
   const dateFields = ['Mula Pakej','TRIP DATE','DATE','TARIKH','Tamat Pakej'];
-  for(const key of dateFields){
-    let d = f[key];
-    if(d && typeof d === 'string'){
-      const parsed = new Date(d);
-      if(!isNaN(parsed.getTime()) && parsed.getFullYear()>2020) return parsed.getTime();
-    }
-  }
+  for(const key of dateFields){ let d = f[key]; if(d && typeof d === 'string'){ const parsed = new Date(d); if(!isNaN(parsed.getTime()) && parsed.getFullYear()>2020) return parsed.getTime(); } }
   const tripName = f['Trip'] || '';
   const yearMatch = tripName.match(/(202[5-9]|203\d)/);
   const year = yearMatch ? parseInt(yearMatch[0]) : 0;
   const months = {'JANUARI':1,'FEBRUARI':2,'MAC':3,'APRIL':4,'MEI':5,'JUN':6,'JULAI':7,'OGOS':8,'SEPTEMBER':9,'OKTOBER':10,'NOVEMBER':11,'DISEMBER':12};
-  let month = 0;
-  const upper = tripName.toUpperCase();
-  for(const [k,v] of Object.entries(months)){ if(upper.includes(k)){ month=v; break; } }
+  let month = 0; const upper = tripName.toUpperCase(); for(const [k,v] of Object.entries(months)){ if(upper.includes(k)){ month=v; break; } }
   const dayMatch = tripName.match(/^(\d{1,2})\s*-/) || tripName.match(/(\d{1,2})\s*-\s*\d{1,2}/);
   const day = dayMatch ? parseInt(dayMatch[1]) : 1;
   if(year && month) return new Date(year, month-1, day).getTime();
@@ -166,10 +149,7 @@ async function fetchTripForEjenDropdown(){
       if(data.records) all=all.concat(data.records);
       off=data.offset||'';
     }while(off);
-    if(all.length>0){
-      all.sort((a,b)=>parseTripDateForSort(a)-parseTripDateForSort(b));
-      ejenTripCache=all; window.ejenTripCache=all;
-    }
+    if(all.length>0){ all.sort((a,b)=>parseTripDateForSort(a)-parseTripDateForSort(b)); ejenTripCache=all; window.ejenTripCache=all; }
     populateEjenTripDropdown();
   }catch(e){ console.error(e); }
 }
@@ -232,54 +212,124 @@ async function fetchJemaahForEjenTracker(tripId){
     if(container) container.innerHTML=`<div class="p-6 text-xs text-red-500">${e.message}</div>`;
   }
 }
+
+function getEjenNamesForJemaah(jemaah){
+  const linked = jemaah.fields['EJEN'] || [];
+  if(!Array.isArray(linked) || linked.length===0) return [];
+  return linked.map(id=>{
+    const rec = allEjenRecords.find(r=>r.id===id);
+    return rec ? {id, name: rec.fields['NAMA EJEN']||id} : {id, name: id};
+  });
+}
+
 function renderEjenTrackerGrid(){
   const container=document.getElementById('ejenTrackerContainer'); const statsEl=document.getElementById('ejenTrackerStats');
   if(!container) return;
   let filtered=[...allEjenJemaahRecords];
   if(ejenSearchQuery) filtered=filtered.filter(r=>String(r.fields['NAME']||'').toLowerCase().includes(ejenSearchQuery));
-  const eField = 'EJEN';
-  const ejenMap={}; const unassigned=[];
+  
+  const ejenMap={}; const unassigned=[]; const sharedList=[];
   filtered.forEach(j=>{
-    const linked=j.fields[eField] || [];
-    const ejenId=Array.isArray(linked)&&linked.length>0?linked[0]:null;
-    if(!ejenId) unassigned.push(j); else { if(!ejenMap[ejenId]) ejenMap[ejenId]=[]; ejenMap[ejenId].push(j); }
+    const linked=j.fields['EJEN'] || [];
+    if(!Array.isArray(linked) || linked.length===0){
+      unassigned.push(j);
+    } else if(linked.length>=2){
+      sharedList.push(j);
+      linked.forEach(eid=>{
+        if(!ejenMap[eid]) ejenMap[eid]=[];
+        ejenMap[eid].push(j);
+      });
+    } else {
+      const eid = linked[0];
+      if(!ejenMap[eid]) ejenMap[eid]=[];
+      ejenMap[eid].push(j);
+    }
   });
-  if(statsEl){ statsEl.textContent=`${filtered.length} Jemaah | ${filtered.length-unassigned.length} Ada Ejen | ${unassigned.length} Tiada Ejen`; }
+
+  if(statsEl){
+    statsEl.textContent=`${filtered.length} Jemaah | ${filtered.length-unassigned.length-sharedList.length} Single | ${sharedList.length} Share | ${unassigned.length} Tiada Ejen`;
+  }
+
   const aktifEjen=allEjenRecords.filter(r=>(r.fields['STATUS']||'').toUpperCase()==='AKTIF').sort((a,b)=>String(a.fields['NAMA EJEN']||'').localeCompare(String(b.fields['NAMA EJEN']||'')));
-  const ejenOptions=`<option value="">-- Tiada Ejen --</option>`+aktifEjen.map(e=>`<option value="${e.id}">${escapeHtml(e.fields['NAMA EJEN']||'')}</option>`).join('');
-  let html=`<div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-slate-50 border-b text-[10px] font-bold uppercase sticky top-0"><tr><th class="text-left px-4 py-2.5 w-12">#</th><th class="text-left px-4 py-2.5">Nama Jemaah</th><th class="text-left px-4 py-2.5 w-[260px]">Ejen (grouped)</th></tr></thead><tbody>`;
+  const ejenOptions=`<option value="">-- Pilih Ejen --</option>`+aktifEjen.map(e=>`<option value="${e.id}">${escapeHtml(e.fields['NAMA EJEN']||'')}</option>`).join('');
+
+  let html=`<div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-slate-50 border-b text-[10px] font-bold uppercase sticky top-0"><tr><th class="text-left px-4 py-2.5 w-12">#</th><th class="text-left px-4 py-2.5">Nama Jemaah</th><th class="text-left px-4 py-2.5 w-[320px]">Ejen</th></tr></thead><tbody>`;
   let idx=1;
+
+  if(sharedList.length>0){
+    html+=`<tr class="bg-purple-50 border-y border-purple-200"><td colspan="3" class="px-4 py-2.5 font-extrabold text-purple-900"><i class="fa-solid fa-handshake mr-2"></i>KOMISEN BERKONGSI (2 EJEN) <span class="ml-2 bg-white border px-2 py-0.5 rounded-full text-[10px]">${sharedList.length} org</span></td></tr>`;
+    sharedList.forEach(j=>{
+      const ejenList = getEjenNamesForJemaah(j);
+      const badges = ejenList.map(e=>`<span class="inline-flex items-center gap-1 bg-purple-100 border border-purple-200 text-purple-800 px-2 py-0.5 rounded-full text-[10px] font-bold">${escapeHtml(e.name)} <button onclick="removeEjenFromJemaah('${j.id}','${e.id}')" class="ml-1 w-3 h-3 bg-purple-200 rounded-full flex items-center justify-center hover:bg-purple-300">×</button></span>`).join(' ');
+      html+=`<tr class="border-b bg-purple-50/30 hover:bg-purple-50"><td class="px-4 py-2">${idx++}</td><td class="px-4 py-2 font-semibold">${escapeHtml(j.fields['NAME']||'-')} <span class="ml-2 bg-purple-600 text-white text-[9px] px-1.5 py-0.5 rounded">SHARED</span></td><td class="px-4 py-2"><div class="flex flex-wrap items-center gap-1.5 mb-1">${badges}</div><select onchange="addEjenToJemaah('${j.id}',this.value); this.value=''" class="w-full border border-purple-300 rounded-lg px-2 py-1 text-[11px] bg-white"><option value="">+ Tambah ejen kedua...</option>${ejenOptions}</select></td></tr>`;
+    });
+  }
+
   Object.entries(ejenMap).sort((a,b)=>String(allEjenRecords.find(r=>r.id===a[0])?.fields['NAMA EJEN']||'').localeCompare(String(allEjenRecords.find(r=>r.id===b[0])?.fields['NAMA EJEN']||''))).forEach(([eid,list])=>{
     const ename=allEjenRecords.find(r=>r.id===eid)?.fields['NAMA EJEN']||'EJEN';
-    html+=`<tr class="bg-slate-100 border-y"><td colspan="3" class="px-4 py-2 font-extrabold"><i class="fa-solid fa-user-tag mr-2 text-brand-maroon"></i>${escapeHtml(ename)} <span class="ml-2 bg-white border px-2 py-0.5 rounded-full text-[10px]">${list.length} org</span></td></tr>`;
-    list.forEach(j=>{ const curr=Array.isArray(j.fields[eField])?j.fields[eField][0]:''; html+=`<tr class="border-b hover:bg-slate-50"><td class="px-4 py-2">${idx++}</td><td class="px-4 py-2 font-semibold">${escapeHtml(j.fields['NAME']||'-')}</td><td class="px-4 py-2"><select onchange="updateJemaahEjen('${j.id}',this.value)" class="w-full border rounded-lg px-2 py-1.5 text-xs bg-white">${ejenOptions.replace(`value="${curr}"`, `value="${curr}" selected`)}</select></td></tr>`; });
+    const singleList = list.filter(j=> (j.fields['EJEN']||[]).length===1 );
+    const sharedForThisEjen = list.filter(j=> (j.fields['EJEN']||[]).length>=2 );
+    if(singleList.length===0 && sharedList.length>0) return;
+    html+=`<tr class="bg-slate-100 border-y"><td colspan="3" class="px-4 py-2 font-extrabold"><i class="fa-solid fa-user-tag mr-2 text-brand-maroon"></i>${escapeHtml(ename)} <span class="ml-2 bg-white border px-2 py-0.5 rounded-full text-[10px]">${singleList.length} org (single) + ${sharedForThisEjen.length} share</span></td></tr>`;
+    singleList.forEach(j=>{
+      const ejenList = getEjenNamesForJemaah(j);
+      const badges = ejenList.map(e=>`<span class="inline-flex items-center gap-1 bg-slate-900 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">${escapeHtml(e.name)} <button onclick="removeEjenFromJemaah('${j.id}','${e.id}')" class="ml-1 w-3 h-3 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30">×</button></span>`).join(' ');
+      html+=`<tr class="border-b hover:bg-slate-50"><td class="px-4 py-2">${idx++}</td><td class="px-4 py-2 font-semibold">${escapeHtml(j.fields['NAME']||'-')}</td><td class="px-4 py-2"><div class="flex flex-wrap items-center gap-1.5 mb-1">${badges}</div><select onchange="addEjenToJemaah('${j.id}',this.value); this.value=''" class="w-full border rounded-lg px-2 py-1 text-[11px] bg-white"><option value="">+ Tambah ejen share...</option>${ejenOptions}</select></td></tr>`;
+    });
   });
+
   if(unassigned.length>0){
     html+=`<tr class="bg-amber-50 border-y border-amber-200"><td colspan="3" class="px-4 py-2 font-extrabold text-amber-800">TIADA EJEN <span class="ml-2 bg-white border px-2 py-0.5 rounded-full text-[10px]">${unassigned.length} org</span></td></tr>`;
-    unassigned.forEach(j=>{ html+=`<tr class="border-b hover:bg-amber-50/50"><td class="px-4 py-2">${idx++}</td><td class="px-4 py-2 font-semibold">${escapeHtml(j.fields['NAME']||'-')}</td><td class="px-4 py-2"><select onchange="updateJemaahEjen('${j.id}',this.value)" class="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-xs bg-white">${ejenOptions}</select></td></tr>`; });
+    unassigned.forEach(j=>{
+      html+=`<tr class="border-b hover:bg-amber-50/50"><td class="px-4 py-2">${idx++}</td><td class="px-4 py-2 font-semibold">${escapeHtml(j.fields['NAME']||'-')}</td><td class="px-4 py-2"><select onchange="addEjenToJemaah('${j.id}',this.value)" class="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-xs bg-white"><option value="">-- Pilih Ejen --</option>${ejenOptions.replace('-- Pilih Ejen --','-- Assign Ejen --')}</select></td></tr>`;
+    });
   }
   if(!filtered.length) html+=`<tr><td colspan="3" class="p-10 text-center text-slate-400">Tiada jemaah untuk trip ni.</td></tr>`;
   html+=`</tbody></table></div>`; container.innerHTML=html;
 }
-async function updateJemaahEjen(jId,eId){
+
+async function addEjenToJemaah(jId,eId){
+  if(!eId) return;
   const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT;
   const eField = 'EJEN';
-  const rec=allEjenJemaahRecords.find(r=>r.id===jId); if(rec) rec.fields[eField]=eId?[eId]:[];
+  const rec=allEjenJemaahRecords.find(r=>r.id===jId);
+  let current = rec ? (rec.fields[eField]||[]) : [];
+  if(!Array.isArray(current)) current=[];
+  if(current.includes(eId)){ alert('Ejen ni dah ada untuk jemaah ni'); return; }
+  if(current.length>=2){ if(!confirm('Jemaah ni dah ada 2 ejen (max). Nak replace dengan ejen baru?')) return; current = [eId]; } else { current = [...current, eId]; }
+  if(rec) rec.fields[eField]=current;
   try{
     const url=`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jId}`;
-    const fields = eId ? {[eField]:[eId]} : {[eField]:[]};
+    const fields = {[eField]: current};
     const res=await fetch(url,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields})});
     const data=await res.json();
     if(data.error) throw new Error(data.error.message);
     renderEjenTrackerGrid();
-  }catch(e){
-    console.error(e);
-    alert('Gagal: '+e.message);
-  }
+  }catch(e){ console.error(e); alert('Gagal: '+e.message+'\n\nPastikan field EJEN dalam DATA JEMAAH UMRAH dah ON "Allow linking to multiple records"'); }
 }
+
+async function removeEjenFromJemaah(jId,eId){
+  if(!confirm('Buang ejen ni dari jemaah?')) return;
+  const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT;
+  const eField = 'EJEN';
+  const rec=allEjenJemaahRecords.find(r=>r.id===jId);
+  let current = rec ? (rec.fields[eField]||[]) : [];
+  current = current.filter(id=>id!==eId);
+  if(rec) rec.fields[eField]=current;
+  try{
+    const url=`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jId}`;
+    const fields = {[eField]: current};
+    const res=await fetch(url,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields})});
+    const data=await res.json();
+    if(data.error) throw new Error(data.error.message);
+    renderEjenTrackerGrid();
+  }catch(e){ console.error(e); alert('Gagal: '+e.message); }
+}
+
+async function updateJemaahEjen(jId,eId){ return addEjenToJemaah(jId,eId); }
 function viewJemaahByEjen(id){ const l=allEjenRecords.find(r=>r.id===id); alert(`Ejen ${l?.fields['NAMA EJEN']} - ${l?.fields['JUMLAH JEMAAH']||0} jemaah`); setEjenMode('tracker'); }
 function escapeHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 document.addEventListener('DOMContentLoaded',()=>{ setTimeout(()=>{ if(document.getElementById('modul-ejen')){ renderEjenHTML(); fetchEjenData(); fetchTripForEjenDropdown(); } },1200); });
 
-window.renderEjenHTML=renderEjenHTML; window.fetchEjenData=fetchEjenData; window.fetchTripForEjenDropdown=fetchTripForEjenDropdown; window.populateEjenTripDropdown=populateEjenTripDropdown; window.fetchJemaahForEjenTracker=fetchJemaahForEjenTracker; window.setEjenMode=setEjenMode; window.updateJemaahEjen=updateJemaahEjen; window.handleEjenSearch=handleEjenSearch; window.onEjenTripChange=onEjenTripChange; window.openAddEjenModal=openAddEjenModal; window.openEditEjenModal=openEditEjenModal; window.closeEjenModal=closeEjenModal; window.saveEjen=saveEjen; window.deleteEjen=deleteEjen; window.viewJemaahByEjen=viewJemaahByEjen;
+window.renderEjenHTML=renderEjenHTML; window.fetchEjenData=fetchEjenData; window.fetchTripForEjenDropdown=fetchTripForEjenDropdown; window.populateEjenTripDropdown=populateEjenTripDropdown; window.fetchJemaahForEjenTracker=fetchJemaahForEjenTracker; window.setEjenMode=setEjenMode; window.updateJemaahEjen=updateJemaahEjen; window.addEjenToJemaah=addEjenToJemaah; window.removeEjenFromJemaah=removeEjenFromJemaah; window.handleEjenSearch=handleEjenSearch; window.onEjenTripChange=onEjenTripChange; window.openAddEjenModal=openAddEjenModal; window.openEditEjenModal=openEditEjenModal; window.closeEjenModal=closeEjenModal; window.saveEjen=saveEjen; window.deleteEjen=deleteEjen; window.viewJemaahByEjen=viewJemaahByEjen;
