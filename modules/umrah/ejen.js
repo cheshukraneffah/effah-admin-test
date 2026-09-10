@@ -1,5 +1,5 @@
-// ejen.js V1.8 - CLEAN TRIP NAME (hide 26/11 | ) + SORT BY DATE + FIX EJEN LIST FIELD
-console.log('EJEN V1.8 - CLEAN NAME & SORT');
+// ejen.js V1.9 - FIX FIELD NAME EJEN (not EJEN LIST) + FIX BLANK DROPDOWN
+console.log('EJEN V1.9 - FIELD EJEN + FIX BLANK');
 
 var allEjenRecords = window.allEjenRecords || [];
 var allEjenJemaahRecords = window.allEjenJemaahRecords || [];
@@ -8,7 +8,7 @@ var ejenMode = window.ejenMode || localStorage.getItem('effah_ejen_mode') || 'se
 var ejenTripCache = window.ejenTripCache || [];
 var ejenActiveTripId = window.ejenActiveTripId || localStorage.getItem('effah_ejen_active_trip') || '';
 var ejenSearchQuery = '';
-var ejenFieldName = 'EJEN LIST';
+var ejenFieldName = 'EJEN'; // FIXED: user field is EJEN not EJEN LIST
 
 try{
   var AIRTABLE_PAT = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat') || window.DEFAULT_PAT;
@@ -49,7 +49,7 @@ function renderEjenHTML(){
       ${isTracker ? `
         <div class="bg-white p-3 px-4 rounded-2xl border border-slate-300 flex items-center gap-3 text-xs">
           <span class="font-bold"><i class="fa-solid fa-plane mr-1 text-brand-maroon"></i> Pilih Trip:</span>
-          <select id="ejenTripSelect" onchange="onEjenTripChange(this.value)" class="min-w-[420px] border border-slate-300 rounded-xl px-3 py-2.5 text-xs bg-white font-semibold"><option value="">-- Pilih Trip Umrah --</option></select>
+          <select id="ejenTripSelect" onchange="onEjenTripChange(this.value)" class="min-w-[420px] border border-slate-300 rounded-xl px-3 py-2.5 text-xs bg-white font-semibold text-slate-900"><option value="">-- Pilih Trip Umrah --</option></select>
           <span id="ejenTrackerStats" class="ml-auto text-[11px] text-slate-500"></span>
         </div>
         <div id="ejenTrackerContainer" class="bg-white rounded-2xl border border-slate-300 overflow-hidden"><div class="p-8 text-center text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Pilih trip...</div></div>
@@ -106,46 +106,37 @@ function closeEjenModal(){ document.getElementById('ejenModal').classList.add('h
 async function saveEjen(){ const id=document.getElementById('ejenInputId').value.trim(); const nama=document.getElementById('ejenInputNama').value.trim().toUpperCase(); const phone=document.getElementById('ejenInputPhone').value.trim(); const status=document.getElementById('ejenInputStatus').value; const catatan=document.getElementById('ejenInputCatatan').value.trim(); if(!nama){ alert('Nama wajib'); return; } const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT; const fields={'NAMA EJEN':nama,'NO TELEFON':phone||null,'STATUS':status,'CATATAN':catatan||null}; let url=`https://api.airtable.com/v0/${base}/EJEN%20LIST`, method='POST', body={fields}; if(id){ url+=`/${id}`; method='PATCH'; } const res=await fetch(url,{method,headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify(id?{fields}:body)}); const d=await res.json(); if(d.error){ alert(d.error.message); return; } closeEjenModal(); fetchEjenData(); }
 async function deleteEjen(id){ if(!confirm('Padam?')) return; const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT; await fetch(`https://api.airtable.com/v0/${base}/EJEN%20LIST/${id}`,{method:'DELETE',headers:{Authorization:`Bearer ${pat}`}}); allEjenRecords=allEjenRecords.filter(r=>r.id!==id); renderSenaraiEjenGrid(); }
 
-// === CLEAN TRIP NAME FUNCTION ===
 function cleanTripName(raw){
   if(!raw) return '';
   let s = String(raw).trim();
-  // Remove patterns like "26/11 | " , "26/12 | " , "27/01 | " at start
-  s = s.replace(/^\d{1,2}\/\d{1,2}\s*\|\s*/,'');
-  s = s.replace(/^\d{1,2}\/\d{1,2}\s*-\s*/,''); // just in case
-  // Remove leading code like "26/11 17 - 28 NOV..." -> keep only after
-  // If still starts with date like "26/11", remove again
-  s = s.replace(/^\d{2}\/\d{2}\s+/,'');
-  return s.trim();
+  // Remove "26/11 | " pattern at start
+  const original = s;
+  s = s.replace(/^\d{1,2}\/\d{1,2}\s*\|\s*/,'').trim();
+  s = s.replace(/^\d{1,2}\/\d{1,2}\s+/,'').trim();
+  // If after cleaning empty, return original without code stripping harshly
+  if(!s || s.length<2) return original;
+  // If cleaned is just date like 2026-11-17, return original
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return original.replace(/^\d{1,2}\/\d{1,2}\s*\|\s*/,'').trim() || original;
+  return s;
 }
 
 function parseTripDateForSort(record){
   const f=record.fields||{};
-  // Try TRIP DATE field first
   let d = f['TRIP DATE'] || f['DATE'] || f['TARIKH'] || '';
   if(d){
-    // d could be 2026-11-17 or ISO
     const parsed = new Date(d);
     if(!isNaN(parsed.getTime())) return parsed.getTime();
   }
-  // Fallback: parse from TRIP NAME like "05 - 16 OGOS 2026" -> try extract year and month
   const name = f['TRIP NAME'] || f['NAMA TRIP'] || '';
-  // Try find year
   const yearMatch = name.match(/(202[4-9]|203\d)/);
   const year = yearMatch ? parseInt(yearMatch[0]) : 0;
-  // Month mapping
-  const months = { 'JANUARI':1,'FEBRUARI':2,'MAC':3,'APRIL':4,'MEI':5,'JUN':6,'JULAI':7,'OGOS':8,'SEPTEMBER':9,'OKTOBER':10,'NOVEMBER':11,'DISEMBER':12,'JAN':1,'FEB':2,'MAR':3,'APR':4,'MEI':5,'JUN':6,'JUL':7,'OGOS':8,'SEPT':9,'OKT':10,'NOV':11,'DIS':12 };
+  const months = { 'JANUARI':1,'FEBRUARI':2,'MAC':3,'APRIL':4,'MEI':5,'JUN':6,'JULAI':7,'OGOS':8,'SEPTEMBER':9,'OKTOBER':10,'NOVEMBER':11,'DISEMBER':12 };
   let month = 0;
   const upper = name.toUpperCase();
-  for(const [k,v] of Object.entries(months)){
-    if(upper.includes(k)){ month = v; break; }
-  }
-  // Day: first number
+  for(const [k,v] of Object.entries(months)){ if(upper.includes(k)){ month = v; break; } }
   const dayMatch = name.match(/(\d{1,2})\s*-\s*\d{1,2}/);
   const day = dayMatch ? parseInt(dayMatch[1]) : 1;
-  if(year && month){
-    return new Date(year, month-1, day).getTime();
-  }
+  if(year && month) return new Date(year, month-1, day).getTime();
   return 0;
 }
 
@@ -161,10 +152,8 @@ async function fetchTripForEjenDropdown(){
       off=data.offset||'';
     }while(off);
     if(all.length>0){
-      // Sort by actual date chronologically
       all.sort((a,b)=>parseTripDateForSort(a)-parseTripDateForSort(b));
       ejenTripCache=all; window.ejenTripCache=all;
-      console.log('✅ PAKEJ UMRAH sorted', all.length);
     }
     populateEjenTripDropdown();
   }catch(e){ console.error(e); }
@@ -175,13 +164,23 @@ function populateEjenTripDropdown(){
   const trips=ejenTripCache||[];
   if(!trips.length){ sel.innerHTML=`<option value="">-- Tiada trip --</option>`; return; }
   
-  sel.innerHTML=`<option value="">-- Pilih Trip Umrah (${trips.length} trip) --</option>`+trips.map(t=>{
+  let html = `<option value="">-- Pilih Trip Umrah (${trips.length} trip) --</option>`;
+  trips.forEach(t=>{
     const f=t.fields||{};
-    let raw = f['TRIP NAME'] || f['NAMA TRIP'] || f['NAMA PAKEJ'] || f['PAKEJ'] || '';
+    let raw = f['TRIP NAME'] || f['NAMA TRIP'] || f['NAMA PAKEJ'] || f['PAKEJ'] || f['Name'] || '';
+    if(!raw) raw = t.id;
     let clean = cleanTripName(raw);
-    if(!clean || clean.startsWith('rec')) clean = raw;
-    return `<option value="${t.id}">${escapeHtml(String(clean)).substring(0,120)}</option>`;
-  }).join('');
+    // Ensure clean not empty and not just recID
+    if(!clean || clean.length<2 || clean.startsWith('rec')) clean = raw;
+    // Final safety: if still blank, use TRIP DATE
+    if(!clean || /^\d{4}-\d{2}-\d{2}$/.test(clean)){
+      const dateFallback = f['TRIP DATE'] || '';
+      clean = clean + (dateFallback ? ` (${String(dateFallback).substring(0,10)})` : '');
+    }
+    html += `<option value="${t.id}" style="color:#0f172a">${escapeHtml(String(clean)).substring(0,120)}</option>`;
+  });
+  sel.innerHTML = html;
+  sel.style.color = '#0f172a'; // force black text
   if(ejenActiveTripId) sel.value=ejenActiveTripId;
 }
 
@@ -238,9 +237,13 @@ function renderEjenTrackerGrid(){
   if(!container) return;
   let filtered=[...allEjenJemaahRecords];
   if(ejenSearchQuery) filtered=filtered.filter(r=>String(r.fields['NAME']||'').toLowerCase().includes(ejenSearchQuery));
-  const eField = 'EJEN LIST';
+  const eField = ejenFieldName; // Now EJEN
   const ejenMap={}; const unassigned=[];
-  filtered.forEach(j=>{ const linked=j.fields[eField]||[]; const ejenId=Array.isArray(linked)&&linked.length>0?linked[0]:null; if(!ejenId) unassigned.push(j); else { if(!ejenMap[ejenId]) ejenMap[ejenId]=[]; ejenMap[ejenId].push(j); } });
+  filtered.forEach(j=>{
+    const linked=j.fields[eField] || j.fields['EJEN LIST'] || j.fields['EJEN'] || [];
+    const ejenId=Array.isArray(linked)&&linked.length>0?linked[0]:null;
+    if(!ejenId) unassigned.push(j); else { if(!ejenMap[ejenId]) ejenMap[ejenId]=[]; ejenMap[ejenId].push(j); }
+  });
   if(statsEl){ statsEl.textContent=`${filtered.length} Jemaah | ${filtered.length-unassigned.length} Ada Ejen | ${unassigned.length} Tiada Ejen`; }
   const aktifEjen=allEjenRecords.filter(r=>(r.fields['STATUS']||'').toUpperCase()==='AKTIF').sort((a,b)=>String(a.fields['NAMA EJEN']||'').localeCompare(String(b.fields['NAMA EJEN']||'')));
   const ejenOptions=`<option value="">-- Tiada Ejen --</option>`+aktifEjen.map(e=>`<option value="${e.id}">${escapeHtml(e.fields['NAMA EJEN']||'')}</option>`).join('');
@@ -249,7 +252,7 @@ function renderEjenTrackerGrid(){
   Object.entries(ejenMap).sort((a,b)=>String(allEjenRecords.find(r=>r.id===a[0])?.fields['NAMA EJEN']||'').localeCompare(String(allEjenRecords.find(r=>r.id===b[0])?.fields['NAMA EJEN']||''))).forEach(([eid,list])=>{
     const ename=allEjenRecords.find(r=>r.id===eid)?.fields['NAMA EJEN']||'EJEN';
     html+=`<tr class="bg-slate-100 border-y"><td colspan="3" class="px-4 py-2 font-extrabold"><i class="fa-solid fa-user-tag mr-2 text-brand-maroon"></i>${escapeHtml(ename)} <span class="ml-2 bg-white border px-2 py-0.5 rounded-full text-[10px]">${list.length} org</span></td></tr>`;
-    list.forEach(j=>{ const curr=Array.isArray(j.fields[eField])?j.fields[eField][0]:''; html+=`<tr class="border-b hover:bg-slate-50"><td class="px-4 py-2">${idx++}</td><td class="px-4 py-2 font-semibold">${escapeHtml(j.fields['NAME']||'-')}</td><td class="px-4 py-2"><select onchange="updateJemaahEjen('${j.id}',this.value)" class="w-full border rounded-lg px-2 py-1.5 text-xs bg-white">${ejenOptions.replace(`value="${curr}"`, `value="${curr}" selected`)}</select></td></tr>`; });
+    list.forEach(j=>{ const curr=Array.isArray(j.fields[eField]||j.fields['EJEN LIST']||j.fields['EJEN'])?(j.fields[eField]||j.fields['EJEN LIST']||j.fields['EJEN'])[0]:''; html+=`<tr class="border-b hover:bg-slate-50"><td class="px-4 py-2">${idx++}</td><td class="px-4 py-2 font-semibold">${escapeHtml(j.fields['NAME']||'-')}</td><td class="px-4 py-2"><select onchange="updateJemaahEjen('${j.id}',this.value)" class="w-full border rounded-lg px-2 py-1.5 text-xs bg-white">${ejenOptions.replace(`value="${curr}"`, `value="${curr}" selected`)}</select></td></tr>`; });
   });
   if(unassigned.length>0){
     html+=`<tr class="bg-amber-50 border-y border-amber-200"><td colspan="3" class="px-4 py-2 font-extrabold text-amber-800">TIADA EJEN <span class="ml-2 bg-white border px-2 py-0.5 rounded-full text-[10px]">${unassigned.length} org</span></td></tr>`;
@@ -261,15 +264,17 @@ function renderEjenTrackerGrid(){
 
 async function updateJemaahEjen(jId,eId){
   const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT;
-  const eField = 'EJEN LIST';
+  const eField = ejenFieldName; // EJEN
   const rec=allEjenJemaahRecords.find(r=>r.id===jId); if(rec) rec.fields[eField]=eId?[eId]:[];
   try{
     const url=`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jId}`;
     const fields = eId ? {[eField]:[eId]} : {[eField]:[]};
+    console.log('Updating field', eField, 'for', jId, '->', eId);
     const res=await fetch(url,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields})});
     const data=await res.json();
     if(data.error) throw new Error(data.error.message);
     renderEjenTrackerGrid();
+    console.log('✅ Ejen assigned');
   }catch(e){ alert('Gagal: '+e.message); console.error(e); }
 }
 function viewJemaahByEjen(id){ const l=allEjenRecords.find(r=>r.id===id); alert(`Ejen ${l?.fields['NAMA EJEN']} - ${l?.fields['JUMLAH JEMAAH']||0} jemaah`); setEjenMode('tracker'); }
