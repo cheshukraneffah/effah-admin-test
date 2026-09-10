@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(typeof fetchTripUmrahData==='function') fetchTripUmrahData();
   if(typeof fetchJemaahUmrahData==='function') fetchJemaahUmrahData();
   if(typeof fetchRoomingData==='function') setTimeout(fetchRoomingData, 800);
+  if(typeof fetchEjenData==='function') setTimeout(fetchEjenData, 1000);
   const last=localStorage.getItem(STORAGE_TIME_KEY);
   const saved=localStorage.getItem(STORAGE_TAB_KEY);
   let target='home';
@@ -28,6 +29,10 @@ function switchTab(tabName,saveState=true){
   if(tabName==='rooming'){
     if(typeof renderRoomingHTML==='function') renderRoomingHTML();
     if(typeof fetchRoomingData==='function') fetchRoomingData();
+  }
+  if(tabName==='ejen'){
+    if(typeof fetchEjenTripDropdown==='function') fetchEjenTripDropdown();
+    if(typeof fetchEjenData==='function') fetchEjenData();
   }
   if(window.innerWidth<768){ const sb=document.getElementById('sidebar'); if(sb) sb.classList.add('-translate-x-full'); }
   if(saveState) try{localStorage.setItem(STORAGE_TAB_KEY,tabName);}catch(e){}
@@ -56,7 +61,6 @@ function toggleSidebar(){
       if(inside) inside.classList.remove('hidden');
     }
   }else{
-    // mobile
     sidebar.classList.toggle('-translate-x-full');
     if(outside) outside.classList.add('hidden');
   }

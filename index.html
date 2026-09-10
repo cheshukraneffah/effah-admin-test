@@ -7,6 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <link rel="icon" type="image/png" href="assets/favicon.png">
+    <script>window._origFetch = window.fetch.bind(window);</script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -196,7 +197,53 @@
                 <section id="modul-trip-luar" class="tab-content hidden"></section>
                 <section id="modul-peserta-luar" class="tab-content hidden"></section>
                 <section id="modul-rooming" class="tab-content hidden"></section>
-                <section id="modul-ejen" class="tab-content hidden"></section>
+                <section id="modul-ejen" class="tab-content hidden">
+<div id="ejenModule" class="p-4 md:p-6">
+  <div class="flex flex-wrap gap-3 mb-5 items-center">
+    <div>
+      <h2 class="text-[16px] font-extrabold text-slate-900">Ejen Tracker</h2>
+      <p class="text-[11px] text-slate-500 mt-0.5">Senarai ejen & jumlah jemaah ikut trip</p>
+    </div>
+    <select id="ejenTripSelect" onchange="onEjenTripChange()" class="ml-auto border border-slate-200 bg-white rounded-full px-3.5 py-2 text-[12px] font-semibold min-w-[220px]"></select>
+    <button onclick="document.getElementById('newEjenModal')?.classList.remove('hidden')" class="bg-[#7A0C2E] text-white px-4 py-2 rounded-full text-[11px] font-bold shadow"><i class="fa-solid fa-plus mr-1"></i> Tambah Ejen</button>
+  </div>
+  <div class="flex gap-2 mb-4">
+    <div class="relative flex-1">
+      <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[11px]"></i>
+      <input id="searchEjen" placeholder="Cari nama ejen, kod, telefon..." class="w-full text-[12px] border border-slate-200 rounded-full pl-9 pr-3 py-2.5 bg-white" oninput="filterEjenList(this.value)">
+    </div>
+    <div class="text-[11px] px-3 py-2.5 bg-white border border-slate-200 rounded-full font-bold text-slate-600" id="ejenCountBadge">0 Ejen</div>
+  </div>
+  <div id="ejenLoading" class="hidden text-center py-12">
+    <div class="inline-block animate-spin rounded-full h-6 w-6 border-2 border-[#7A0C2E] border-t-transparent"></div>
+    <div class="text-[11px] text-slate-500 mt-2">Memuatkan ejen...</div>
+  </div>
+  <div id="ejenListContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+</div>
+
+<!-- Modal Tambah Ejen -->
+<div id="newEjenModal" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+  <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="font-bold text-[14px]">Tambah Ejen Baru</h3>
+      <button onclick="document.getElementById('newEjenModal').classList.add('hidden')" class="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center"><i class="fa-solid fa-xmark text-[11px]"></i></button>
+    </div>
+    <div class="space-y-2.5">
+      <input id="newEjenName" placeholder="Nama Ejen *" class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[12px]">
+      <div class="grid grid-cols-2 gap-2">
+        <input id="newEjenKod" placeholder="Kod Ejen (EJN001)" class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[12px]">
+        <input id="newEjenTel" placeholder="No Telefon" class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[12px]">
+      </div>
+      <select id="newEjenStatus" class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[12px] bg-white"><option value="Aktif">Aktif</option><option value="Tidak Aktif">Tidak Aktif</option><option value="Blacklist">Blacklist</option></select>
+      <textarea id="newEjenCatatan" placeholder="Catatan (optional)" rows="2" class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[12px]"></textarea>
+    </div>
+    <div class="flex gap-2 justify-end mt-5">
+      <button onclick="document.getElementById('newEjenModal').classList.add('hidden')" class="px-5 py-2.5 rounded-full border border-slate-200 text-[11px] font-bold">Batal</button>
+      <button onclick="addNewEjen()" class="px-6 py-2.5 rounded-full bg-[#7A0C2E] text-white text-[11px] font-bold">Simpan Ejen</button>
+    </div>
+  </div>
+</div>
+</section>
                 <section id="modul-settings" class="tab-content hidden"></section>
             </div>
         </main>
@@ -226,6 +273,7 @@
     <script src="modules/umrah/trip-umrah.js"></script>
     <script src="modules/umrah/jemaah-umrah.js"></script>
     <script src="modules/umrah/rooming.js"></script>
+    <script src="js/modules/ejen/ejen.js"></script>
 
 <script>
 (function(){
