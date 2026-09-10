@@ -1,5 +1,5 @@
-// ejen.js V2.4 - SUPPORT SHARED KOMISEN (2 EJEN 1 JEMAAH)
-console.log('EJEN V2.4 - SHARED KOMISEN SUPPORT');
+// ejen.js V2.5 - REMOVE SHARE KOMISEN BANNER + KEEP MULTI EJEN LOGIC
+console.log('EJEN V2.5 - NO BANNER, MULTI EJEN KEPT');
 
 var allEjenRecords = window.allEjenRecords || [];
 var allEjenJemaahRecords = window.allEjenJemaahRecords || [];
@@ -44,9 +44,6 @@ function renderEjenHTML(){
         </div>
       </div>
       ${isTracker ? `
-        <div class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-[11px] text-amber-900 flex items-center gap-2">
-          <i class="fa-solid fa-lightbulb text-amber-600"></i> <b>Share Komisen:</b> 1 jemaah boleh ada 2 ejen. Pilih ejen pertama, lepas tu pilih ejen kedua kat dropdown yang sama. Jemaah akan dikira untuk dua-dua ejen.
-        </div>
         <div class="bg-white p-3 px-4 rounded-2xl border border-slate-300 flex items-center gap-3 text-xs">
           <span class="font-bold"><i class="fa-solid fa-plane mr-1 text-brand-maroon"></i> Pilih Trip:</span>
           <select id="ejenTripSelect" onchange="onEjenTripChange(this.value)" class="min-w-[500px] border border-slate-300 rounded-xl px-3 py-2.5 text-xs bg-white font-bold text-slate-900"><option value="">-- Pilih Trip Umrah --</option></select>
@@ -238,7 +235,6 @@ function renderEjenTrackerGrid(){
       unassigned.push(j);
     } else if(linked.length>=2){
       sharedList.push(j);
-      // Also add to each ejenMap for individual tracking
       linked.forEach(eid=>{
         if(!ejenMap[eid]) ejenMap[eid]=[];
         ejenMap[eid].push(j);
@@ -257,12 +253,11 @@ function renderEjenTrackerGrid(){
   const aktifEjen=allEjenRecords.filter(r=>(r.fields['STATUS']||'').toUpperCase()==='AKTIF').sort((a,b)=>String(a.fields['NAMA EJEN']||'').localeCompare(String(b.fields['NAMA EJEN']||'')));
   const ejenOptions=`<option value="">-- Pilih Ejen --</option>`+aktifEjen.map(e=>`<option value="${e.id}">${escapeHtml(e.fields['NAMA EJEN']||'')}</option>`).join('');
 
-  let html=`<div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-slate-50 border-b text-[10px] font-bold uppercase sticky top-0"><tr><th class="text-left px-4 py-2.5 w-12">#</th><th class="text-left px-4 py-2.5">Nama Jemaah</th><th class="text-left px-4 py-2.5 w-[320px]">Ejen (boleh 2 orang - share)</th></tr></thead><tbody>`;
+  let html=`<div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-slate-50 border-b text-[10px] font-bold uppercase sticky top-0"><tr><th class="text-left px-4 py-2.5 w-12">#</th><th class="text-left px-4 py-2.5">Nama Jemaah</th><th class="text-left px-4 py-2.5 w-[320px]">Ejen</th></tr></thead><tbody>`;
   let idx=1;
 
-  // Shared commission section first if exists
   if(sharedList.length>0){
-    html+=`<tr class="bg-purple-50 border-y border-purple-200"><td colspan="3" class="px-4 py-2.5 font-extrabold text-purple-900"><i class="fa-solid fa-handshake mr-2"></i>KOMISEN BERKONGSI (2 EJEN) <span class="ml-2 bg-white border px-2 py-0.5 rounded-full text-[10px]">${sharedList.length} org</span> <span class="ml-2 text-[10px] font-normal text-purple-700">- jemaah ni dikira untuk dua-dua ejen</span></td></tr>`;
+    html+=`<tr class="bg-purple-50 border-y border-purple-200"><td colspan="3" class="px-4 py-2.5 font-extrabold text-purple-900"><i class="fa-solid fa-handshake mr-2"></i>KOMISEN BERKONGSI (2 EJEN) <span class="ml-2 bg-white border px-2 py-0.5 rounded-full text-[10px]">${sharedList.length} org</span></td></tr>`;
     sharedList.forEach(j=>{
       const ejenList = getEjenNamesForJemaah(j);
       const badges = ejenList.map(e=>`<span class="inline-flex items-center gap-1 bg-purple-100 border border-purple-200 text-purple-800 px-2 py-0.5 rounded-full text-[10px] font-bold">${escapeHtml(e.name)} <button onclick="removeEjenFromJemaah('${j.id}','${e.id}')" class="ml-1 w-3 h-3 bg-purple-200 rounded-full flex items-center justify-center hover:bg-purple-300">×</button></span>`).join(' ');
@@ -270,13 +265,11 @@ function renderEjenTrackerGrid(){
     });
   }
 
-  // Normal grouped by ejen
   Object.entries(ejenMap).sort((a,b)=>String(allEjenRecords.find(r=>r.id===a[0])?.fields['NAMA EJEN']||'').localeCompare(String(allEjenRecords.find(r=>r.id===b[0])?.fields['NAMA EJEN']||''))).forEach(([eid,list])=>{
     const ename=allEjenRecords.find(r=>r.id===eid)?.fields['NAMA EJEN']||'EJEN';
-    // Filter out shared already shown? Show all but mark shared in list
     const singleList = list.filter(j=> (j.fields['EJEN']||[]).length===1 );
     const sharedForThisEjen = list.filter(j=> (j.fields['EJEN']||[]).length>=2 );
-    if(singleList.length===0 && sharedList.length>0) return; // skip if only shared (already shown above)
+    if(singleList.length===0 && sharedList.length>0) return;
     html+=`<tr class="bg-slate-100 border-y"><td colspan="3" class="px-4 py-2 font-extrabold"><i class="fa-solid fa-user-tag mr-2 text-brand-maroon"></i>${escapeHtml(ename)} <span class="ml-2 bg-white border px-2 py-0.5 rounded-full text-[10px]">${singleList.length} org (single) + ${sharedForThisEjen.length} share</span></td></tr>`;
     singleList.forEach(j=>{
       const ejenList = getEjenNamesForJemaah(j);
@@ -302,21 +295,12 @@ async function addEjenToJemaah(jId,eId){
   const rec=allEjenJemaahRecords.find(r=>r.id===jId);
   let current = rec ? (rec.fields[eField]||[]) : [];
   if(!Array.isArray(current)) current=[];
-  if(current.includes(eId)){
-    alert('Ejen ni dah ada untuk jemaah ni');
-    return;
-  }
-  if(current.length>=2){
-    if(!confirm('Jemaah ni dah ada 2 ejen (max). Nak replace dengan ejen baru?')) return;
-    current = [eId]; // replace
-  } else {
-    current = [...current, eId];
-  }
+  if(current.includes(eId)){ alert('Ejen ni dah ada untuk jemaah ni'); return; }
+  if(current.length>=2){ if(!confirm('Jemaah ni dah ada 2 ejen (max). Nak replace dengan ejen baru?')) return; current = [eId]; } else { current = [...current, eId]; }
   if(rec) rec.fields[eField]=current;
   try{
     const url=`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jId}`;
     const fields = {[eField]: current};
-    console.log('ADD Ejen', eId, 'to', jId, 'now', current);
     const res=await fetch(url,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields})});
     const data=await res.json();
     if(data.error) throw new Error(data.error.message);
@@ -342,11 +326,7 @@ async function removeEjenFromJemaah(jId,eId){
   }catch(e){ console.error(e); alert('Gagal: '+e.message); }
 }
 
-async function updateJemaahEjen(jId,eId){
-  // Legacy single select - now converts to add
-  return addEjenToJemaah(jId,eId);
-}
-
+async function updateJemaahEjen(jId,eId){ return addEjenToJemaah(jId,eId); }
 function viewJemaahByEjen(id){ const l=allEjenRecords.find(r=>r.id===id); alert(`Ejen ${l?.fields['NAMA EJEN']} - ${l?.fields['JUMLAH JEMAAH']||0} jemaah`); setEjenMode('tracker'); }
 function escapeHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
