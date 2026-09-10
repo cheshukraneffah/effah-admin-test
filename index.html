@@ -357,15 +357,34 @@ window.allEjenRecords = allEjenRecords;
 
 function getEjenName(r){ return r.fields?.['NAMA EJEN'] || r.fields?.['NAMA'] || 'EJEN'; }
 
+function cleanTripNameForEjen(raw){
+  if(!raw) return 'Trip';
+  try{
+    let s = String(raw).replace(/\n/g,' ').trim();
+    // same cleaning as rooming
+    s = s.replace(/\s{2,}/g,' ');
+    return s;
+  }catch(e){ return String(raw); }
+}
 async function fetchEjenTripDropdown(){
   try{
-    const trips = await effahGetAllEjen('TRIP', '');
     const sel = document.getElementById('ejenTripSelect');
     if(!sel) return;
-    // Sort by date desc
-    trips.sort((a,b)=> new Date(b.fields['TARIKH']||b.fields['DATE']||0) - new Date(a.fields['TARIKH']||a.fields['DATE']||0));
+    // Use already loaded trip records from trip-umrah module if available
+    let trips = window.allTripUmrahRecords || window.allTripRecords || window.allTripData || [];
+    if(!trips || trips.length===0){
+      trips = await effahGetAllEjen('TRIP', '');
+    }
+    // Sort by Mula Pakej desc if available, else by TARIKH
+    trips = [...trips];
+    trips.sort((a,b)=> {
+      const da = a.fields?.['Mula Pakej']||a.fields?.['TARIKH']||a.fields?.['DATE']||'';
+      const db = b.fields?.['Mula Pakej']||b.fields?.['TARIKH']||b.fields?.['DATE']||'';
+      return String(db).localeCompare(String(da));
+    });
     sel.innerHTML = '<option value="">Semua Trip</option>' + trips.map(t=>{
-      const name = t.fields['TRIP NAME']||t.fields['NAMA TRIP']||t.id;
+      const raw = t.fields?.Trip || t.fields?.['TRIP'] || t.fields?.['TRIP NAME'] || t.fields?.['NAMA TRIP'] || t.fields?.['Pakej'] || t.fields?.['PAKEJ'] || t.id;
+      const name = cleanTripNameForEjen(raw);
       return `<option value="${t.id}">${name}</option>`;
     }).join('');
     if(activeEjenTripId) sel.value = activeEjenTripId;
