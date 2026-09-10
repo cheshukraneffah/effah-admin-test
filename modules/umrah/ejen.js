@@ -1,5 +1,5 @@
-// ejen.js V2.1 - LOG REAL FIELD NAMES + FIX BLANK + USE EJEN FIELD
-console.log('EJEN V2.1 - LOGGING REAL KEYS');
+// ejen.js V2.2 FINAL - SORT BY MULA PAKEJ DATE + FIELD Trip CONFIRMED + FIELD EJEN
+console.log('EJEN V2.2 - SORTED BY MULA PAKEJ');
 
 var allEjenRecords = window.allEjenRecords || [];
 var allEjenJemaahRecords = window.allEjenJemaahRecords || [];
@@ -8,7 +8,6 @@ var ejenMode = window.ejenMode || localStorage.getItem('effah_ejen_mode') || 'se
 var ejenTripCache = window.ejenTripCache || [];
 var ejenActiveTripId = window.ejenActiveTripId || localStorage.getItem('effah_ejen_active_trip') || '';
 var ejenSearchQuery = '';
-var ejenFieldName = 'EJEN';
 
 var AIRTABLE_PAT = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat') || window.DEFAULT_PAT;
 var AIRTABLE_BASE_ID = window.AIRTABLE_BASE_ID || localStorage.getItem('effah_base_id') || window.DEFAULT_BASE_ID;
@@ -50,7 +49,7 @@ function renderEjenHTML(){
           <select id="ejenTripSelect" onchange="onEjenTripChange(this.value)" class="min-w-[500px] border border-slate-300 rounded-xl px-3 py-2.5 text-xs bg-white font-bold text-slate-900"><option value="">-- Pilih Trip Umrah --</option></select>
           <span id="ejenTrackerStats" class="ml-auto text-[11px] text-slate-500"></span>
         </div>
-        <div id="ejenTrackerContainer" class="bg-white rounded-2xl border border-slate-300 overflow-hidden"><div class="p-8 text-center text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Pilih trip...</div></div>
+        <div id="ejenTrackerContainer" class="bg-white rounded-2xl border border-slate-300 overflow-hidden"><div class="p-8 text-center text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Pilih trip...</div></div>
       ` : `
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div class="bg-white rounded-2xl border p-3.5"><div class="text-[10px] font-bold text-slate-500 uppercase">Total Ejen</div><div class="text-xl font-extrabold">${allEjenRecords.length}</div></div>
@@ -104,23 +103,43 @@ function closeEjenModal(){ document.getElementById('ejenModal').classList.add('h
 async function saveEjen(){ const id=document.getElementById('ejenInputId').value.trim(); const nama=document.getElementById('ejenInputNama').value.trim().toUpperCase(); const phone=document.getElementById('ejenInputPhone').value.trim(); const status=document.getElementById('ejenInputStatus').value; const catatan=document.getElementById('ejenInputCatatan').value.trim(); if(!nama){ alert('Nama wajib'); return; } const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT; const fields={'NAMA EJEN':nama,'NO TELEFON':phone||null,'STATUS':status,'CATATAN':catatan||null}; let url=`https://api.airtable.com/v0/${base}/EJEN%20LIST`, method='POST', body={fields}; if(id){ url+=`/${id}`; method='PATCH'; } const res=await fetch(url,{method,headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify(id?{fields}:body)}); const d=await res.json(); if(d.error){ alert(d.error.message); return; } closeEjenModal(); fetchEjenData(); }
 async function deleteEjen(id){ if(!confirm('Padam?')) return; const base=window.AIRTABLE_BASE_ID, pat=window.AIRTABLE_PAT; await fetch(`https://api.airtable.com/v0/${base}/EJEN%20LIST/${id}`,{method:'DELETE',headers:{Authorization:`Bearer ${pat}`}}); allEjenRecords=allEjenRecords.filter(r=>r.id!==id); renderSenaraiEjenGrid(); }
 
+// Clean: remove "26/12 | " prefix
 function cleanTripName(raw){
   if(!raw) return '';
   let s = String(raw).trim();
-  const orig = s;
+  // Remove leading "26/12 | " or "26/11 | " etc
   s = s.replace(/^\d{1,2}\/\d{1,2}\s*\|\s*/,'').trim();
-  if(!s || s.length < 3){
-    const parts = orig.split('|');
-    if(parts.length>1){ s = parts.slice(1).join('|').trim(); if(s.length>=3) return s; }
-    return orig;
-  }
-  return s;
+  return s || raw;
 }
 
+// SORT by Mula Pakej date - this is the real date field in PAKEJ UMRAH
 function parseTripDateForSort(record){
   const f=record.fields||{};
-  let d = f['TRIP DATE'] || f['DATE'] || f['TARIKH'] || '';
-  if(d){ const parsed = new Date(d); if(!isNaN(parsed.getTime())) return parsed.getTime(); }
+  // Priority: Mula Pakej, TRIP DATE, Date, Tamat Pakej
+  const dateFields = ['Mula Pakej','TRIP DATE','DATE','TARIKH','Tamat Pakej','Date Open Group WS'];
+  for(const key of dateFields){
+    let d = f[key];
+    if(d){
+      // If d is array or object, skip
+      if(typeof d !== 'string') continue;
+      const parsed = new Date(d);
+      if(!isNaN(parsed.getTime()) && parsed.getFullYear()>2020){
+        return parsed.getTime();
+      }
+    }
+  }
+  // Fallback: try parse from Trip name like "05 - 16 OGOS 2026"
+  const tripName = f['Trip'] || f['TRIP NAME'] || '';
+  const yearMatch = tripName.match(/(202[5-9]|203\d)/);
+  const year = yearMatch ? parseInt(yearMatch[0]) : 0;
+  const months = {'JANUARI':1,'FEBRUARI':2,'MAC':3,'APRIL':4,'MEI':5,'JUN':6,'JULAI':7,'OGOS':8,'SEPTEMBER':9,'OKTOBER':10,'NOVEMBER':11,'DISEMBER':12};
+  let month = 0;
+  const upper = tripName.toUpperCase();
+  for(const [k,v] of Object.entries(months)){ if(upper.includes(k)){ month=v; break; } }
+  const dayMatch = tripName.match(/^(\d{1,2})\s*-/) || tripName.match(/(\d{1,2})\s*-\s*\d{1,2}/);
+  const day = dayMatch ? parseInt(dayMatch[1]) : 1;
+  if(year && month) return new Date(year, month-1, day).getTime();
+  if(tripName.toUpperCase().includes('TBC')) return 9999999999999; // TBC at bottom
   return 0;
 }
 
@@ -136,21 +155,17 @@ async function fetchTripForEjenDropdown(){
       off=data.offset||'';
     }while(off);
     if(all.length>0){
-      // LOG REAL KEYS FOR DEBUGGING
-      const first = all[0];
-      console.log('=== PAKEJ UMRAH FIRST RECORD KEYS (REAL NAMES) ===');
-      console.log(Object.keys(first.fields).join(' | '));
-      console.log('=== FIRST RECORD FULL FIELDS ===');
-      console.log(JSON.stringify(first.fields, null, 2));
-      all.forEach((r,i)=>{
-        const keys = Object.keys(r.fields);
-        // log only first 3 for brevity if needed
-        if(i<2){
-          console.log(`Record ${i} keys:`, keys.join(', '));
-        }
+      // SORT BY DATE ASC - earliest first, TBC last
+      all.sort((a,b)=>{
+        const da = parseTripDateForSort(a);
+        const db = parseTripDateForSort(b);
+        return da - db;
       });
-      all.sort((a,b)=>parseTripDateForSort(a)-parseTripDateForSort(b));
       ejenTripCache=all; window.ejenTripCache=all;
+      console.log('✅ PAKEJ UMRAH sorted by Mula Pakej, total', all.length);
+      all.slice(0,5).forEach((r,i)=>{
+        console.log(`Sorted ${i}: ${r.fields['Trip']} | Mula: ${r.fields['Mula Pakej']} | sort:${parseTripDateForSort(r)}`);
+      });
     }
     populateEjenTripDropdown();
   }catch(e){ console.error('fetchTripForEjenDropdown failed', e); }
@@ -161,53 +176,15 @@ function populateEjenTripDropdown(){
   const trips=ejenTripCache||[];
   if(!trips.length){ sel.innerHTML=`<option value="">-- Tiada trip --</option>`; return; }
   
-  // Try to find best field automatically from first record
-  const firstFields = trips[0]?.fields || {};
-  const allKeys = Object.keys(firstFields);
-  console.log('All keys for trip:', allKeys.join(' | '));
+  // CONFIRMED: field name is "Trip" - contains "26/12 | 22 DISEMBER - 02 JANUARI 2027 (GROUP B)"
+  const bestKey = 'Trip';
   
-  // Priority: find field that contains month names or has date-like trip name
-  const monthRe = /JAN|FEB|MAC|APR|MEI|JUN|JUL|OGOS|SEPT|OKT|NOV|DIS/i;
-  let bestKey = null;
-  // Try common names first
-  const common = ['TRIP NAME','NAMA TRIP','PAKEJ','NAMA PAKEJ','TRIP','Name','PACKAGE NAME','NAMA'];
-  for(const k of common){
-    if(firstFields[k] && typeof firstFields[k]==='string' && firstFields[k].length>3){
-      bestKey = k; break;
-    }
-  }
-  // If not found, search for field containing month
-  if(!bestKey){
-    for(const k of allKeys){
-      const v = String(firstFields[k]||'');
-      if(monthRe.test(v) && v.length>6){
-        bestKey = k; break;
-      }
-    }
-  }
-  // Fallback to first long string field
-  if(!bestKey){
-    bestKey = allKeys.find(k=>typeof firstFields[k]==='string' && String(firstFields[k]).length>8) || allKeys[0];
-  }
-  
-  console.log('✅ Using best trip name key:', bestKey, 'value:', firstFields[bestKey]);
-
   let html = `<option value="">-- Pilih Trip Umrah (${trips.length} trip) --</option>`;
   trips.forEach(t=>{
     const f=t.fields||{};
-    let raw = f[bestKey] || f['TRIP NAME'] || f['NAMA TRIP'] || f['Name'] || '';
-    if(!raw || String(raw).startsWith('rec')){
-      // try any string field that is not date
-      for(const k of allKeys){
-        const v = String(f[k]||'');
-        if(v && !v.startsWith('rec') && v.length>5 && !/^\d{4}-\d{2}-\d{2}$/.test(v)){
-          raw = v; break;
-        }
-      }
-    }
+    let raw = f[bestKey] || f['Trip'] || f['TRIP NAME'] || '';
     if(!raw) raw = t.id;
     let clean = cleanTripName(raw);
-    if(!clean || clean.startsWith('rec')) clean = raw;
     html += `<option value="${t.id}">${escapeHtml(String(clean)).substring(0,150)}</option>`;
   });
   sel.innerHTML = html;
@@ -253,8 +230,6 @@ async function fetchJemaahForEjenTracker(tripId){
       return false;
     });
 
-    console.log(`Filtered ${filtered.length} for trip ${tripId}`);
-
     allEjenJemaahRecords = filtered.sort((a,b)=>String(a.fields['NAME']||'').localeCompare(String(b.fields['NAME']||'')));
     window.allEjenJemaahRecords = allEjenJemaahRecords;
 
@@ -274,7 +249,7 @@ function renderEjenTrackerGrid(){
   const eField = 'EJEN';
   const ejenMap={}; const unassigned=[];
   filtered.forEach(j=>{
-    const linked=j.fields[eField] || j.fields['EJEN LIST'] || [];
+    const linked=j.fields[eField] || [];
     const ejenId=Array.isArray(linked)&&linked.length>0?linked[0]:null;
     if(!ejenId) unassigned.push(j); else { if(!ejenMap[ejenId]) ejenMap[ejenId]=[]; ejenMap[ejenId].push(j); }
   });
