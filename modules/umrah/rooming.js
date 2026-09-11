@@ -273,8 +273,8 @@ function openDeleteStaffModal(){
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
       <div class="p-4 border-b flex items-center justify-between bg-red-50">
         <div>
-          <h3 class="font-extrabold text-[12px] text-red-900"><i class="fa-solid fa-trash mr-2"></i>PADAM STAFF DARI EXTRA LIST</h3>
-          <p class="text-[10px] text-red-700 mt-0.5">Pilih staff untuk dipadam. Staff akan dibuang dari semua bilik juga.</p>
+          <h3 class="font-extrabold text-[12px] text-red-900"><i class="fa-solid fa-trash mr-2"></i>PENGESAHAN PEMADAMAN STAFF</h3>
+          <p class="text-[10px] text-red-700 mt-0.5">Sila pilih staff yang ingin dipadam. Staff yang dipadam akan dikeluarkan secara automatik dari semua bilik yang telah ditetapkan.</p>
         </div>
         <button onclick="closeDeleteStaffModal()" class="w-7 h-7 rounded-full bg-white border flex items-center justify-center hover:bg-slate-100"><i class="fa-solid fa-xmark text-[11px]"></i></button>
       </div>
@@ -303,7 +303,7 @@ function toggleAllDeleteStaff(checked){
 async function deleteSingleStaffFromModal(staffId){
   const s=staffList.find(x=>x.id===staffId||x.airtableId===staffId);
   const name = s?.name||'Staff ini';
-  if(!confirm(`Adakah anda pasti untuk memadam ${name} dari Extra List?\n\n${name} akan dibuang dari semua bilik yang dia assigned juga.`)) return;
+  if(!confirm(`Adakah anda pasti untuk memadam ${name} dari senarai Extra List?\n\nTindakan ini akan mengeluarkan staff tersebut dari semua bilik yang telah ditetapkan dan rekod akan dipadam dari sistem.`)) return;
   await performDeleteStaff(staffId);
   closeDeleteStaffModal();
   // Reopen if still have staff
@@ -315,7 +315,7 @@ async function confirmBulkDeleteStaff(){
   if(checks.length===0){ alert('Sila pilih sekurang-kurangnya satu staff untuk dipadam.'); return; }
   const ids = checks.map(c=>c.value);
   const names = ids.map(id=> staffList.find(x=>x.id===id||x.airtableId===id)?.name||id).join(', ');
-  if(!confirm(`Adakah anda pasti untuk memadam ${checks.length} staff berikut?\n\n${names}\n\nMereka akan dibuang dari semua bilik juga.`)) return;
+  if(!confirm(`Adakah anda pasti untuk memadam ${checks.length} staff berikut dari senarai Extra List?\n\n${names}\n\nTindakan ini akan mengeluarkan kesemua staff tersebut dari semua bilik yang telah ditetapkan.`)) return;
   
   // Delete one by one
   for(let id of ids){
@@ -384,7 +384,7 @@ async function performDeleteStaff(staffId){
 async function deleteStaff(staffId){
   const s=staffList.find(x=>x.id===staffId||x.airtableId===staffId);
   const name = s?.name||'Staff ini';
-  if(!confirm(`Padam ${name} dari Extra List?\n\n${name} akan dibuang dari semua bilik juga.`)) return;
+  if(!confirm(`Adakah anda pasti untuk memadam ${name} dari senarai Extra List?\n\nStaff tersebut akan dikeluarkan dari semua bilik yang telah ditetapkan.`)) return;
   await performDeleteStaff(staffId);
 }
 
@@ -627,7 +627,7 @@ function renderRoomingHTML(){
           <div class="px-2.5 pb-2.5 flex gap-1.5">
             <input id="newStaffInput" placeholder="Taip nama staff" class="flex-1 text-[11px] px-2.5 py-2 border border-slate-200 rounded-xl bg-white focus:outline-none" onkeydown="if(event.key==='Enter'){ addNewStaff(); }">
             <button onclick="addNewStaff()" class="px-3 py-2 bg-slate-900 text-white border border-slate-900 rounded-xl text-[11px] font-bold hover:bg-black">+ Add</button>
-            <button onclick="openDeleteStaffModal()" class="px-3 py-2 bg-red-50 border border-red-200 text-red-700 rounded-xl text-[11px] font-bold hover:bg-red-600 hover:text-white hover:border-red-600 flex items-center gap-1" title="Padam staff dari list"><i class="fa-solid fa-trash"></i> Padam</button>
+            <button onclick="openDeleteStaffModal()" class="px-3 py-2 bg-red-50 border border-red-200 text-red-700 rounded-xl text-[11px] font-bold hover:bg-red-600 hover:text-white hover:border-red-600 flex items-center gap-1" title="Padam staff dari senarai Extra List"><i class="fa-solid fa-trash"></i> Padam</button>
           </div>
           <div id="staffListContainer" class="px-2 pb-2.5 max-h-[34vh] overflow-y-auto space-y-1 bg-white min-h-[70px] relative"></div>
         </div>
@@ -1403,7 +1403,7 @@ function renderStaffList(){
     return `<div ${drag} class="flex flex-col gap-1.5 px-2.5 py-2 rounded-xl border text-[11px] ${cls} relative">
       <div class="flex items-center justify-between">
         <div class="flex gap-2 items-center"><span class="text-slate-400 text-[10px]">${String(idx+1).padStart(2,'0')}</span><span class="font-medium truncate max-w-[120px]">${s.name}</span>${assignedInLoc?'<span class="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded text-[8px] font-bold">ASSIGNED di '+activeLocation+'</span>':''}</div>
-        <div class="flex gap-1.5 items-center"><button onclick="quickAssignStaff('${staffId}')" class="w-6 h-6 rounded-full border ${assignedInLoc?'opacity-30 pointer-events-none':'hover:bg-[#7A0C2E] hover:text-white bg-white'} text-[10px] flex items-center justify-center" title="Assign ke bilik">+</button><button onclick="deleteStaff('${staffId}')" title="Padam staff dari Extra List" class="${deleteBtnClass}"><i class="fa-solid fa-trash text-[10px]"></i></button></div>
+        <div class="flex gap-1.5 items-center"><button onclick="quickAssignStaff('${staffId}')" class="w-6 h-6 rounded-full border ${assignedInLoc?'opacity-30 pointer-events-none':'hover:bg-[#7A0C2E] hover:text-white bg-white'} text-[10px] flex items-center justify-center" title="Assign ke bilik">+</button><button onclick="deleteStaff('${staffId}')" title="Pengesahan pemadaman staff" class="${deleteBtnClass}"><i class="fa-solid fa-trash text-[10px]"></i></button></div>
       </div>
       <div class="flex items-center gap-2">
         <div class="relative flex-1">
