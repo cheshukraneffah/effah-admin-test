@@ -211,15 +211,44 @@ function removeStaff(roomId,staffName, evt){ if(evt){ evt.stopPropagation(); evt
   updateRoomField(roomId,'STAFF / EXTRA',arr.join(','),true);
 }
 
-async function deleteStaff(staffId){
+async async function deleteStaff(staffId){
+  if(!confirm('Padam staff ini dari Extra List?\n\nStaff akan dibuang dari semua bilik juga jika ada assigned.')) return;
   const s=staffList.find(x=>x.id===staffId||x.airtableId===staffId);
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
   const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
+  const staffName = s?.name || 'Staff';
+  // Remove from all rooms first
+  try{
+    for(let rec of (allRoomingRecords||[])){
+      if(rec.fields && rec.fields['STAFF LIST (ROOMING)']){
+        let arr = rec.fields['STAFF LIST (ROOMING)'] || [];
+        if(Array.isArray(arr) && arr.includes(s?.airtableId || staffId)){
+          arr = arr.filter(id=> id!==s?.airtableId && id!==staffId && id!==s?.id);
+          rec.fields['STAFF LIST (ROOMING)'] = arr;
+        }
+      }
+      if(rec.fields && rec.fields['ROOMING LIST']){
+        // also check ROOMING LIST if staff stored there
+      }
+    }
+  }catch(e){ console.warn('cleanup rooms', e); }
+  
   if(base&&pat&&s?.airtableId){
-    try{ await fetch(`https://api.airtable.com/v0/${base}/STAFF%20LIST%20%28ROOMING%29/${s.airtableId}`,{method:'DELETE', headers:{'Authorization':`Bearer ${pat}`}}); }catch(e){ console.error(e); }
+    try{ 
+      const res = await fetch(`https://api.airtable.com/v0/${base}/STAFF%20LIST%20%28ROOMING%29/${s.airtableId}`,{method:'DELETE', headers:{'Authorization':`Bearer ${pat}`}}); 
+      if(!res.ok){
+        const err = await res.json().catch(()=>({}));
+        console.error('Airtable delete failed', err);
+        // still continue to remove locally
+      }
+    }catch(e){ console.error('Delete Airtable failed', e); }
   }
   staffList=staffList.filter(x=>x.id!==staffId&&x.airtableId!==staffId);
-  saveStaffList(); renderStaffList();
+  saveStaffList(); 
+  try{ renderStaffList(); }catch(e){}
+  try{ renderRoomingGrid(); }catch(e){}
+  try{ renderLocationTabs(); }catch(e){}
+  console.log('Staff deleted', staffName);
 }
 
 
@@ -1233,7 +1262,7 @@ function renderStaffList(){
     return `<div ${drag} class="flex flex-col gap-1.5 px-2.5 py-2 rounded-xl border text-[11px] ${cls} relative">
       <div class="flex items-center justify-between">
         <div class="flex gap-2 items-center"><span class="text-slate-400 text-[10px]">${String(idx+1).padStart(2,'0')}</span><span class="font-medium truncate max-w-[120px]">${s.name}</span>${assignedInLoc?'<span class="ml-1 px-1 py-0.5 bg-slate-200 rounded text-[8px]">ASSIGNED di '+activeLocation+'</span>':''}</div>
-        <div class="flex gap-1"><button onclick="quickAssignStaff('${staffId}')" class="w-5 h-5 rounded-full border ${assignedInLoc?'opacity-30 pointer-events-none':'hover:bg-[#7A0C2E] hover:text-white'} text-[10px]">+</button><button onclick="deleteStaff('${staffId}')" class="w-5 h-5 rounded-full border hover:bg-red-50 text-[10px]"><i class="fa-solid fa-trash text-[9px]"></i></button></div>
+        <div class="flex gap-1"><button onclick="quickAssignStaff('${staffId}')" class="w-5 h-5 rounded-full border ${assignedInLoc?'opacity-30 pointer-events-none':'hover:bg-[#7A0C2E] hover:text-white'} text-[10px]">+</button><button onclick="deleteStaff('${staffId}')" title="Padam staff dari list" class="w-5 h-5 rounded-full border border-red-200 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white text-[10px] flex items-center justify-center"><i class="fa-solid fa-trash text-[9px]"></i></button></div>
       </div>
       <div class="flex items-center gap-2">
         <div class="relative flex-1">
