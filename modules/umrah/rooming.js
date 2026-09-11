@@ -211,7 +211,7 @@ function removeStaff(roomId,staffName, evt){ if(evt){ evt.stopPropagation(); evt
   updateRoomField(roomId,'STAFF / EXTRA',arr.join(','),true);
 }
 
-async async function deleteStaff(staffId){
+async function deleteStaff(staffId){
   if(!confirm('Padam staff ini dari Extra List?\n\nStaff akan dibuang dari semua bilik juga jika ada assigned.')) return;
   const s=staffList.find(x=>x.id===staffId||x.airtableId===staffId);
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
