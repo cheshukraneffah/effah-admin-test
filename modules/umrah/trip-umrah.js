@@ -1,4 +1,4 @@
-// V24 FINAL - strict hijri Season only (no auto calc) fix TBC image_0e0e43.png, fix 422 by sending only name image_b8057a.png - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
+// V26 FINAL - add new option TEXT ONLY (no color/id) as requested, direct PATCH then metadata fallback - baki logic image_55ef73.png green >5 red <=5, closed no baki, remove +Add New Option to fix 422 image_c4c6ad.png, strict hijri fix TBC - strict hijri Season only (no auto calc) fix TBC image_0e0e43.png, fix 422 by sending only name image_b8057a.png - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
 // Check this comment exists on live site to confirm deployment
 // Variable Global Simpan Data & Options
 let allTripUmrahRecords = [];
@@ -16,7 +16,7 @@ let selectOptions = {
     tempoh: ['11H 9M', '12H 10M', '9H 7M', '13H 10M', '17H 15M', '10H 7M']
 };
 
-console.log('🟢 Trip Umrah V24 FINAL LOADED - strict hijri only (fix TBC blank) + fix 422 metadata API - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
+console.log('🟢 Trip Umrah V26 FINAL LOADED - text only add new option - baki all green>5 red<=5 + remove add new option 422 fix - strict hijri only (fix TBC blank) + fix 422 metadata API - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
 console.log('✅ Hijri Season field should be at line ~284');
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -401,12 +401,22 @@ function renderTripSidebarList(records) {
         let statusDot = statusBadge.dot;
         let statusCls = statusBadge.cls;
         
-        // Baki seat logic
+        // V25 FIX for image_55ef73.png: Show all baki
+        // >5 = hijau, <=5 = merah, CLOSED = Tamat/Ditutup tanpa baki
         let bakiText = '';
-        if(availSeat>0 && availSeat<=5){
+        const isClosed = (status||'').toString().toUpperCase().includes('CLOSED') || statusBadge.label==='CLOSED' || availSeat<=0 && totalSeat>0 && (status||'').toUpperCase().includes('CLOSED');
+        const isActuallyClosed = (status||'').toString().toUpperCase().includes('CLOSED') || statusBadge.label==='CLOSED';
+        if(isActuallyClosed){
+          bakiText = `<div class="text-right mt-1"><span class="text-[10px] font-bold text-slate-400">Tamat / Ditutup</span></div>`;
+        } else if(availSeat>5){
+          bakiText = `<div class="text-right mt-1"><span class="text-[10px] font-bold text-emerald-600">Baki: ${availSeat} Seat</span></div>`;
+        } else if(availSeat>0 && availSeat<=5){
           bakiText = `<div class="text-right mt-1"><span class="text-[10px] font-bold text-rose-600">Baki: ${availSeat} Seat</span></div>`;
         } else if(availSeat<=0){
           bakiText = `<div class="text-right mt-1"><span class="text-[10px] font-bold text-slate-400">Tamat / Ditutup</span></div>`;
+        } else {
+          // availSeat 0 but not closed yet? show 0
+          bakiText = `<div class="text-right mt-1"><span class="text-[10px] font-bold text-slate-500">Baki: ${availSeat} Seat</span></div>`;
         }
         
         const card = document.createElement('div');
@@ -588,23 +598,106 @@ function buildSelectDropdown(recId, fieldName, currentValue, optionsArray, categ
     const isSelected=currentNormalized===opt; 
     optionsHtml+=`<option value="${opt}" ${isSelected?'selected':''}>${opt}</option>`; 
   }); 
-  // V22: Re-enabled + Add New Option with metadata API (fix insufficient permission error from image_910fa6.png)
-  optionsHtml+=`<option value="__ADD_NEW__" class="font-bold text-[#8B1E3F]">+ Add New Option...</option>`;
+  // V26: Re-enabled + Add New Option - hantar TEXT JE (no color, no id) as requested
+  optionsHtml+=`<option value="__ADD_NEW__" style="font-weight:bold;color:#8B1E3F">+ Add New Option...</option>`;
   return `<div class="relative">
     <select onchange="handleDropdownChange('${recId}', '${fieldName}', this, '${categoryKey}')" class="w-full p-2.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none font-semibold text-slate-800">${optionsHtml}</select>
   </div>`; 
 }
 function handleDropdownChange(recId, fieldName, selectEl, categoryKey){ 
   const selectedVal=selectEl.value; 
-  if(selectedVal==='__ADD_NEW__'){ 
-    // Legacy fallback - shouldn't happen now, but keep logic
-    addNewSelectOptionViaMetadata(recId, fieldName, categoryKey, selectEl);
+  if(selectedVal==='__ADD_NEW__'){
+    // V26: hantar TEXT JE ke Airtable (no color, no id) as requested
+    addNewSelectOptionTextOnly(recId, fieldName, categoryKey, selectEl);
   } else {
     updateAirtableField(recId, fieldName, selectedVal);
-  } 
+  }
 }
 
-async function addNewSelectOptionViaMetadata(recId, fieldName, categoryKey, selectEl){
+async function addNewSelectOptionTextOnly(recId, fieldName, categoryKey, selectEl){
+  const raw = prompt(`Add new option untuk ${fieldName}:\n\nTaip text je, contoh: MALINDO AIR`);
+  if(!raw || raw.trim()===''){ selectEl.value=''; return; }
+  const cleanOpt = normalizeDashFormat(raw.trim().toUpperCase());
+  
+  // Step 1: Try direct record PATCH with TEXT JE (simplest, works if field allows new options)
+  console.log(`Trying TEXT ONLY direct PATCH: ${fieldName} = "${cleanOpt}"`);
+  const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/PAKEJ%20UMRAH/${recId}`;
+  try {
+    const res = await fetch(url, {
+      method:'PATCH',
+      headers:{Authorization:`Bearer ${AIRTABLE_PAT}`,'Content-Type':'application/json'},
+      body: JSON.stringify({fields:{[fieldName]: cleanOpt}})
+    });
+    const data = await res.json();
+    if(res.ok){
+      console.log(`✅ TEXT ONLY success - Airtable auto-created option "${cleanOpt}"`);
+      if(!selectOptions[categoryKey].includes(cleanOpt)) selectOptions[categoryKey].push(cleanOpt);
+      // Update local
+      const targetRec = allTripUmrahRecords.find(r=>r.id===recId);
+      if(targetRec) targetRec.fields[fieldName]=cleanOpt;
+      if(selectedTripRecord && selectedTripRecord.id===recId) selectedTripRecord.fields[fieldName]=cleanOpt;
+      selectEl.value=cleanOpt;
+      // Re-render sidebar to preserve filter
+      if(typeof tripFilters !== 'undefined' && (tripFilters.hijri!=='All' || tripFilters.month!=='All' || tripFilters.airline!=='All' || tripFilters.tempoh!=='All' || tripFilters.musim!=='All' || (tripFilters.search&&tripFilters.search!==''))){
+        filterTripSidebar();
+      } else {
+        renderTripSidebarList(allTripUmrahRecords);
+      }
+      return;
+    } else {
+      console.warn('Direct PATCH failed, trying metadata API with TEXT ONLY', data);
+      throw new Error(data.error?.message || 'Direct PATCH failed');
+    }
+  } catch(e){
+    console.warn('Direct text-only PATCH failed:', e.message);
+    // Step 2: Fallback to metadata API with TEXT ONLY (name only, no color, no id)
+    try {
+      const metaUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`;
+      const tablesRes = await fetch(metaUrl, {headers:{Authorization:`Bearer ${AIRTABLE_PAT}`}});
+      if(!tablesRes.ok){
+        const err = await tablesRes.json();
+        throw new Error(err.error?.message || 'Metadata fetch failed');
+      }
+      const tablesData = await tablesRes.json();
+      const table = (tablesData.tables||[]).find(t=> t.name==='PAKEJ UMRAH');
+      const field = table.fields.find(f=> f.name===fieldName);
+      const existingChoices = field.options?.choices||[];
+      // Check if already exists
+      if(existingChoices.some(c=> c.name.toUpperCase()===cleanOpt.toUpperCase())){
+        updateAirtableField(recId, fieldName, cleanOpt);
+        return;
+      }
+      // TEXT ONLY: only name, no color, no id
+      const newChoices = [...existingChoices.map(c=> ({name: c.name})), {name: cleanOpt}];
+      console.log('Metadata PATCH TEXT ONLY payload:', JSON.stringify({options:{choices:newChoices}}));
+      const patchUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${table.id}/fields/${field.id}`;
+      const patchRes = await fetch(patchUrl, {
+        method:'PATCH',
+        headers:{Authorization:`Bearer ${AIRTABLE_PAT}`, 'Content-Type':'application/json'},
+        body: JSON.stringify({options:{choices:newChoices}})
+      });
+      const patchData = await patchRes.json();
+      if(!patchRes.ok){
+        console.error('Metadata PATCH failed', patchData);
+        throw new Error(patchData.error?.message || 'Metadata PATCH failed');
+      }
+      console.log(`✅ Metadata TEXT ONLY success - added "${cleanOpt}" to ${fieldName}`);
+      if(!selectOptions[categoryKey].includes(cleanOpt)) selectOptions[categoryKey].push(cleanOpt);
+      updateAirtableField(recId, fieldName, cleanOpt);
+      selectEl.value=cleanOpt;
+    } catch(e2){
+      console.error('Both TEXT ONLY methods failed', e2);
+      alert(`Gagal tambah "${cleanOpt}" via API.\n\nError: ${e2.message}\n\nSILA ENABLE di Airtable:\n1. Buka PAKEJ UMRAH > Field ${fieldName} > Customize\n2. Tick "Allow users to create new options"\n3. Atau tambah manual: + Add option > ${cleanOpt}\n\nLepas tu reload page.`);
+      // Add locally so UI shows it
+      if(!selectOptions[categoryKey].includes(cleanOpt)) selectOptions[categoryKey].push(cleanOpt);
+      selectEl.value=cleanOpt;
+    }
+  }
+}
+
+
+
+async function addNewSelectOptionViaMetadata_ORIG_DISABLED(recId, fieldName, categoryKey, selectEl){
   const newOption = prompt(`Masukkan nama pilihan baru untuk ${fieldName}:\n\nNota: Airtable perlukan permission schema.bases:write. Jika error, tambah manual di Airtable UI.`);
   if(!newOption || newOption.trim()===''){ selectEl.value=''; return; }
   const cleanOpt = normalizeDashFormat(newOption.trim());
