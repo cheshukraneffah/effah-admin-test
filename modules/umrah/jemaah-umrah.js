@@ -692,18 +692,82 @@ function renderViewsSidebar() {
       tripsToShow = [];
     }
 
-    tripsToShow.forEach(rec => {
+    // V52: Grouped by bulan macam trip-umrah image_d21506.png - tapi nama trip sahaja
+    function getMonthKeyLongJemaah(dateStr){
+      if(!dateStr) return 'TBC';
+      const d = new Date(dateStr);
+      if(isNaN(d)) return 'TBC';
+      const months = ['JANUARI','FEBRUARI','MAC','APRIL','MEI','JUN','JULAI','OGOS','SEPTEMBER','OKTOBER','NOVEMBER','DISEMBER'];
+      return months[d.getMonth()] + ' ' + d.getFullYear();
+    }
+    const monthOrder = {'JANUARI':1,'FEBRUARI':2,'MAC':3,'APRIL':4,'MEI':5,'JUN':6,'JULAI':7,'OGOS':8,'SEPTEMBER':9,'OKTOBER':10,'NOVEMBER':11,'DISEMBER':12};
+    function parseMonthKeyForSortJemaah(key){
+      const parts = key.trim().split(' ');
+      const monthName = parts[0];
+      const year = parseInt(parts[1])||0;
+      const mNum = monthOrder[monthName]||99;
+      return year*100 + mNum;
+    }
+
+    // Filter invalid records (fix M_ID error)
+    const safeTrips = (tripsToShow||[]).filter(rec=> rec && rec.fields && typeof rec.fields === 'object');
+    // Group by month based on Mula Pakej
+    const groups = {};
+    safeTrips.forEach(rec=>{
+      const key = getMonthKeyLongJemaah(rec.fields['Mula Pakej']||'');
+      if(!key || key==='TBC') return;
+      if(!groups[key]) groups[key]=[];
+      groups[key].push(rec);
+    });
+
+    const sortedGroupKeys = Object.keys(groups).sort((a,b)=> parseMonthKeyForSortJemaah(a)-parseMonthKeyForSortJemaah(b));
+
+    if(sortedGroupKeys.length===0){
+      // Fallback flat list if no date
+      safeTrips.forEach(rec => {
         const title = tripMap[rec.id] ? tripMap[rec.id].title : cleanTripName(rec.fields['Trip']);
         if (!title || title === 'TBC') return;
-
         const isActive = selectedTripFilter === title;
-
         const btn = document.createElement('button');
         btn.onclick = () => selectTripFilter(title, title);
         btn.className = `w-full text-left p-2 px-3 rounded-xl text-xs font-semibold transition flex items-center space-x-2.5 ${isActive ? 'bg-slate-100 text-slate-900 border border-slate-300/80 shadow-2xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`;
         btn.innerHTML = `<i class="fa-solid fa-list-check text-brand-maroon text-xs w-4"></i><span class="truncate">${title}</span>`;
         container.appendChild(btn);
-    });
+      });
+    } else {
+      sortedGroupKeys.forEach(groupKey=>{
+        const groupRecs = groups[groupKey];
+        // Sort inside group by date asc
+        groupRecs.sort((a,b)=>{
+          const da = new Date(a.fields['Mula Pakej']||0);
+          const db = new Date(b.fields['Mula Pakej']||0);
+          return da - db;
+        });
+
+        // Header like image_d21506.png: SEPTEMBER 2026 + count badge - tapi simple
+        const header = document.createElement('div');
+        header.className = 'flex items-center justify-between mt-4 mb-2 px-1 first:mt-0';
+        header.innerHTML = `
+          <div class="flex items-center gap-1.5">
+            <span class="text-[11px]">📅</span>
+            <span class="text-[11px] font-extrabold text-[#8B1E3F] tracking-wide uppercase">${groupKey}</span>
+          </div>
+          <span class="text-[10px] font-bold bg-[#FDF0F3] text-[#8B1E3F] border border-[#F5D0D9] px-2 py-0.5 rounded-full">${groupRecs.length} Trip</span>
+        `;
+        container.appendChild(header);
+
+        groupRecs.forEach(rec=>{
+          const title = tripMap[rec.id] ? tripMap[rec.id].title : cleanTripName(rec.fields['Trip']);
+          if (!title || title === 'TBC') return;
+          const isActive = selectedTripFilter === title;
+          const btn = document.createElement('button');
+          btn.onclick = () => selectTripFilter(title, title);
+          btn.className = `w-full text-left p-2 px-3 rounded-xl text-xs font-semibold transition flex items-center space-x-2.5 mb-1 ${isActive ? 'bg-slate-100 text-slate-900 border border-slate-300/80 shadow-2xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`;
+          btn.innerHTML = `<i class="fa-solid fa-list-check text-brand-maroon text-xs w-4"></i><span class="truncate">${title}</span>`;
+          container.appendChild(btn);
+        });
+      });
+    }
 
     if(tripsToShow.length===0 && selectedHijriFilter && selectedHijriFilter!=='TBC'){
       const empty = document.createElement('div');
