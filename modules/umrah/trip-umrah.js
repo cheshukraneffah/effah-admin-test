@@ -1,4 +1,4 @@
-// V32 FINAL - fix image_bb9aa2.png trip switch back to old selected during fetch + image_cbb19c.png BATIK AIR delay 5-10 sec in detail, merge not overwrite for propagation delay, loading flag - fix from Airtable Omni AI image_6a56b9.png: typecast:true for direct PATCH image_64cd05.png, metadata with existing ids + new name only image_6be327.png image_740339.png image_3e9405.png, recommended approach image_b5cba5.png - user says already enabled but still 422 INVALID_MULTIPLE_CHOICE, so use manual add workaround + auto-load from Airtable, filters dynamic image_4fafaf.png - filters NOT hardcoded (image_4fafaf.png) merge with Airtable choices, fix AIR ARABIA error image_5ecfc0.png image_cd48ad.png by requiring Allow new options - ALL SELECTIONS FROM AIRTABLE, no hardcoded, AIRASIA etc auto appear - auto fetch field choices from Airtable so manual AIRASIA appears, text only add new option with proper error for Allow new options - add new option TEXT ONLY (no color/id) as requested, direct PATCH then metadata fallback - baki logic image_55ef73.png green >5 red <=5, closed no baki, remove +Add New Option to fix 422 image_c4c6ad.png, strict hijri fix TBC - strict hijri Season only (no auto calc) fix TBC image_0e0e43.png, fix 422 by sending only name image_b8057a.png - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
+// V33 FINAL - add new option loading skeleton spinning in dropdown image_bb9aa2.png, progress bar percent for initial load, fix flicker kejap ada kejap takde - fix image_bb9aa2.png trip switch back to old selected during fetch + image_cbb19c.png BATIK AIR delay 5-10 sec in detail, merge not overwrite for propagation delay, loading flag - fix from Airtable Omni AI image_6a56b9.png: typecast:true for direct PATCH image_64cd05.png, metadata with existing ids + new name only image_6be327.png image_740339.png image_3e9405.png, recommended approach image_b5cba5.png - user says already enabled but still 422 INVALID_MULTIPLE_CHOICE, so use manual add workaround + auto-load from Airtable, filters dynamic image_4fafaf.png - filters NOT hardcoded (image_4fafaf.png) merge with Airtable choices, fix AIR ARABIA error image_5ecfc0.png image_cd48ad.png by requiring Allow new options - ALL SELECTIONS FROM AIRTABLE, no hardcoded, AIRASIA etc auto appear - auto fetch field choices from Airtable so manual AIRASIA appears, text only add new option with proper error for Allow new options - add new option TEXT ONLY (no color/id) as requested, direct PATCH then metadata fallback - baki logic image_55ef73.png green >5 red <=5, closed no baki, remove +Add New Option to fix 422 image_c4c6ad.png, strict hijri fix TBC - strict hijri Season only (no auto calc) fix TBC image_0e0e43.png, fix 422 by sending only name image_b8057a.png - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
 // Check this comment exists on live site to confirm deployment
 // Variable Global Simpan Data & Options
 let allTripUmrahRecords = [];
@@ -17,7 +17,45 @@ let selectOptions = {
     tempoh: []
 };
 
-console.log('🟢 Trip Umrah V32 FINAL LOADED - fix trip switch race + BATIK AIR delay - fix with typecast:true + metadata with ids - workaround for Airtable block even when enabled - filters dynamic from Airtable + fix add new option allow new options - all selections fetch from Airtable no hardcoded - auto load field choices AIRASIA + text only fix - text only add new option - baki all green>5 red<=5 + remove add new option 422 fix - strict hijri only (fix TBC blank) + fix 422 metadata API - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
+// V33: Loading skeleton + progress bar helpers
+function updateTripLoadingProgress(percent, label){
+  const bar = document.getElementById('tripLoadingBar');
+  const percentEl = document.getElementById('tripLoadingPercent');
+  const labelEl = document.getElementById('tripLoadingLabel');
+  const container = document.getElementById('tripLoadingProgress');
+  if(!container) return;
+  container.classList.remove('hidden');
+  if(bar) bar.style.width = percent + '%';
+  if(percentEl) percentEl.textContent = percent + '%';
+  if(labelEl) labelEl.textContent = label || 'Memuat...';
+  if(percent>=100){
+    setTimeout(()=>{ container.classList.add('hidden'); }, 500);
+  }
+}
+
+function showDropdownLoadingSkeleton(selectEl, isLoading){
+  if(!selectEl) return;
+  const wrapper = selectEl.closest('.relative');
+  if(!wrapper) return;
+  let loader = wrapper.querySelector('.dropdown-loading-overlay');
+  if(isLoading){
+    selectEl.disabled = true;
+    selectEl.classList.add('opacity-50');
+    if(!loader){
+      loader = document.createElement('div');
+      loader.className = 'dropdown-loading-overlay absolute inset-0 bg-white/80 backdrop-blur-[1px] rounded-xl flex items-center justify-center z-10';
+      loader.innerHTML = `<div class="flex items-center gap-2 text-[11px] font-bold text-slate-700"><div class="w-4 h-4 border-2 border-slate-200 border-t-slate-900 rounded-full animate-spin"></div> Menambah...</div>`;
+      wrapper.appendChild(loader);
+    }
+    loader.classList.remove('hidden');
+  } else {
+    selectEl.disabled = false;
+    selectEl.classList.remove('opacity-50');
+    if(loader) loader.classList.add('hidden');
+  }
+}
+
+console.log('🟢 Trip Umrah V33 FINAL LOADED - loading skeleton + progress bar + smooth - fix trip switch race + BATIK AIR delay - fix with typecast:true + metadata with ids - workaround for Airtable block even when enabled - filters dynamic from Airtable + fix add new option allow new options - all selections fetch from Airtable no hardcoded - auto load field choices AIRASIA + text only fix - text only add new option - baki all green>5 red<=5 + remove add new option 422 fix - strict hijri only (fix TBC blank) + fix 422 metadata API - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
 console.log('✅ Hijri Season field should be at line ~284');
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -66,8 +104,20 @@ function renderTripUmrahHTML() {
                         <i class="fa-solid fa-rotate"></i>
                     </button>
                 </div>
+                <div id="tripLoadingProgress" class="hidden mb-3">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span id="tripLoadingLabel" class="text-[10px] font-bold text-slate-600">Memuat...</span>
+                        <span id="tripLoadingPercent" class="text-[10px] font-bold text-slate-900">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div id="tripLoadingBar" class="bg-slate-900 h-2 rounded-full transition-all duration-300 ease-out" style="width:0%"></div>
+                    </div>
+                </div>
                 <div id="tripSidebarContainer" class="space-y-1 overflow-y-auto flex-1 max-h-[60vh] pr-1">
-                    <div class="text-center py-10 text-slate-400 text-xs">Sila klik 'Refresh' untuk muat turun trip...</div>
+                    <div class="text-center py-10 text-slate-400 text-xs">
+                        <div class="w-8 h-8 mx-auto mb-2 border-2 border-slate-200 border-t-slate-900 rounded-full animate-spin"></div>
+                        Memuat trip...
+                    </div>
                 </div>
             </div>
             <div class="flex-1 flex flex-col space-y-6 overflow-x-hidden" id="tripMainDetailWorkspace">
@@ -347,18 +397,25 @@ async function fetchTripUmrahData() {
       window.tripDataLoading = false;
       return;
     }
+    // V33: Smooth loading with progress bar - no flicker kejap ada kejap takde
+    const container = document.getElementById('tripSidebarContainer');
+    updateTripLoadingProgress(5, 'Memuat field options...');
     // Fetch field choices first so AIRASIA manual appears - V32 merge not overwrite
     await fetchAirtableFieldChoices();
-    const container = document.getElementById('tripSidebarContainer');
-    if (container) container.innerHTML = '<div class="text-center py-10 text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuat trip... Sila tunggu sampai habis fetch</div>';
+    updateTripLoadingProgress(25, 'Field options loaded');
+    if (container) {
+      container.innerHTML = '<div class="text-center py-8 text-slate-400 text-xs"><div class="w-6 h-6 mx-auto mb-2 border-2 border-slate-200 border-t-slate-900 rounded-full animate-spin"></div>Memuat trip dari Airtable...</div>';
+    }
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/PAKEJ%20UMRAH?sort[0][field]=Mula%20Pakej&sort[0][direction]=asc&sort[1][field]=Tamat%20Pakej&sort[1][direction]=asc`;
     try {
         const prevSelectedId = (selectedTripRecord && selectedTripRecord.id) ? selectedTripRecord.id : localStorage.getItem('effah_last_selected_trip');
         const sidebarContainer = document.getElementById('tripSidebarContainer');
         const prevScrollTop = sidebarContainer ? sidebarContainer.scrollTop : 0;
+        updateTripLoadingProgress(40, 'Fetching trip records...');
         const response = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_PAT}` } });
         const data = await response.json();
         allTripUmrahRecords = data.records || [];
+        updateTripLoadingProgress(70, `Found ${allTripUmrahRecords.length} trips, rendering...`);
         extractDynamicOptions(allTripUmrahRecords);
         const validTrips = allTripUmrahRecords.filter(rec => {
             const f = rec.fields;
@@ -412,11 +469,16 @@ async function fetchTripUmrahData() {
         }
         // After initial load, populate hijri tabs
         try{ updateHijriFilterTabs(); }catch(e){}
+        updateTripLoadingProgress(90, 'Finalizing...');
+        // V33: Small delay to avoid flicker, then show list smoothly
+        await new Promise(r=> setTimeout(r, 200));
+        updateTripLoadingProgress(100, 'Selesai');
         window.tripDataLoading = false;
-        console.log('✅ V32 fetchTripUmrahData complete in', (Date.now()-_fetchStartTime)+'ms - loading finished, now safe to select trip');
+        console.log('✅ V33 fetchTripUmrahData complete in', (Date.now()-_fetchStartTime)+'ms - smooth load done');
     } catch (err) {
         console.error('fetchTripUmrahData error', err);
         if (container) container.innerHTML = '<div class="text-center py-10 text-rose-500 text-xs">Gagal muat data. Semak API Key.</div>';
+        updateTripLoadingProgress(100, 'Gagal');
         window.tripDataLoading = false;
     }
 }
@@ -690,10 +752,10 @@ function buildSelectDropdown(recId, fieldName, currentValue, optionsArray, categ
     const isSelected=currentNormalized===opt; 
     optionsHtml+=`<option value="${opt}" ${isSelected?'selected':''}>${opt}</option>`; 
   }); 
-  // V26: Re-enabled + Add New Option - hantar TEXT JE (no color, no id) as requested
+  // V33: All selections have + Add New Option with loading skeleton
   optionsHtml+=`<option value="__ADD_NEW__" style="font-weight:bold;color:#8B1E3F">+ Add New Option...</option>`;
-  return `<div class="relative">
-    <select onchange="handleDropdownChange('${recId}', '${fieldName}', this, '${categoryKey}')" class="w-full p-2.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none font-semibold text-slate-800">${optionsHtml}</select>
+  return `<div class="relative" data-field="${fieldName}" data-category="${categoryKey}">
+    <select id="select-${recId}-${fieldName.replace(/\s+/g,'-')}" onchange="handleDropdownChange('${recId}', '${fieldName}', this, '${categoryKey}')" class="w-full p-2.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none font-semibold text-slate-800 transition-all">${optionsHtml}</select>
   </div>`; 
 }
 function handleDropdownChange(recId, fieldName, selectEl, categoryKey){ 
