@@ -523,16 +523,17 @@ function renderMultiSelectCell(recId, fieldName, currentValues){
   const currentArr = Array.isArray(currentValues) ? currentValues : (currentValues ? [currentValues] : []);
   let pillsHtml = '';
   if(currentArr.length>0){
-    currentArr.forEach(val=>{ pillsHtml += `<span class="inline-flex items-center gap-1 bg-sky-100 text-sky-800 border border-sky-200 text-[10px] font-bold px-2 py-0.5 rounded-full mr-1 mb-1">${val} <button onclick="removeMultiSelectValue('${recId}', '${fieldName}', '${val.replace(/'/g, "\\'")}')" class="ml-1 text-sky-600 hover:text-rose-600">x</button></span>`; });
+    currentArr.forEach(val=>{ pillsHtml += `<span class="inline-flex items-center gap-1 bg-sky-100 text-sky-800 border border-sky-200 text-[10px] font-bold px-2 py-0.5 rounded-full mr-1 mb-1">${val} <button onclick="event.stopPropagation(); removeMultiSelectValue('${recId}', '${fieldName}', '${val.replace(/'/g, "\'")}') " class="ml-1 text-sky-600 hover:text-rose-600">x</button></span>`; });
   } else { pillsHtml = `<span class="text-slate-300 text-[10px]">-</span>`; }
   let optsHtml = '';
   if(options.length>0){
-    options.forEach(opt=>{ const isSelected = currentArr.includes(opt.name); optsHtml += `<label class="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 cursor-pointer text-xs"><input type="checkbox" ${isSelected?'checked':''} onchange="toggleMultiSelectValue('${recId}', '${fieldName}', '${opt.name.replace(/'/g, "\\'")}', this.checked)" class="w-3.5 h-3.5 rounded border-slate-300 text-brand-maroon"> <span>${opt.name}</span></label>`; });
+    options.forEach(opt=>{ const isSelected = currentArr.includes(opt.name); optsHtml += `<label class="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 cursor-pointer text-xs"><input type="checkbox" ${isSelected?'checked':''} onchange="toggleMultiSelectValue('${recId}', '${fieldName}', '${opt.name.replace(/'/g, "\'")}', this.checked)" class="w-3.5 h-3.5 rounded border-slate-300 text-brand-maroon"> <span>${opt.name}</span></label>`; });
   }
   optsHtml += `<div class="border-t border-slate-200 mt-1 pt-1"><button onclick="handleAddNewMultiOption('${fieldName}')" class="w-full text-left px-2 py-1 text-[11px] font-bold text-brand-maroon hover:bg-rose-50 rounded">+ Add option</button></div>`;
-  const dropdownId = `ms-dropdown-${recId}-${fieldName.replace(/\\s/g,'')}`;
-  return `<div class="relative group/ms"><div class="flex flex-wrap items-center gap-1 p-1 min-h-[28px] border border-transparent hover:border-slate-300 rounded-lg cursor-pointer" onclick="document.getElementById('${dropdownId}').classList.toggle('hidden')">${pillsHtml}<i class="fa-solid fa-chevron-down text-[10px] text-slate-400 ml-auto"></i></div><div id="${dropdownId}" class="hidden absolute left-0 top-full mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-200 z-50 max-h-60 overflow-y-auto p-1">${optsHtml}</div></div>`;
+  const dropdownId = `ms-dropdown-${recId}-${fieldName.replace(/\s/g,'')}`;
+  return `<div class="relative cell-dropdown-wrapper"><div class="flex flex-wrap items-center gap-1 p-1 min-h-[28px] border border-transparent hover:border-slate-300 rounded-lg cursor-pointer" onclick="event.stopPropagation(); toggleCellDropdown('${dropdownId}')">${pillsHtml}<i class="fa-solid fa-chevron-down text-[10px] text-slate-400 ml-auto"></i></div><div id="${dropdownId}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-200 z-50 max-h-64 overflow-y-auto p-1">${optsHtml}</div></div>`;
 }
+
 function toggleMultiSelectValue(recId, fieldName, value, isChecked){
   const rec = allJemaahUmrahRecords.find(r=> r.id===recId); if(!rec) return;
   let current = rec.fields[fieldName]; let arr = Array.isArray(current) ? [...current] : (current ? [current] : []);
@@ -548,16 +549,33 @@ function renderEjenCell(recId, currentEjenIds){
     ids.forEach(eId=>{
       const e = ejenListCache.find(x=> x.id===eId);
       const name = e ? e.name : eId;
-      pillsHtml += `<span class="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full mr-1 mb-1">${name} <button onclick="removeEjenLink('${recId}', '${eId}')" class="ml-1 text-emerald-600 hover:text-rose-600">x</button></span>`;
+      pillsHtml += `<span class="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full mr-1 mb-1">${name} <button onclick="event.stopPropagation(); removeEjenLink('${recId}', '${eId}')" class="ml-1 text-emerald-600 hover:text-rose-600">x</button></span>`;
     });
   } else { pillsHtml = `<span class="text-slate-300 text-[10px]">-</span>`; }
   const dropdownId = `ejen-dropdown-${recId}`;
   let optsHtml = '';
   if(ejenListCache.length>0){
-    ejenListCache.forEach(e=>{ const isSelected = ids.includes(e.id); optsHtml += `<label class="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 cursor-pointer text-xs"><input type="checkbox" ${isSelected?'checked':''} onchange="toggleEjenLink('${recId}', '${e.id}', this.checked)" class="w-3.5 h-3.5 rounded border-slate-300 text-brand-maroon"> <div class="flex flex-col"><span class="font-bold">${e.name}</span><span class="text-[10px] text-slate-500">${e.status||''} ${e.noTelefon?'• '+e.noTelefon:''}</span></div></label>`; });
+    ejenListCache.forEach(e=>{ const isSelected = ids.includes(e.id); optsHtml += `<label class="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 cursor-pointer text-xs ejen-option"><input type="checkbox" ${isSelected?'checked':''} onchange="toggleEjenLink('${recId}', '${e.id}', this.checked)" class="w-3.5 h-3.5 rounded border-slate-300 text-brand-maroon"> <div class="flex flex-col"><span class="font-bold">${e.name}</span><span class="text-[10px] text-slate-500">${e.status||''} ${e.noTelefon?'• '+e.noTelefon:''}</span></div></label>`; });
   } else { optsHtml = `<div class="text-[11px] text-slate-400 p-2">Memuat ejen... <i class="fa-solid fa-spinner fa-spin"></i></div>`; }
-  return `<div class="relative"><div class="flex flex-wrap items-center gap-1 p-1 min-h-[28px] border border-transparent hover:border-slate-300 rounded-lg cursor-pointer" onclick="document.getElementById('${dropdownId}').classList.toggle('hidden')">${pillsHtml}<i class="fa-solid fa-chevron-down text-[10px] text-slate-400 ml-auto"></i></div><div id="${dropdownId}" class="hidden absolute left-0 top-full mt-1 w-72 bg-white rounded-xl shadow-xl border border-slate-200 z-50 max-h-80 overflow-y-auto p-1"><div class="p-2"><input type="text" placeholder="Search ejen..." class="w-full text-xs p-1.5 border border-slate-200 rounded-lg" onkeyup="filterEjenDropdown('${recId}', this.value)"></div><div id="${dropdownId}-list">${optsHtml}</div></div></div>`;
+  return `<div class="relative cell-dropdown-wrapper"><div class="flex flex-wrap items-center gap-1 p-1 min-h-[28px] border border-transparent hover:border-slate-300 rounded-lg cursor-pointer" onclick="event.stopPropagation(); toggleCellDropdown('${dropdownId}')">${pillsHtml}<i class="fa-solid fa-chevron-down text-[10px] text-slate-400 ml-auto"></i></div><div id="${dropdownId}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-72 bg-white rounded-xl shadow-xl border border-slate-200 z-[60] max-h-80 overflow-y-auto p-1"><div class="p-2"><input type="text" placeholder="Search ejen..." class="w-full text-xs p-1.5 border border-slate-200 rounded-lg" onkeyup="filterEjenDropdown('${recId}', this.value)" onclick="event.stopPropagation()"></div><div id="${dropdownId}-list">${optsHtml}</div></div></div>`;
 }
+
+function toggleCellDropdown(id){
+  // Close Sort and Edit/Arrange dropdowns - fix double overlap image_e56e93.png
+  const sortDrop = document.getElementById('sortDropdownMenu');
+  const hideDrop = document.getElementById('hideFieldsDropdown');
+  if(sortDrop) sortDrop.classList.add('hidden');
+  if(hideDrop) hideDrop.classList.add('hidden');
+  const all = document.querySelectorAll('[data-cell-dropdown]');
+  all.forEach(d=>{ if(d.id!==id) d.classList.add('hidden'); });
+  const target = document.getElementById(id);
+  if(target) target.classList.toggle('hidden');
+}
+
+function closeAllCellDropdowns(){
+  document.querySelectorAll('[data-cell-dropdown]').forEach(d=> d.classList.add('hidden'));
+}
+
 function toggleEjenLink(recId, ejenId, isChecked){
   const rec = allJemaahUmrahRecords.find(r=> r.id===recId); if(!rec) return;
   let current = rec.fields['EJEN']; let arr = Array.isArray(current) ? [...current] : (current ? [current] : []);
@@ -2646,6 +2664,14 @@ document.addEventListener('click', function(e){
     }
   });
 })();
+
+
+
+document.addEventListener('click', function(e){
+  if(!e.target.closest('[data-cell-dropdown]') && !e.target.closest('.cell-dropdown-wrapper')){
+    if(typeof closeAllCellDropdowns === 'function') closeAllCellDropdowns();
+  }
+});
 
 
 })();
