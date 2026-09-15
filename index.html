@@ -532,8 +532,9 @@
       const sourceTrips = (cachedTrips.length>0) ? cachedTrips : (allTripDataForCalendar||[]);
       const upcoming = sourceTrips.filter(rec=>{
         const mula = rec.fields['Mula Pakej'] ? new Date(rec.fields['Mula Pakej']) : null;
-        if(!mula) return false; mula.setHours(0,0,0,0);
-        return mula >= today && mula <= in30;
+        if(!mula) return false; 
+        const mulaMid = new Date(mula); mulaMid.setHours(0,0,0,0);
+        return mulaMid >= today && mulaMid <= in30;
       }).sort((a,b)=> new Date(a.fields['Mula Pakej']) - new Date(b.fields['Mula Pakej']));
       if(countEl) countEl.textContent = upcoming.length+' Trip';
       if(upcoming.length===0){
@@ -543,7 +544,8 @@
       list.innerHTML = upcoming.map(rec=>{
         const f = rec.fields;
         const mula = new Date(f['Mula Pakej']);
-        const diff = Math.ceil((mula - today)/(1000*60*60*24));
+        const mulaMid = new Date(mula); mulaMid.setHours(0,0,0,0);
+        const diff = Math.round((mulaMid - today)/(1000*60*60*24));
         const diffText = diff===0 ? 'Hari ini' : diff===1 ? 'Esok • dalam 1 hari' : 'dalam '+diff+' hari';
         const diffSub = diff===0 ? 'Berlepas hari ini' : diff===1 ? 'Berlepas esok' : 'Berlepas dalam '+diff+' hari lagi';
         const baki = f['Available Seat']||0;
