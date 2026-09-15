@@ -6,12 +6,50 @@ let tripJemaahSortField = 'NAME';
 let tripJemaahSortDir = 'asc';
 
 let selectOptions = {
+    hijri: ['1447H','1448H','1449H','1450H'],
     group: ['GROUP A', 'GROUP B'],
     sektor: ['KUL-JED/JED-KUL', 'KUL-JED/MED-KUL', 'KUL-MED/JED-KUL', 'KUL-MED/MED-KUL', 'KUL-TIF/MED-JED'],
     penerbangan: ['OMAN AIR', 'EMIRATES', 'QATAR AIRWAYS', 'SAUDIA'],
     musim: ['LOW SEASON', 'MID SEASON', 'HIGH SEASON'],
     tempoh: ['11H 9M', '12H 10M', '9H 7M', '13H 10M', '17H 15M', '10H 7M']
 };
+
+let tripFilters = { hijri: 'All', month: 'All', search: '' };
+
+function getHijriFieldValue(rec){
+  const f = rec.fields;
+  // Try all possible field names
+  let val = f['Hijri Season'] || f['Hijri Year'] || f['Musim Hijri'] || f['Hijri'] || f['HIJRI'] || '';
+  if(val) return val.toString().trim().toUpperCase();
+  // Auto fallback from Mula Pakej date
+  const mula = f['Mula Pakej'];
+  if(mula){
+    const d = new Date(mula);
+    if(!isNaN(d)){
+      // Approximate Hijri mapping - 1448H = Jul 2026 - May 2027, 1449H = Jun 2027 onwards
+      // You can adjust these cutoffs
+      if(d < new Date('2027-05-15')) return '1448H';
+      if(d < new Date('2028-05-01')) return '1449H';
+      return '1450H';
+    }
+  }
+  return '1448H'; // default
+}
+function getMonthKeyFromDate(dateStr){
+  if(!dateStr) return 'TBC';
+  const d = new Date(dateStr);
+  if(isNaN(d)) return 'TBC';
+  const months = ['JAN','FEB','MAR','APR','MEI','JUN','JUL','OGOS','SEPT','OKT','NOV','DIS'];
+  return months[d.getMonth()] + ' ' + d.getFullYear();
+}
+function getMonthShort(dateStr){
+  if(!dateStr) return 'TBC';
+  const d = new Date(dateStr);
+  if(isNaN(d)) return 'TBC';
+  const months = ['JAN','FEB','MAR','APR','MEI','JUN','JUL','OGOS','SEPT','OKT','NOV','DIS'];
+  return months[d.getMonth()];
+}
+
 
 document.addEventListener('DOMContentLoaded', () => {
     renderTripUmrahHTML();
@@ -36,7 +74,11 @@ function renderTripUmrahHTML() {
                         <i class="fa-solid fa-rotate"></i>
                     </button>
                 </div>
-                <div id="tripSidebarContainer" class="space-y-2 overflow-y-auto flex-1 max-h-[75vh] pr-1">
+                <div class="space-y-2 mb-3">
+                    <div id="hijriPills" class="flex flex-wrap gap-1.5"></div>
+                    <div id="monthPills" class="flex flex-wrap gap-1"></div>
+                </div>
+                <div id="tripSidebarContainer" class="space-y-2 overflow-y-auto flex-1 max-h-[70vh] pr-1">
                     <div class="text-center py-10 text-slate-400 text-xs">Sila klik 'Refresh' untuk muat turun trip...</div>
                 </div>
             </div>
@@ -218,7 +260,7 @@ function renderTripDetailForm(rec) {
                 <div><label class="block font-bold text-slate-600 mb-1">Total Jemaah</label><input type="text" value="${f['Total Jemaah'] || 0}" disabled class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 cursor-not-allowed"></div>
                 <div><label class="block font-bold text-slate-600 mb-1">FIT Tickets</label><input type="text" value="${f['FIT Tickets'] || 0}" disabled class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 cursor-not-allowed"></div>
                 <div><label class="block font-bold text-slate-600 mb-1">Last Payment</label><input type="text" value="${f['Last Payment'] || '-'}" disabled class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 cursor-not-allowed"></div>
-                <div class="md:col-span-2"><label class="block font-bold text-slate-600 mb-1">Sektor</label>${buildSelectDropdown(id, 'Sektor', f['Sektor'], selectOptions.sektor, 'sektor')}</div>
+                <div><label class="block font-bold text-slate-600 mb-1">Hijri Season (1448H/1449H)</label>${buildSelectDropdown(id, 'Hijri Season', getHijriFieldValue(rec), selectOptions.hijri, 'hijri')}</div><div class="md:col-span-2"><label class="block font-bold text-slate-600 mb-1">Sektor</label>${buildSelectDropdown(id, 'Sektor', f['Sektor'], selectOptions.sektor, 'sektor')}</div>
             </div>
         </div>
         <div class="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-6 md:p-8">
@@ -324,8 +366,8 @@ async function updateAirtableField(recId, fieldName, value){
   }
 }
 async function deleteTripRecord(recId){ if(!confirm('Adakah anda pasti nak padam rekod Trip ini dari Airtable?')) return; const url=`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/PAKEJ%20UMRAH/${recId}`; try{ const response=await fetch(url,{method:'DELETE',headers:{Authorization:`Bearer ${AIRTABLE_PAT}`}}); if(response.ok){fetchTripUmrahData();}}catch(err){alert('Gagal memadam rekod.');} }
-function extractDynamicOptions(records){ records.forEach(r=>{ const f=r.fields; const checkAndPush=(val,targetArray)=>{ if(!val) return; const clean=normalizeDashFormat(val); if(clean&&!targetArray.includes(clean)){targetArray.push(clean);} }; checkAndPush(f['Group (if relevant)'], selectOptions.group); checkAndPush(f['Sektor'], selectOptions.sektor); checkAndPush(f['Penerbangan'], selectOptions.penerbangan); checkAndPush(f['Musim'], selectOptions.musim); checkAndPush(f['Tempoh Pakej'], selectOptions.tempoh); }); }
-function filterTripSidebar(){ const query=document.getElementById('searchTripSidebar').value.toLowerCase(); const filtered=allTripUmrahRecords.filter(rec=>{ const f=rec.fields; const rawTrip=(f['Trip']||'').toLowerCase(); const cleanTrip=cleanTripName(rawTrip).toLowerCase(); const airline=(f['Penerbangan']||'').toLowerCase(); return rawTrip.includes(query)||cleanTrip.includes(query)||airline.includes(query); }); renderTripSidebarList(filtered); }
+function extractDynamicOptions(records){ records.forEach(r=>{ const f=r.fields; const checkAndPush=(val,targetArray)=>{ if(!val) return; const clean=normalizeDashFormat(val); if(clean&&!targetArray.includes(clean)){targetArray.push(clean);} }; const checkHijri=(val)=>{ if(!val) return; const c=val.toString().trim().toUpperCase(); if(c && !selectOptions.hijri.includes(c)) selectOptions.hijri.push(c); if(c && !selectOptions.hijri.includes(c.replace('H',''))){} }; checkHijri(f['Hijri Season']||f['Hijri Year']||f['Hijri']); checkAndPush(f['Group (if relevant)'], selectOptions.group); checkAndPush(f['Sektor'], selectOptions.sektor); checkAndPush(f['Penerbangan'], selectOptions.penerbangan); checkAndPush(f['Musim'], selectOptions.musim); checkAndPush(f['Tempoh Pakej'], selectOptions.tempoh); }); }
+function filterTripSidebar(){ const query=document.getElementById('searchTripSidebar').value.toLowerCase(); tripFilters.search = query; renderTripSidebarList(allTripUmrahRecords); }
 function filterTripJemaahTable(q){ const query=(q||'').toLowerCase(); const container=document.getElementById('modul-pakej-umrah'); if(!container) return; const rows=container.querySelectorAll('table tbody tr'); rows.forEach(tr=>{ const txt=tr.textContent.toLowerCase(); tr.style.display=txt.includes(query)?'':'none'; }); }
 function closeTripAddCustomerModal(){ const modal=document.getElementById('tripAddCustomerModal'); if(modal){ modal.classList.add('hidden'); modal.style.display='none'; } }
 function openTripAddCustomerModal(){ let modal=document.getElementById('tripAddCustomerModal'); const tripName=(typeof selectedTripRecord!=='undefined'&&selectedTripRecord)?(selectedTripRecord.fields['Trip']||'') : ''; if(!modal){ modal=document.createElement('div'); modal.id='tripAddCustomerModal'; modal.className='fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4'; modal.innerHTML=`<div class="bg-white rounded-3xl shadow-2xl p-6 md:p-8 max-w-lg w-full border border-slate-100"><div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-100"><div class="flex items-center space-x-2.5"><div class="w-9 h-9 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center"><i class="fa-solid fa-user-plus"></i></div><div><h3 class="font-extrabold text-slate-900 text-base">Tambah Jemaah Baru</h3><p class="text-[11px] text-slate-500">${tripName ? 'Trip: '+tripName : ''}</p></div></div><button onclick="closeTripAddCustomerModal()" class="text-slate-400 hover:text-slate-700 p-1"><i class="fa-solid fa-xmark text-lg"></i></button></div><form onsubmit="submitTripAddCustomer(event)" class="space-y-3 text-xs"><div><label class="block font-bold text-slate-700 mb-1">Nama Penuh *</label><input type="text" id="tripAddName" required placeholder="NAMA PENUH" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none font-semibold uppercase"></div><div class="grid grid-cols-2 gap-3"><div><label class="block font-bold text-slate-700 mb-1">No IC</label><input type="text" id="tripAddIC" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none"></div><div><label class="block font-bold text-slate-700 mb-1">Passport No</label><input type="text" id="tripAddPassport" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none"></div></div><div><label class="block font-bold text-slate-700 mb-1">Trip</label><input type="text" id="tripAddTrip" value="${tripName}" readonly class="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl font-bold text-slate-600"></div><div class="flex gap-3 pt-3"><button type="button" onclick="closeTripAddCustomerModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl">Batal</button><button type="submit" class="flex-1 bg-slate-900 hover:bg-black text-white font-bold py-2.5 rounded-xl shadow-xs">Simpan</button></div></form></div>`; document.body.appendChild(modal); modal.addEventListener('click', (e)=>{ if(e.target===modal) closeTripAddCustomerModal(); }); } else { modal.style.display='flex'; modal.classList.remove('hidden'); const inp=modal.querySelector('#tripAddTrip'); if(inp) inp.value=tripName; } }
