@@ -1,4 +1,4 @@
-// V17 FINAL - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
+// V18 FINAL - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
 // Check this comment exists on live site to confirm deployment
 // Variable Global Simpan Data & Options
 let allTripUmrahRecords = [];
@@ -16,7 +16,7 @@ let selectOptions = {
     tempoh: ['11H 9M', '12H 10M', '9H 7M', '13H 10M', '17H 15M', '10H 7M']
 };
 
-console.log('🟢 Trip Umrah V17 FINAL LOADED - Hijri tabs fixed - Hijri 1448H/1449H/1450H -', new Date().toISOString());
+console.log('🟢 Trip Umrah V18 FINAL LOADED - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
 console.log('✅ Hijri Season field should be at line ~284');
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -106,30 +106,33 @@ function updateHijriFilterTabs(){
   const container = document.getElementById('hijriFilterTabs');
   if(!container) return;
   const counts = {};
-  let total = 0;
+  let total = (allTripUmrahRecords||[]).length;
   (allTripUmrahRecords||[]).forEach(r=>{
     const h = getHijriFieldValue(r);
     if(!h) return;
     counts[h] = (counts[h]||0)+1;
-    total++;
   });
   const order = ['1448H','1449H','1450H'];
-  const sortedHijri = Object.keys(counts).sort((a,b)=>{
-    const ia = order.indexOf(a); const ib = order.indexOf(b);
+  // Only show hijri that has at least 1 trip, plus SEMUA
+  // If user adds trip 1450H, it will auto appear
+  const existingHijri = order.filter(h => (counts[h]||0) > 0);
+  // Also include any other hijri values not in order but has data
+  Object.keys(counts).forEach(h=>{
+    if(!order.includes(h) && counts[h]>0 && !existingHijri.includes(h)) existingHijri.push(h);
+  });
+  // Sort by order
+  existingHijri.sort((a,b)=>{
+    const ia=order.indexOf(a); const ib=order.indexOf(b);
     if(ia!==-1 && ib!==-1) return ia-ib;
     if(ia!==-1) return -1;
     if(ib!==-1) return 1;
     return a.localeCompare(b);
   });
-  // Ensure all 3 options always shown even if 0
-  order.forEach(o=>{ if(!(o in counts)) counts[o]=counts[o]||0; });
-  const allHijri = order.filter(o=>counts[o]!==undefined || sortedHijri.includes(o));
-  // Build tabs
-  let html = `<button onclick="setHijriFilter('All')" class="px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${tripFilters.hijri==='All' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}">SEMUA ${total>0?`<span class="ml-1 opacity-70">(${total})</span>`:''}</button>`;
-  allHijri.forEach(h=>{
+  let html = `<button onclick="setHijriFilter('All')" class="px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${tripFilters.hijri==='All' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}">SEMUA <span class="ml-1 opacity-70">(${total})</span></button>`;
+  existingHijri.forEach(h=>{
     const c = counts[h]||0;
     const active = tripFilters.hijri===h;
-    html += `<button onclick="setHijriFilter('${h}')" class="px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${active ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}">${h} ${c>0?`<span class="ml-1 opacity-70">(${c})</span>`:''}</button>`;
+    html += `<button onclick="setHijriFilter('${h}')" class="px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${active ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}">${h} <span class="ml-1 opacity-70">(${c})</span></button>`;
   });
   container.innerHTML = html;
   updateAdvancedFilterOptions();
@@ -144,14 +147,61 @@ function updateAdvancedFilterOptions(){
     if(f['Tempoh Pakej']) tempohSet.add(f['Tempoh Pakej']);
     if(f['Musim']) musimSet.add(f['Musim']);
   });
+  // --- SORTING LOGIC ---
+  const monthOrder = {'JANUARI':1,'FEBRUARI':2,'MAC':3,'APRIL':4,'MEI':5,'JUN':6,'JULAI':7,'OGOS':8,'SEPTEMBER':9,'OKTOBER':10,'NOVEMBER':11,'DISEMBER':12};
+  function parseMonthKey(key){
+    // key like "OGOS 2026" or "DISEMBER 2026"
+    const parts = key.trim().split(' ');
+    const monthName = parts[0];
+    const year = parseInt(parts[1])||0;
+    const mNum = monthOrder[monthName]||99;
+    return year*100 + mNum;
+  }
+  function parseTempoh(t){
+    // "10H 7M" or "13H 10M" -> sort by H then M
+    const m = t.match(/(\d+)H.*?(\d+)M/);
+    if(!m) return 9999;
+    return parseInt(m[1])*100 + parseInt(m[2]);
+  }
+  const musimOrder = {'LOW SEASON':1,'MID SEASON':2,'HIGH SEASON':3};
+  
   const selMonth = document.getElementById('filterMonth');
   const selAirline = document.getElementById('filterAirline');
   const selTempoh = document.getElementById('filterTempoh');
   const selMusim = document.getElementById('filterMusim');
-  if(selMonth){ const cur = tripFilters.month; let opts='<option value="All">Bulan: Semua</option>'; Array.from(monthSet).sort().forEach(m=>{ opts+=`<option value="${m}" ${cur===m?'selected':''}>${m}</option>`; }); selMonth.innerHTML=opts; }
-  if(selAirline){ const cur = tripFilters.airline; let opts='<option value="All">Airline: Semua</option>'; Array.from(airlineSet).sort().forEach(a=>{ opts+=`<option value="${a}" ${cur===a?'selected':''}>${a}</option>`; }); selAirline.innerHTML=opts; }
-  if(selTempoh){ const cur = tripFilters.tempoh; let opts='<option value="All">Tempoh: Semua</option>'; Array.from(tempohSet).sort().forEach(t=>{ opts+=`<option value="${t}" ${cur===t?'selected':''}>${t}</option>`; }); selTempoh.innerHTML=opts; }
-  if(selMusim){ const cur = tripFilters.musim; let opts='<option value="All">Musim: Semua</option>'; Array.from(musimSet).sort().forEach(m=>{ opts+=`<option value="${m}" ${cur===m?'selected':''}>${m}</option>`; }); selMusim.innerHTML=opts; }
+  
+  if(selMonth){
+    const cur = tripFilters.month;
+    let sortedMonths = Array.from(monthSet).sort((a,b)=> parseMonthKey(a)-parseMonthKey(b));
+    let opts='<option value="All">Bulan: Semua</option>';
+    sortedMonths.forEach(m=>{ opts+=`<option value="${m}" ${cur===m?'selected':''}>${m}</option>`; });
+    // Only update if changed to preserve selection
+    if(selMonth.innerHTML!==opts || selMonth.value!==cur) selMonth.innerHTML=opts;
+    selMonth.value=cur;
+  }
+  if(selAirline){
+    const cur = tripFilters.airline;
+    let opts='<option value="All">Airline: Semua</option>';
+    Array.from(airlineSet).sort().forEach(a=>{ opts+=`<option value="${a}" ${cur===a?'selected':''}>${a}</option>`; });
+    if(selAirline.innerHTML!==opts) selAirline.innerHTML=opts;
+    selAirline.value=cur;
+  }
+  if(selTempoh){
+    const cur = tripFilters.tempoh;
+    let sortedTempoh = Array.from(tempohSet).sort((a,b)=> parseTempoh(a)-parseTempoh(b));
+    let opts='<option value="All">Tempoh: Semua</option>';
+    sortedTempoh.forEach(t=>{ opts+=`<option value="${t}" ${cur===t?'selected':''}>${t}</option>`; });
+    if(selTempoh.innerHTML!==opts) selTempoh.innerHTML=opts;
+    selTempoh.value=cur;
+  }
+  if(selMusim){
+    const cur = tripFilters.musim;
+    let sortedMusim = Array.from(musimSet).sort((a,b)=> (musimOrder[a]||99)-(musimOrder[b]||99));
+    let opts='<option value="All">Musim: Semua</option>';
+    sortedMusim.forEach(m=>{ opts+=`<option value="${m}" ${cur===m?'selected':''}>${m}</option>`; });
+    if(selMusim.innerHTML!==opts) selMusim.innerHTML=opts;
+    selMusim.value=cur;
+  }
 }
 
 function setHijriFilter(val){ tripFilters.hijri=val; filterTripSidebar(); updateHijriFilterTabs(); }
@@ -319,9 +369,19 @@ function renderTripDetailForm(rec) {
     const _scrollSave = _sidebar ? _sidebar.scrollTop : 0;
     selectedTripRecord = rec;
     if(rec && rec.id){ try{ localStorage.setItem('effah_last_selected_trip', rec.id); }catch(e){} }
-    renderTripSidebarList(allTripUmrahRecords);
+    // V18 FIX: Don't reset filter when clicking a trip - preserve current filtered list
+    // Previously: renderTripSidebarList(allTripUmrahRecords) -> caused bug where clicking 1449H trip shows all 31 trips
+    // Now: update only selected state, or re-apply current filters
+    const hasActiveFilter = tripFilters.hijri!=='All' || tripFilters.month!=='All' || tripFilters.airline!=='All' || tripFilters.tempoh!=='All' || tripFilters.musim!=='All' || (tripFilters.search&&tripFilters.search!=='');
+    if(hasActiveFilter){
+        // Re-apply filter but keep scroll
+        filterTripSidebar();
+        setTimeout(()=>{ const sc=document.getElementById('tripSidebarContainer'); if(sc) sc.scrollTop=_scrollSave; }, 10);
+    } else {
+        renderTripSidebarList(allTripUmrahRecords);
+        setTimeout(()=>{ const sc=document.getElementById('tripSidebarContainer'); if(sc) sc.scrollTop=_scrollSave; }, 10);
+    }
     // Restore scroll after sidebar re-render
-    setTimeout(()=>{ const sc=document.getElementById('tripSidebarContainer'); if(sc) sc.scrollTop=_scrollSave; }, 0);
     const f = rec.fields; const id = rec.id;
     const rawTripTitle = f['Trip'] || f['NAME'] || 'TBC';
     const displayTitle = cleanTripName(rawTripTitle);
