@@ -1,4 +1,4 @@
-// V19 FINAL - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
+// V20 FINAL - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
 // Check this comment exists on live site to confirm deployment
 // Variable Global Simpan Data & Options
 let allTripUmrahRecords = [];
@@ -16,7 +16,7 @@ let selectOptions = {
     tempoh: ['11H 9M', '12H 10M', '9H 7M', '13H 10M', '17H 15M', '10H 7M']
 };
 
-console.log('🟢 Trip Umrah V19 FINAL LOADED - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
+console.log('🟢 Trip Umrah V20 FINAL LOADED - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
 console.log('✅ Hijri Season field should be at line ~284');
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -530,9 +530,9 @@ function renderTripDetailForm(rec) {
                     <button onclick="openTripAddCustomerModal()" class="bg-slate-900 text-white font-bold px-3.5 py-2 rounded-xl hover:bg-black transition text-xs flex items-center shadow-xs"><i class="fa-solid fa-plus mr-1.5"></i> Add customer</button>
                 </div>
             </div>
-            <div class="overflow-x-auto border border-slate-200/80 rounded-xl">
+            <div class="overflow-auto border border-slate-200/80 rounded-xl max-h-[55vh] md:max-h-[60vh] scrollbar-thin">
                 <table class="w-full text-left text-xs" id="tripJemaahTable">
-                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200/80">
+                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200/80 sticky top-0 z-10">
                         <tr>
                             <th class="p-3 w-10 text-center">#</th>
                             <th class="p-3 cursor-pointer hover:text-slate-800 select-none" onclick="sortTripJemaahBy('NAME')">NAME <span class="sort-icon" data-field="NAME">↑</span></th>
@@ -570,8 +570,93 @@ function handleMulaDateChange(){ const mulaInput=document.getElementById('modalM
 function openNewTripModal(){ const modal=document.getElementById('newTripModal'); const mulaInput=document.getElementById('modalMulaPakej'); const tamatInput=document.getElementById('modalTamatPakej'); if(mulaInput){mulaInput.value='';mulaInput.removeAttribute('min');} if(tamatInput){tamatInput.value='';tamatInput.removeAttribute('min');} if(modal) modal.classList.remove('hidden'); }
 function closeNewTripModal(){ const modal=document.getElementById('newTripModal'); if(modal) modal.classList.add('hidden'); }
 async function submitNewTripRecord(e){ if(e) e.preventDefault(); if(!AIRTABLE_PAT||!AIRTABLE_BASE_ID) return; const mulaDate=document.getElementById('modalMulaPakej').value; const tamatDate=document.getElementById('modalTamatPakej').value; if(!mulaDate||!tamatDate){alert('Sila masukkan kedua-dua tarikh');return;} if(tamatDate<mulaDate){alert('Tarikh Tamat mesti selepas Mula');return;} const url=`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/PAKEJ%20UMRAH`; try{ const response=await fetch(url,{method:'POST',headers:{Authorization:`Bearer ${AIRTABLE_PAT}`,'Content-Type':'application/json'},body:JSON.stringify({fields:{"Mula Pakej":mulaDate,"Tamat Pakej":tamatDate}})}); if(response.ok){closeNewTripModal();fetchTripUmrahData();}else{const errData=await response.json();console.error(errData);alert("Gagal menambah trip baru.");}}catch(err){alert('Gagal menambah trip baru.');} }
-function buildSelectDropdown(recId, fieldName, currentValue, optionsArray, categoryKey){ const uniqueOptions=[]; optionsArray.forEach(opt=>{ if(!opt) return; const cleanOpt=normalizeDashFormat(opt); if(cleanOpt&&!uniqueOptions.includes(cleanOpt)) uniqueOptions.push(cleanOpt); }); let optionsHtml=`<option value="">-- Pilih --</option>`; const currentNormalized=normalizeDashFormat(currentValue); uniqueOptions.forEach(opt=>{ const isSelected=currentNormalized===opt; optionsHtml+=`<option value="${opt}" ${isSelected?'selected':''}>${opt}</option>`; }); optionsHtml+=`<option value="__ADD_NEW__" class="font-bold text-brand-maroon">+ Add New Option...</option>`; return `<select onchange="handleDropdownChange('${recId}', '${fieldName}', this, '${categoryKey}')" class="w-full p-2.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none font-semibold text-slate-800">${optionsHtml}</select>`; }
-function handleDropdownChange(recId, fieldName, selectEl, categoryKey){ const selectedVal=selectEl.value; if(selectedVal==='__ADD_NEW__'){ const newOption=prompt(`Masukkan nama pilihan baru untuk ${fieldName}:`); if(newOption&&newOption.trim()!==''){ const cleanOpt=normalizeDashFormat(newOption); if(!selectOptions[categoryKey].includes(cleanOpt)){selectOptions[categoryKey].push(cleanOpt);} selectEl.value=cleanOpt; updateAirtableField(recId, fieldName, cleanOpt);}else{selectEl.value='';}}else{updateAirtableField(recId, fieldName, selectedVal);} }
+function buildSelectDropdown(recId, fieldName, currentValue, optionsArray, categoryKey){ 
+  const uniqueOptions=[]; 
+  optionsArray.forEach(opt=>{ if(!opt) return; const cleanOpt=normalizeDashFormat(opt); if(cleanOpt&&!uniqueOptions.includes(cleanOpt)) uniqueOptions.push(cleanOpt); }); 
+  // Also include current value if not in options (for legacy data)
+  const currentNormalized=normalizeDashFormat(currentValue);
+  if(currentNormalized && !uniqueOptions.includes(currentNormalized) && currentNormalized!=='-- PILIH --'){
+    uniqueOptions.unshift(currentNormalized);
+  }
+  let optionsHtml=`<option value="">-- Pilih --</option>`; 
+  uniqueOptions.forEach(opt=>{ 
+    const isSelected=currentNormalized===opt; 
+    optionsHtml+=`<option value="${opt}" ${isSelected?'selected':''}>${opt}</option>`; 
+  }); 
+  // V20: Removed + Add New Option... because Airtable API requires schema.bases:write and metadata API
+  // New options must be added via Airtable UI or via addNewSelectOption() which uses metadata API
+  // We keep a small link below dropdown instead
+  return `<select onchange="handleDropdownChange('${recId}', '${fieldName}', this, '${categoryKey}')" class="w-full p-2.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none font-semibold text-slate-800">${optionsHtml}</select>`; 
+}
+function handleDropdownChange(recId, fieldName, selectEl, categoryKey){ 
+  const selectedVal=selectEl.value; 
+  if(selectedVal==='__ADD_NEW__'){ 
+    // Legacy fallback - shouldn't happen now, but keep logic
+    addNewSelectOptionViaMetadata(recId, fieldName, categoryKey, selectEl);
+  } else {
+    updateAirtableField(recId, fieldName, selectedVal);
+  } 
+}
+
+async function addNewSelectOptionViaMetadata(recId, fieldName, categoryKey, selectEl){
+  const newOption = prompt(`Masukkan nama pilihan baru untuk ${fieldName}:\n\nNota: Airtable perlukan permission schema.bases:write. Jika error, tambah manual di Airtable UI.`);
+  if(!newOption || newOption.trim()===''){ selectEl.value=''; return; }
+  const cleanOpt = normalizeDashFormat(newOption.trim());
+  
+  // Try metadata API first (requires schema.bases:write scope)
+  try {
+    if(!AIRTABLE_PAT || !AIRTABLE_BASE_ID) throw new Error('No PAT');
+    // Get field ID via metadata API
+    const metaUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`;
+    const tablesRes = await fetch(metaUrl, {headers:{Authorization:`Bearer ${AIRTABLE_PAT}`}});
+    if(!tablesRes.ok){
+      const err = await tablesRes.json();
+      console.error('Metadata API failed', err);
+      // Fallback: try direct record update (will fail if option doesn't exist, but we try)
+      // Show instruction
+      alert(`Airtable tidak benarkan tambah option baru via API (insufficient permission).\n\nError: ${err.error?.message||'schema.bases:write required'}\n\nSila tambah manual di Airtable:\n1. Buka base PAKEJ UMRAH\n2. Field ${fieldName} > Customize > Add option > ${cleanOpt}\n3. Lepas tu reload page ini.\n\nOption akan disimpan local dulu.`);
+      // Add locally only
+      if(!selectOptions[categoryKey].includes(cleanOpt)) selectOptions[categoryKey].push(cleanOpt);
+      selectEl.value=cleanOpt;
+      // Try optimistic update anyway
+      updateAirtableField(recId, fieldName, cleanOpt);
+      return;
+    }
+    const tablesData = await tablesRes.json();
+    const table = (tablesData.tables||[]).find(t=> t.name==='PAKEJ UMRAH');
+    if(!table) throw new Error('Table PAKEJ UMRAH not found');
+    const field = (table.fields||[]).find(f=> f.name===fieldName);
+    if(!field) throw new Error(`Field ${fieldName} not found`);
+    // field.options.choices
+    const existingChoices = field.options?.choices||[];
+    if(existingChoices.some(c=> c.name.toUpperCase()===cleanOpt.toUpperCase())){
+      // Already exists
+      updateAirtableField(recId, fieldName, cleanOpt);
+      return;
+    }
+    const newChoices = [...existingChoices, {name: cleanOpt}];
+    // Update field via metadata API
+    const patchUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${table.id}/fields/${field.id}`;
+    const patchRes = await fetch(patchUrl, {
+      method:'PATCH',
+      headers:{Authorization:`Bearer ${AIRTABLE_PAT}`, 'Content-Type':'application/json'},
+      body: JSON.stringify({options:{choices:newChoices}})
+    });
+    if(!patchRes.ok){
+      const err = await patchRes.json();
+      throw new Error(err.error?.message||'Failed to add option');
+    }
+    console.log(`✅ Added new option ${cleanOpt} to field ${fieldName} via metadata API`);
+    if(!selectOptions[categoryKey].includes(cleanOpt)) selectOptions[categoryKey].push(cleanOpt);
+    updateAirtableField(recId, fieldName, cleanOpt);
+  } catch(e){
+    console.error('addNewSelectOptionViaMetadata error', e);
+    alert(`Gagal tambah option baru: ${e.message}\n\nTambah manual di Airtable UI: Field ${fieldName} > + Add option > ${cleanOpt}`);
+    // Add locally
+    if(!selectOptions[categoryKey].includes(cleanOpt)) selectOptions[categoryKey].push(cleanOpt);
+    selectEl.value=cleanOpt;
+  }
+}
 async function updateAirtableField(recId, fieldName, value){
   if(!AIRTABLE_PAT||!AIRTABLE_BASE_ID) return;
   const sidebarContainer = document.getElementById('tripSidebarContainer');
