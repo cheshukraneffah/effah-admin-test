@@ -3,7 +3,12 @@ let allJemaahUmrahRecords = [];
 let rawTripRecordsList = []; 
 let tripMap = {}; 
 let selectedTripFilter = null;
-let selectedHijriFilter = 'All'; // V46 Option B: All | 1448H | 1449H | TBC - fetch dari data, jangan hardcoded
+let selectedHijriFilter = null;
+let isJemaahLoading = false;
+let jemaahFieldOptions = {};
+let ejenListCache = [];
+let jemaahMetaTableId = null;
+let jemaahMetaFieldsByName = {};
 
  // AUTO-FILL GLOBAL PAT - FINAL
 try{
