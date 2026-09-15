@@ -114,7 +114,7 @@ async function fetchTripUmrahData() {
           if(stillExists){
             renderTripDetailForm(stillExists);
             if(typeof fetchJemaahUmrahData === 'function'){
-              const _fetchId = stillExists.id; fetchJemaahUmrahData(true).then(()=>{ const curId = selectedTripRecord ? selectedTripRecord.id : null; if(curId && curId !== _fetchId){ console.log('Race guard: user switched to', curId, 'skip', _fetchId); return; } const sc=document.getElementById('tripSidebarContainer'); const savedScroll=sc?sc.scrollTop:0; const upd = allTripUmrahRecords.find(r=>r.id===_fetchId)||stillExists; renderTripDetailForm(upd); setTimeout(()=>{ const s2=document.getElementById('tripSidebarContainer'); if(s2) s2.scrollTop=savedScroll; },0); });
+              const _fetchId = stillExists.id; fetchJemaahUmrahData(true).then(()=>{ if(selectedTripRecord && selectedTripRecord.id !== _fetchId){ return; }  const curId = selectedTripRecord ? selectedTripRecord.id : null; if(curId && curId !== _fetchId){ console.log('Race guard: user switched to', curId, 'skip', _fetchId); return; } const sc=document.getElementById('tripSidebarContainer'); const savedScroll=sc?sc.scrollTop:0; const upd = allTripUmrahRecords.find(r=>r.id===_fetchId)||stillExists; renderTripDetailForm(upd); setTimeout(()=>{ const s2=document.getElementById('tripSidebarContainer'); if(s2) s2.scrollTop=savedScroll; },0); });
             }
           } else if (allTripUmrahRecords.length > 0) {
             renderTripDetailForm(allTripUmrahRecords[0]);
@@ -164,7 +164,11 @@ function renderTripSidebarList(records) {
     });
 }
 
+let _tripDetailVersion = 0;
 function renderTripDetailForm(rec) {
+    _tripDetailVersion++;
+    const currentVersion = _tripDetailVersion;
+    window._lastTripClickTime = Date.now();
     const _sidebar = document.getElementById('tripSidebarContainer');
     const _scrollSave = _sidebar ? _sidebar.scrollTop : 0;
     selectedTripRecord = rec;
