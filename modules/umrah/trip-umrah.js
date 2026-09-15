@@ -1,4 +1,4 @@
-// V27 FINAL - auto fetch field choices from Airtable so manual AIRASIA appears, text only add new option with proper error for Allow new options - add new option TEXT ONLY (no color/id) as requested, direct PATCH then metadata fallback - baki logic image_55ef73.png green >5 red <=5, closed no baki, remove +Add New Option to fix 422 image_c4c6ad.png, strict hijri fix TBC - strict hijri Season only (no auto calc) fix TBC image_0e0e43.png, fix 422 by sending only name image_b8057a.png - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
+// V28 FINAL - ALL SELECTIONS FROM AIRTABLE, no hardcoded, AIRASIA etc auto appear - auto fetch field choices from Airtable so manual AIRASIA appears, text only add new option with proper error for Allow new options - add new option TEXT ONLY (no color/id) as requested, direct PATCH then metadata fallback - baki logic image_55ef73.png green >5 red <=5, closed no baki, remove +Add New Option to fix 422 image_c4c6ad.png, strict hijri fix TBC - strict hijri Season only (no auto calc) fix TBC image_0e0e43.png, fix 422 by sending only name image_b8057a.png - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
 // Check this comment exists on live site to confirm deployment
 // Variable Global Simpan Data & Options
 let allTripUmrahRecords = [];
@@ -7,16 +7,17 @@ let currentTripJemaahList = [];
 let tripJemaahSortField = 'NAME';
 let tripJemaahSortDir = 'asc';
 
+// V28: ALL SELECTIONS NOT HARDCODED - fully fetch from Airtable options
 let selectOptions = {
-    hijri: ['1448H','1449H','1450H'],
-    group: ['GROUP A', 'GROUP B'],
-    sektor: ['KUL-JED/JED-KUL', 'KUL-JED/MED-KUL', 'KUL-MED/JED-KUL', 'KUL-MED/MED-KUL', 'KUL-TIF/MED-JED'],
-    penerbangan: ['OMAN AIR', 'EMIRATES', 'QATAR AIRWAYS', 'SAUDIA'],
-    musim: ['LOW SEASON', 'MID SEASON', 'HIGH SEASON'],
-    tempoh: ['11H 9M', '12H 10M', '9H 7M', '13H 10M', '17H 15M', '10H 7M']
+    hijri: [],
+    group: [],
+    sektor: [],
+    penerbangan: [],
+    musim: [],
+    tempoh: []
 };
 
-console.log('🟢 Trip Umrah V27 FINAL LOADED - auto load field choices AIRASIA + text only fix - text only add new option - baki all green>5 red<=5 + remove add new option 422 fix - strict hijri only (fix TBC blank) + fix 422 metadata API - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
+console.log('🟢 Trip Umrah V28 FINAL LOADED - all selections fetch from Airtable no hardcoded - auto load field choices AIRASIA + text only fix - text only add new option - baki all green>5 red<=5 + remove add new option 422 fix - strict hijri only (fix TBC blank) + fix 422 metadata API - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
 console.log('✅ Hijri Season field should be at line ~284');
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -271,11 +272,12 @@ function getStatusBadgeForCard(status, occupied, total){
 function cleanTripName(tripName) { if (!tripName) return 'TBC'; return tripName.replace(/^[\d\/]+\s*\|\s*/i, '').trim(); }
 function normalizeDashFormat(str) { if (!str) return ''; return str.trim().toUpperCase().replace(/KUL\s+/g, 'KUL-').replace(/\s+JED/g, '-JED').replace(/\s+MED/g, '-MED').replace(/\s+KUL/g, '-KUL').replace(/\s+TIF/g, '-TIF').replace(/--+/g, '-'); }
 
-// V27: Fetch field choices dynamically from Airtable so manual AIRASIA appears
+// V28: Fetch ALL field choices from Airtable - NO HARDCODED
 async function fetchAirtableFieldChoices(){
   try{
     if(!AIRTABLE_PAT || !AIRTABLE_BASE_ID) return;
     const metaUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`;
+    console.log('🔄 Fetching ALL select options from Airtable...');
     const res = await fetch(metaUrl, {headers:{Authorization:`Bearer ${AIRTABLE_PAT}`}});
     if(!res.ok){
       console.warn('Metadata fetch for choices failed', await res.text());
@@ -283,7 +285,10 @@ async function fetchAirtableFieldChoices(){
     }
     const data = await res.json();
     const table = (data.tables||[]).find(t=> t.name==='PAKEJ UMRAH');
-    if(!table) return;
+    if(!table){
+      console.warn('Table PAKEJ UMRAH not found in metadata');
+      return;
+    }
     const fieldMap = {
       'Hijri Season': 'hijri',
       'Group (if relevant)': 'group',
@@ -292,19 +297,22 @@ async function fetchAirtableFieldChoices(){
       'Musim': 'musim',
       'Tempoh Pakej': 'tempoh'
     };
-    (table.fields||[]).forEach(f=>{
-      const key = fieldMap[f.name];
-      if(key && f.options && f.options.choices){
-        const choices = f.options.choices.map(c=> c.name).filter(Boolean);
-        if(choices.length>0){
-          // Merge with existing, keep unique uppercase
-          const existing = selectOptions[key]||[];
-          const merged = [...new Set([...existing, ...choices.map(c=> normalizeDashFormat(c))])];
-          selectOptions[key] = merged;
-          console.log(`✅ Loaded ${key} choices from Airtable:`, choices);
-        }
+    // Clear and repopulate from Airtable only
+    Object.keys(fieldMap).forEach(airtableFieldName=>{
+      const key = fieldMap[airtableFieldName];
+      const field = (table.fields||[]).find(f=> f.name===airtableFieldName);
+      if(field && field.options && field.options.choices){
+        const choices = field.options.choices.map(c=> c.name).filter(Boolean).map(c=> normalizeDashFormat(c));
+        // Sort for consistency
+        const unique = [...new Set(choices)].sort();
+        selectOptions[key] = unique;
+        console.log(`✅ V28 Loaded ${key} (${airtableFieldName}) from Airtable:`, unique);
+      } else {
+        console.warn(`Field ${airtableFieldName} not found or has no choices`);
+        if(!selectOptions[fieldMap[airtableFieldName]]) selectOptions[fieldMap[airtableFieldName]] = [];
       }
     });
+    console.log('✅ All selectOptions loaded from Airtable:', selectOptions);
   }catch(e){
     console.warn('fetchAirtableFieldChoices error', e);
   }
