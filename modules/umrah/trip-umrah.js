@@ -1,4 +1,4 @@
-// V18 FINAL - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
+// V19 FINAL - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
 // Check this comment exists on live site to confirm deployment
 // Variable Global Simpan Data & Options
 let allTripUmrahRecords = [];
@@ -16,7 +16,7 @@ let selectOptions = {
     tempoh: ['11H 9M', '12H 10M', '9H 7M', '13H 10M', '17H 15M', '10H 7M']
 };
 
-console.log('🟢 Trip Umrah V18 FINAL LOADED - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
+console.log('🟢 Trip Umrah V19 FINAL LOADED - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
 console.log('✅ Hijri Season field should be at line ~284');
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -326,29 +326,120 @@ async function fetchTripUmrahData() {
 function renderTripSidebarList(records) {
     const container = document.getElementById('tripSidebarContainer');
     if (!container) return;
-    // Preserve scroll
     const prevScroll = container.scrollTop;
     container.innerHTML = '';
-    if (records.length === 0) { container.innerHTML = '<div class="text-center py-10 text-slate-400 text-xs">Tiada rekod trip.</div>'; return; }
-    records.forEach(rec => {
+    if (!records || records.length === 0) { container.innerHTML = '<div class="text-center py-10 text-slate-400 text-xs">Tiada rekod trip.</div>'; return; }
+    
+    // Group by Bulan (Month) - like reference image image_0a5c69.png
+    const monthOrder = {'JANUARI':1,'FEBRUARI':2,'MAC':3,'APRIL':4,'MEI':5,'JUN':6,'JULAI':7,'OGOS':8,'SEPTEMBER':9,'OKTOBER':10,'NOVEMBER':11,'DISEMBER':12};
+    function parseMonthKeyForSort(key){
+      const parts = key.trim().split(' ');
+      const monthName = parts[0];
+      const year = parseInt(parts[1])||0;
+      const mNum = monthOrder[monthName]||99;
+      return year*100 + mNum;
+    }
+    
+    // Group records
+    const groups = {};
+    records.forEach(rec=>{
+      const key = getMonthKeyLong(rec.fields['Mula Pakej']||'');
+      if(!groups[key]) groups[key]=[];
+      groups[key].push(rec);
+    });
+    
+    // Sort group keys chronologically
+    const sortedGroupKeys = Object.keys(groups).sort((a,b)=> parseMonthKeyForSort(a)-parseMonthKeyForSort(b));
+    
+    sortedGroupKeys.forEach(groupKey=>{
+      const groupRecs = groups[groupKey];
+      // Sort trips inside group by Mula Pakej date ascending
+      groupRecs.sort((a,b)=>{
+        const da = new Date(a.fields['Mula Pakej']||0);
+        const db = new Date(b.fields['Mula Pakej']||0);
+        return da - db;
+      });
+      
+      // Header like image_0a5c69.png: JULAI 2026 with count badge
+      const header = document.createElement('div');
+      header.className = 'flex items-center justify-between mt-4 mb-2 px-1 first:mt-0';
+      header.innerHTML = `
+        <div class="flex items-center gap-1.5">
+          <span class="text-[11px]">📅</span>
+          <span class="text-[11px] font-extrabold text-[#8B1E3F] tracking-wide uppercase">${groupKey}</span>
+        </div>
+        <span class="text-[10px] font-bold bg-[#FDF0F3] text-[#8B1E3F] border border-[#F5D0D9] px-2 py-0.5 rounded-full">${groupRecs.length} Trip</span>
+      `;
+      container.appendChild(header);
+      
+      // Divider line
+      const divider = document.createElement('div');
+      divider.className = 'h-px bg-slate-200/80 mb-2';
+      container.appendChild(divider);
+      
+      groupRecs.forEach(rec=>{
         const f = rec.fields;
         const rawTripTitle = f['Trip'] || f['NAME'] || 'TBC';
         const displayTitle = cleanTripName(rawTripTitle);
         const airline = f['Penerbangan'] || 'N/A';
+        const sektor = f['Sektor'] || '';
+        const tempoh = f['Tempoh Pakej'] || '';
+        const status = f['Status'] || '';
+        const totalSeat = f['Total Seat'] || 0;
+        const availSeat = f['Available Seat'] || 0;
         const isSelected = selectedTripRecord && selectedTripRecord.id === rec.id;
+        
+        // Status badge logic for card (like image_0a5c69.png)
+        let statusBadge = getStatusBadgeForCard(status, (totalSeat-availSeat), totalSeat);
+        let statusLabel = statusBadge.label;
+        let statusDot = statusBadge.dot;
+        let statusCls = statusBadge.cls;
+        
+        // Baki seat logic
+        let bakiText = '';
+        if(availSeat>0 && availSeat<=5){
+          bakiText = `<div class="text-right mt-1"><span class="text-[10px] font-bold text-rose-600">Baki: ${availSeat} Seat</span></div>`;
+        } else if(availSeat<=0){
+          bakiText = `<div class="text-right mt-1"><span class="text-[10px] font-bold text-slate-400">Tamat / Ditutup</span></div>`;
+        }
+        
         const card = document.createElement('div');
         card.setAttribute('data-trip-id', rec.id);
-        card.className = `p-3 rounded-xl border text-left cursor-pointer transition ${isSelected ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-slate-50/50 hover:bg-slate-100/60 border-slate-200/80'}`;
+        // Card style like image_0a5c69.png - white with border, selected is dark
+        if(isSelected){
+          card.className = 'p-3 rounded-xl border text-left cursor-pointer transition bg-slate-900 text-white border-slate-900 shadow-md mb-2';
+        } else {
+          card.className = 'p-3 rounded-xl border text-left cursor-pointer transition bg-white hover:bg-slate-50 border-slate-200/80 shadow-sm mb-2';
+        }
         card.onclick = () => renderTripDetailForm(rec);
-        const titleColor = isSelected ? 'text-white' : 'text-slate-900';
-        card.innerHTML = `<h4 class="font-bold text-xs ${titleColor} leading-snug">${displayTitle}</h4><div class="mt-2">${getAirlineBadgeHtml(airline, isSelected)}</div>`;
+        const titleColor = isSelected ? 'text-white' : 'text-slate-800';
+        const sektorColor = isSelected ? 'text-white/60' : 'text-slate-500';
+        
+        // Airline badge
+        const airlineBadge = getAirlineBadgeHtml(airline, isSelected);
+        const tempohBadge = tempoh ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-md border ${isSelected?'bg-white/15 text-white border-white/20':'bg-slate-50 text-slate-700 border-slate-200'} uppercase">${tempoh}</span>` : '';
+        
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-2">
+            <h4 class="font-bold text-[13px] ${titleColor} leading-snug flex-1">${displayTitle}</h4>
+            <div class="flex items-center gap-1.5 flex-shrink-0">
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 ${statusCls}"><span class="w-2 h-2 rounded-full ${statusDot}"></span>${statusLabel}</span>
+            </div>
+          </div>
+          <div class="mt-2 flex items-center gap-1.5 flex-wrap">
+            ${tempohBadge}
+            ${airlineBadge}
+          </div>
+          ${sektor ? `<div class="mt-1.5 text-[10px] ${sektorColor} font-medium">${sektor}</div>` : ''}
+          ${bakiText}
+        `;
         container.appendChild(card);
+      });
     });
-    // Restore scroll after render
+    
     requestAnimationFrame(()=>{
       try{ updateHijriFilterTabs(); }catch(e){}
       container.scrollTop = prevScroll;
-      // Also ensure selected card is visible but don't jump to top
       const selectedEl = container.querySelector('[data-trip-id="'+(selectedTripRecord?.id||'')+'"]');
       if(selectedEl){
         const rect = selectedEl.getBoundingClientRect();
@@ -502,8 +593,12 @@ async function updateAirtableField(recId, fieldName, value){
   try{
     const response=await fetch(url,{method:'PATCH',headers:{Authorization:`Bearer ${AIRTABLE_PAT}`,'Content-Type':'application/json'},body:JSON.stringify({fields:fieldsData})});
     if(response.ok){
-      // Just update sidebar without resetting scroll
-      renderTripSidebarList(allTripUmrahRecords);
+      // V19 FIX: preserve current filters instead of resetting to all
+      if(typeof tripFilters !== 'undefined' && (tripFilters.hijri!=='All' || tripFilters.month!=='All' || tripFilters.airline!=='All' || tripFilters.tempoh!=='All' || tripFilters.musim!=='All' || (tripFilters.search&&tripFilters.search!==''))){
+        filterTripSidebar();
+      } else {
+        renderTripSidebarList(allTripUmrahRecords);
+      }
       // Restore scroll immediately
       setTimeout(()=>{
         const sc = document.getElementById('tripSidebarContainer');
@@ -527,7 +622,11 @@ async function updateAirtableField(recId, fieldName, value){
     console.error(err);
     // On network fail (ERR_NAME_NOT_RESOLVED), keep local change
     console.warn('Airtable update failed, keeping local change. Will sync on next refresh.');
-    renderTripSidebarList(allTripUmrahRecords);
+    if(typeof tripFilters !== 'undefined' && (tripFilters.hijri!=='All' || tripFilters.month!=='All' || tripFilters.airline!=='All' || tripFilters.tempoh!=='All' || tripFilters.musim!=='All' || (tripFilters.search&&tripFilters.search!==''))){
+      filterTripSidebar();
+    } else {
+      renderTripSidebarList(allTripUmrahRecords);
+    }
     setTimeout(()=>{ const sc=document.getElementById('tripSidebarContainer'); if(sc) sc.scrollTop=savedScrollTop; }, 10);
   }
 }
