@@ -300,13 +300,20 @@
     }
 
     function determineActiveHijriSeason(trips){
-      if(!trips || trips.length===0) return '1448H';
-      // Group by hijri season
+      if(!trips || trips.length===0) return {active:'1448H', nextSeason:'1449H', seasonMap:{}};
+      // Group by hijri season - V38 FIX: if no hijri season field, fallback to all trips as 1448H
       const seasonMap = {};
+      let hasAnyHijri = false;
       trips.forEach(rec=>{
         const f = rec.fields || {};
-        const hijri = getHijriSeasonFromField(f['Hijri Season'] || '');
-        if(!hijri || hijri==='') return;
+        let hijri = getHijriSeasonFromField(f['Hijri Season'] || '');
+        if(!hijri || hijri===''){
+          // Fallback: if no hijri season, treat as 1448H for now (or extract from date)
+          // This prevents calendar showing 0 trips when Hijri Season field empty
+          hijri = '1448H';
+        } else {
+          hasAnyHijri = true;
+        }
         const mula = f['Mula Pakej'] ? new Date(f['Mula Pakej']) : null;
         if(!mula || isNaN(mula)) return;
         if(!seasonMap[hijri]) seasonMap[hijri] = { trips: [], maxDate: mula, minDate: mula, hasUpcoming: false };
@@ -314,6 +321,11 @@
         if(mula > seasonMap[hijri].maxDate) seasonMap[hijri].maxDate = mula;
         if(mula < seasonMap[hijri].minDate) seasonMap[hijri].minDate = mula;
       });
+      
+      // If no hijri at all, default to 1448H with all trips
+      if(Object.keys(seasonMap).length===0){
+        seasonMap['1448H'] = { trips: trips, maxDate: new Date(), minDate: new Date(), hasUpcoming: true };
+      }
       
       const today = new Date(); today.setHours(0,0,0,0);
       const seasons = Object.keys(seasonMap).sort(); // 1448H, 1449H...
@@ -356,7 +368,11 @@
     }
 
     function updateStatsForActiveSeason(trips, jemaah){
-      const result = determineActiveHijriSeason(trips);
+      let result = determineActiveHijriSeason(trips);
+      // Handle if result is string (old version) or object
+      if(typeof result === 'string'){
+        result = {active: result, nextSeason: (parseInt(result)+1)+'H', seasonMap:{}};
+      }
       activeHijriSeason = result.active;
       
       // Update labels
@@ -445,9 +461,10 @@
       const daysInMonth = new Date(year, month+1, 0).getDate();
       const today = new Date(); today.setHours(0,0,0,0);
       
-      // Build trip dates map for active season
+      // Build trip dates map - V38 FIX for image_bebc88.png
       const tripByDate = {};
-      allTripDataForCalendar.forEach(rec=>{
+      const sourceTrips = (allTripDataForCalendar && allTripDataForCalendar.length>0) ? allTripDataForCalendar : (typeof cachedTrips !== 'undefined' ? cachedTrips : []);
+      sourceTrips.forEach(rec=>{
         const mula = rec.fields['Mula Pakej'];
         if(!mula) return;
         const d = new Date(mula);
@@ -564,20 +581,109 @@
       // This event may not exist, so we poll
     });
 
-    // Poll for allTripUmrahRecords
-    setInterval(function(){
-      if(window.allTripUmrahRecords && window.allTripUmrahRecords.length>0 && window.allTripUmrahRecords !== cachedTrips){
-        cachedTrips = window.allTripUmrahRecords;
-        if(window.allJemaahUmrahRecords) cachedJemaah = window.allJemaahUmrahRecords;
+    // V38 FIX for image_bebc88.png - tak keluar trip sebab allTripUmrahRecords belum fetch di home page
+    // Home page tidak trigger fetchTripUmrahData, jadi data kosong. Kita perlu fetch sendiri atau tunggu dari modul trip-umrah
+    function getTripData(){
+      // Check multiple sources - V37 uses window.allTripRecords, not allTripUmrahRecords
+      if(window.allTripUmrahRecords && window.allTripUmrahRecords.length>0) return window.allTripUmrahRecords;
+      if(window.allTripRecords && window.allTripRecords.length>0) return window.allTripRecords;
+      if(window.allTripDataForCalendar && window.allTripDataForCalendar.length>0) return window.allTripDataForCalendar;
+      // Also check global let allTripUmrahRecords if exposed
+      try{
+        if(typeof allTripUmrahRecords !== 'undefined' && allTripUmrahRecords.length>0) return allTripUmrahRecords;
+      }catch(e){}
+      return [];
+    }
+    
+    function getJemaahData(){
+      if(window.allJemaahUmrahRecords && window.allJemaahUmrahRecords.length>0) return window.allJemaahUmrahRecords;
+      if(window.allJemaahRecords && window.allJemaahRecords.length>0) return window.allJemaahRecords;
+      try{
+        if(typeof allJemaahUmrahRecords !== 'undefined' && allJemaahUmrahRecords.length>0) return allJemaahUmrahRecords;
+      }catch(e){}
+      return [];
+    }
+
+    // Auto-fetch trips if not loaded yet (home page doesn't auto fetch)
+    async function autoFetchIfNeeded(){
+      const existing = getTripData();
+      if(existing.length>0) return existing;
+      console.log('V38 auto-fetch trips for calendar - home page has no data yet, fetching from Airtable...');
+      // Try to call fetchTripUmrahData if available (from trip-umrah.js)
+      if(typeof window.fetchTripUmrahData === 'function'){
+        try{
+          await window.fetchTripUmrahData();
+          // After fetch, get data again
+          return getTripData();
+        }catch(e){ console.warn('autoFetch via fetchTripUmrahData failed', e); }
+      }
+      // Fallback: direct fetch via API
+      try{
+        const pat = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat');
+        const base = window.AIRTABLE_BASE_ID || localStorage.getItem('effah_base_id');
+        if(!pat || !base) return [];
+        const url = `https://api.airtable.com/v0/${base}/PAKEJ%20UMRAH?sort[0][field]=Mula%20Pakej&sort[0][direction]=asc&pageSize=100`;
+        const res = await fetch(url, {headers:{Authorization:`Bearer ${pat}`}});
+        const data = await res.json();
+        const records = (data.records||[]).filter(r=>r && r.id && r.fields);
+        window.allTripUmrahRecords = records;
+        window.allTripRecords = records;
+        console.log('V38 direct fetch got', records.length, 'trips');
+        return records;
+      }catch(e){
+        console.warn('V38 direct fetch failed', e);
+        return [];
+      }
+    }
+
+    // Poll for data - more robust
+    let pollCount = 0;
+    setInterval(async function(){
+      pollCount++;
+      let trips = getTripData();
+      let jemaah = getJemaahData();
+      
+      // If no trips after 3 seconds, try auto-fetch
+      if(trips.length===0 && pollCount===3){
+        trips = await autoFetchIfNeeded();
+        jemaah = getJemaahData();
+      }
+      
+      if(trips.length>0 && trips !== cachedTrips){
+        cachedTrips = trips;
+        cachedJemaah = jemaah;
+        console.log('V38 found trips:', trips.length, 'jemaah:', jemaah.length);
         updateStatsForActiveSeason(cachedTrips, cachedJemaah);
       }
-      if(window.allJemaahUmrahRecords && window.allJemaahUmrahRecords.length>0 && window.allJemaahUmrahRecords !== cachedJemaah){
-        cachedJemaah = window.allJemaahUmrahRecords;
+      if(jemaah.length>0 && jemaah !== cachedJemaah){
+        cachedJemaah = jemaah;
         if(cachedTrips.length>0) updateStatsForActiveSeason(cachedTrips, cachedJemaah);
+      }
+      
+      // If still no trips after 10 polls, show message
+      if(pollCount===10 && trips.length===0){
+        const grid = document.getElementById('calendarGrid');
+        if(grid) grid.innerHTML = `<div class="text-center py-8 col-span-7 text-slate-400 text-xs">Tiada data trip. Sila klik Refresh di Trip Umrah atau semak API Key.</div>`;
+        const list = document.getElementById('upcomingTripsList');
+        if(list) list.innerHTML = `<div class="text-center py-8 text-slate-400 text-xs">Tiada data. Data trip belum dimuatkan.</div>`;
       }
     }, 1000);
 
-    console.log('✅ V38 Calendar + Auto Hijri Season logic loaded');
+    // Also trigger on DOMContentLoaded and after login
+    document.addEventListener('DOMContentLoaded', function(){
+      setTimeout(async ()=>{
+        const trips = await autoFetchIfNeeded();
+        if(trips.length>0) updateStatsForActiveSeason(trips, getJemaahData());
+      }, 1500);
+    });
+
+    // Listen for custom event from trip module
+    window.addEventListener('tripDataLoaded', function(e){
+      console.log('V38 tripDataLoaded event', e.detail);
+      if(e.detail && e.detail.records) updateStatsForActiveSeason(e.detail.records, getJemaahData());
+    });
+
+    console.log('✅ V38 Calendar + Auto Hijri Season logic loaded - fixed image_bebc88.png no trips');
     </script>
 
     <script src="js/config.js"></script>
