@@ -26,7 +26,7 @@ try{
 let selectedJemaahIds = new Set();
 
 // Hidden Fields Tracking
-let hiddenColumns = {};
+let hiddenColumns = JSON.parse(localStorage.getItem('jemaahHiddenColumns')) || {};
 
 // Sort State Tracking
 let currentSortField = 'NAME';
@@ -196,12 +196,25 @@ function renderJemaahUmrahHTML() {
 
                         <div class="relative">
                             <button onclick="toggleHideFieldsDropdown()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-xl transition text-xs flex items-center border border-slate-300">
-                                <i class="fa-solid fa-eye-slash mr-1.5 text-slate-500"></i> Hide fields
+                                <i class="fa-solid fa-table-columns mr-1.5 text-slate-500"></i> Edit/Arrange Fields
                             </button>
 
-                            <div id="hideFieldsDropdown" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-300 z-50 p-3 text-xs space-y-2 max-h-80 overflow-y-auto">
-                                <div class="font-bold text-slate-400 text-[10px] uppercase border-b border-slate-200 pb-1">Tunjukkan / Sorok Column</div>
-                                <div id="fieldsToggleList" class="space-y-1.5"></div>
+                            <div id="hideFieldsDropdown" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 text-xs max-h-[420px] flex flex-col overflow-hidden">
+                                <div class="p-3 border-b border-slate-200 space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <div class="font-bold text-slate-700 text-[11px] uppercase">Find a field</div>
+                                        <button class="text-[11px] text-slate-400 hover:text-slate-600" onclick="document.getElementById('fieldSearchInput').value=''; filterFieldsList();"><i class="fa-solid fa-question-circle"></i></button>
+                                    </div>
+                                    <div class="relative">
+                                        <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400 text-[10px]"></i>
+                                        <input type="text" id="fieldSearchInput" onkeyup="filterFieldsList()" placeholder="Find a field" class="w-full text-xs pl-7 pr-3 py-1.5 border border-slate-300 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400">
+                                    </div>
+                                </div>
+                                <div id="fieldsToggleList" class="overflow-y-auto flex-1 p-1.5 space-y-0.5"></div>
+                                <div class="p-2 border-t border-slate-200 bg-slate-50/50 flex justify-between text-[10px] text-slate-500">
+                                    <span id="visibleFieldsCount">0 fields</span>
+                                    <button onclick="resetFieldsToDefault()" class="font-bold text-slate-600 hover:text-brand-maroon">Reset</button>
+                                </div>
                             </div>
                         </div>
 
@@ -470,7 +483,6 @@ async function fetchEjenList(){
       if(data.records) records = records.concat(data.records);
       offset = data.offset || '';
     }while(offset);
-    if(records.length>0){ console.log('V51 EJEN LIST first record fields', Object.keys(records[0].fields), records[0].fields); }
     ejenListCache = records.map(r=>({ id: r.id, name: r.fields['NAMA EJEN'] || r.fields['NAMA'] || r.fields['NAME'] || 'Unknown', status: r.fields['STATUS']||'', noTelefon: r.fields['NO TELEFON']||'', raw: r }));
   }catch(e){ console.error(e); }
 }
@@ -658,6 +670,7 @@ function getResolvedTripName(tripField) {
     return cleanTripName(rawVal);
 }
 
+
 function renderViewsSidebar() {
     const container = document.getElementById('jemaahViewsSidebar');
     if (!container) return;
@@ -709,9 +722,7 @@ function renderViewsSidebar() {
       return year*100 + mNum;
     }
 
-    // Filter invalid records (fix M_ID error)
     const safeTrips = (tripsToShow||[]).filter(rec=> rec && rec.fields && typeof rec.fields === 'object');
-    // Group by month based on Mula Pakej
     const groups = {};
     safeTrips.forEach(rec=>{
       const key = getMonthKeyLongJemaah(rec.fields['Mula Pakej']||'');
@@ -723,7 +734,6 @@ function renderViewsSidebar() {
     const sortedGroupKeys = Object.keys(groups).sort((a,b)=> parseMonthKeyForSortJemaah(a)-parseMonthKeyForSortJemaah(b));
 
     if(sortedGroupKeys.length===0){
-      // Fallback flat list if no date
       safeTrips.forEach(rec => {
         const title = tripMap[rec.id] ? tripMap[rec.id].title : cleanTripName(rec.fields['Trip']);
         if (!title || title === 'TBC') return;
@@ -737,14 +747,12 @@ function renderViewsSidebar() {
     } else {
       sortedGroupKeys.forEach(groupKey=>{
         const groupRecs = groups[groupKey];
-        // Sort inside group by date asc
         groupRecs.sort((a,b)=>{
           const da = new Date(a.fields['Mula Pakej']||0);
           const db = new Date(b.fields['Mula Pakej']||0);
           return da - db;
         });
 
-        // Header like image_d21506.png: SEPTEMBER 2026 + count badge - tapi simple
         const header = document.createElement('div');
         header.className = 'flex items-center justify-between mt-4 mb-2 px-1 first:mt-0';
         header.innerHTML = `
@@ -811,7 +819,7 @@ function renderJemaahHijriTabs(){
     const tc = tripCounts[h]||0;
     const active = selectedHijriFilter===h;
     const isLoadingThis = isJemaahLoading && active;
-    html += `<button onclick="setJemaahHijriFilter('${h.replace(/'/g, "\\'")}')" class="px-3.5 py-2 rounded-2xl text-[11px] font-bold border transition flex flex-col items-start leading-none gap-0.5 ${active ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'} ${isLoadingThis?'opacity-70':''}"><span class="flex items-center gap-1.5">${isLoadingThis?'<i class="fa-solid fa-spinner fa-spin text-[10px]"></i>':''}${h}</span><span class="text-[9px] font-semibold opacity-70 tracking-wide">${tc} TRIP${jc>0?` (${jc})`:''}</span></button>`;
+    html += `<button onclick="setJemaahHijriFilter('${h.replace(/'/g, "\'")}')" class="px-3.5 py-2 rounded-2xl text-[11px] font-bold border transition flex flex-col items-start leading-none gap-0.5 ${active ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'} ${isLoadingThis?'opacity-70':''}"><span class="flex items-center gap-1.5">${isLoadingThis?'<i class="fa-solid fa-spinner fa-spin text-[10px]"></i>':''}${h}</span><span class="text-[9px] font-semibold opacity-70 tracking-wide">${tc} TRIP${jc>0?` (${jc})`:''}</span></button>`;
   });
   if(tbcJemaah>0 || selectedHijriFilter==='TBC'){
     const active = selectedHijriFilter==='TBC';
@@ -858,7 +866,8 @@ function setJemaahHijriFilter(hijri){
   }, 50);
 }
 
-function selectTripFilter(tripId, displayTitle) {
+
+function selectTripFilterfunction selectTripFilter(tripId, displayTitle) {
     selectedTripFilter = tripId;
     const titleEl = document.getElementById('currentViewTitle');
     if (titleEl) titleEl.textContent = displayTitle.toUpperCase();
@@ -2117,25 +2126,180 @@ function updateStickyNameLeftOffset(idxWidth) {
 }
 
 const columnDefinitions = [
-    { key: 'col-name', label: 'NAME' },
-    { key: 'col-picture', label: 'PICTURE' },
-    { key: 'col-ic', label: 'IC NO.' },
-    { key: 'col-passport', label: 'PASSPORT NO.' },
-    { key: 'col-gender', label: 'GENDER' },
-    { key: 'col-age', label: 'AGE' },
-    { key: 'col-dob', label: 'DOB' },
-    { key: 'col-dobf', label: 'DOB (FOREIGNER)' },
-    { key: 'col-nat', label: 'NATIONALITY' },
-    { key: 'col-visa', label: 'STATUS VISA' },
-    { key: 'col-passcopy', label: 'PASSPORT COPY' },
-    { key: 'col-visacopy', label: 'VISA COPY' },
-    { key: 'col-mofabio', label: 'MOFABIO' },
-    { key: 'col-fit', label: 'FIT TICKET' },
-    { key: 'col-trip', label: 'TRIP' },
-    { key: 'col-issue', label: 'DATE OF ISSUE' },
-    { key: 'col-expire', label: 'DATE OF EXPIRE' },
-    { key: 'col-notes', label: 'NOTES' }
+    { key: 'col-name', label: 'NAME', icon: 'fa-font', type: 'A' },
+    { key: 'col-picture', label: 'PICTURE', icon: 'fa-image', type: '🖼️' },
+    { key: 'col-ic', label: 'IC NO.', icon: 'fa-id-card', type: 'A' },
+    { key: 'col-passport', label: 'PASSPORT NO.', icon: 'fa-passport', type: 'A' },
+    { key: 'col-gender', label: 'GENDER', icon: 'fa-venus-mars', type: 'singleSelect' },
+    { key: 'col-age', label: 'AGE', icon: 'fa-calculator', type: 'formula' },
+    { key: 'col-dob', label: 'DOB', icon: 'fa-calculator', type: 'formula' },
+    { key: 'col-dobf', label: 'DOB (FOREIGNER)', icon: 'fa-calendar', type: 'date' },
+    { key: 'col-nat', label: 'NATIONALITY', icon: 'fa-flag', type: 'singleSelect' },
+    { key: 'col-visa', label: 'STATUS VISA', icon: 'fa-file-lines', type: 'singleSelect' },
+    { key: 'col-passcopy', label: 'PASSPORT COPY', icon: 'fa-file-image', type: 'attachment' },
+    { key: 'col-visacopy', label: 'VISA COPY', icon: 'fa-file-image', type: 'attachment' },
+    { key: 'col-mofabio', label: 'MOFABIO', icon: 'fa-file-image', type: 'attachment' },
+    { key: 'col-fit', label: 'FIT TICKET', icon: 'fa-square-check', type: 'checkbox' },
+    { key: 'col-trip', label: 'TRIP', icon: 'fa-link', type: 'link' },
+    { key: 'col-issue', label: 'DATE OF ISSUE', icon: 'fa-calendar', type: 'date' },
+    { key: 'col-expire', label: 'DATE OF EXPIRE', icon: 'fa-calendar', type: 'date' },
+    { key: 'col-notes', label: 'NOTES', icon: 'fa-align-left', type: 'text' },
+    { key: 'col-board', label: 'BOARD BASIS', icon: 'fa-utensils', type: 'multiSelect' },
+    { key: 'col-train', label: 'TRAIN', icon: 'fa-train', type: 'checkbox' },
+    { key: 'col-insuran', label: 'INSURAN', icon: 'fa-shield-halved', type: 'multiSelect' },
+    { key: 'col-pakej', label: 'PAKEJ', icon: 'fa-box', type: 'singleSelect' },
+    { key: 'col-ejen', label: 'EJEN', icon: 'fa-user-tie', type: 'link' }
 ];
+
+function getFieldTypeIcon(type){
+  const map = {
+    'singleSelect': '<i class="fa-solid fa-circle-dot text-emerald-500 text-[11px]"></i>',
+    'multiSelect': '<i class="fa-solid fa-list text-sky-500 text-[11px]"></i>',
+    'attachment': '<i class="fa-solid fa-paperclip text-slate-400 text-[11px]"></i>',
+    'date': '<i class="fa-regular fa-calendar text-slate-400 text-[11px]"></i>',
+    'checkbox': '<i class="fa-regular fa-square-check text-slate-400 text-[11px]"></i>',
+    'formula': '<i class="fa-solid fa-calculator text-purple-400 text-[11px]"></i>',
+    'link': '<i class="fa-solid fa-link text-amber-500 text-[11px]"></i>',
+    'text': '<i class="fa-solid fa-align-left text-slate-400 text-[11px]"></i>',
+    'A': '<span class="text-[11px] font-bold text-slate-500">A</span>'
+  };
+  return map[type] || '<span class="text-[10px] text-slate-400">T</span>';
+}
+
+let draggedFieldKey = null;
+
+function buildHideFieldsList() {
+    const listContainer = document.getElementById('fieldsToggleList');
+    if (!listContainer) return;
+    listContainer.innerHTML = '';
+
+    const orderedDefs = [];
+    columnOrder.forEach(k=>{
+      const def = columnDefinitions.find(c=> c.key===k);
+      if(def) orderedDefs.push(def);
+    });
+    columnDefinitions.forEach(def=>{
+      if(!orderedDefs.find(d=> d.key===def.key)){
+        if(def.key==='col-idx') return;
+        orderedDefs.push(def);
+      }
+    });
+
+    orderedDefs.forEach((col, idx) => {
+        const isHidden = hiddenColumns[col.key] || false;
+        const isVisible = !isHidden;
+        const item = document.createElement('div');
+        item.draggable = true;
+        item.dataset.key = col.key;
+        item.dataset.index = idx;
+        item.className = `group flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 transition cursor-grab active:cursor-grabbing select-none border border-transparent hover:border-slate-200 ${isHidden?'opacity-60':''}`;
+        item.innerHTML = `
+            <div class="flex items-center gap-2 flex-1 min-w-0">
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" ${isVisible ? 'checked' : ''} onchange="toggleColumnVisibility('${col.key}', this.checked)" class="sr-only peer">
+                    <div class="w-7 h-4 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-sky-500"></div>
+                </label>
+                <span class="w-4 h-4 flex items-center justify-center flex-shrink-0">${getFieldTypeIcon(col.type)}</span>
+                <span class="text-slate-700 font-medium truncate text-[11px]">${col.label}</span>
+            </div>
+            <div class="flex items-center gap-1 opacity-60 group-hover:opacity-100">
+                <span class="text-[10px] text-slate-400 font-mono">${col.type==='A'?'A':''}</span>
+                <i class="fa-solid fa-grip text-[10px] text-slate-300 cursor-grab"></i>
+            </div>
+        `;
+        item.addEventListener('dragstart', (e)=>{
+          draggedFieldKey = col.key;
+          e.dataTransfer.effectAllowed = 'move';
+          item.classList.add('opacity-50');
+        });
+        item.addEventListener('dragend', ()=>{
+          item.classList.remove('opacity-50');
+          draggedFieldKey = null;
+        });
+        item.addEventListener('dragover', (e)=>{
+          e.preventDefault();
+          item.classList.add('bg-sky-50','border-sky-200');
+        });
+        item.addEventListener('dragleave', ()=>{
+          item.classList.remove('bg-sky-50','border-sky-200');
+        });
+        item.addEventListener('drop', (e)=>{
+          e.preventDefault();
+          item.classList.remove('bg-sky-50','border-sky-200');
+          const targetKey = col.key;
+          if(draggedFieldKey && draggedFieldKey!==targetKey){
+            rearrangeColumns(draggedFieldKey, targetKey);
+          }
+        });
+        listContainer.appendChild(item);
+    });
+
+    const visibleCount = orderedDefs.filter(c=> !hiddenColumns[c.key]).length;
+    const countEl = document.getElementById('visibleFieldsCount');
+    if(countEl) countEl.textContent = `${visibleCount} fields visible`;
+}
+
+function rearrangeColumns(draggedKey, targetKey){
+  const fromIdx = columnOrder.indexOf(draggedKey);
+  const toIdx = columnOrder.indexOf(targetKey);
+  if(fromIdx===-1 || toIdx===-1) return;
+  const [removed] = columnOrder.splice(fromIdx,1);
+  const newToIdx = columnOrder.indexOf(targetKey);
+  columnOrder.splice(newToIdx, 0, removed);
+  localStorage.setItem('jemaahColOrder', JSON.stringify(columnOrder));
+  renderTableHeader();
+  filterAndRenderJemaahGrid();
+  buildHideFieldsList();
+}
+
+function filterFieldsList(){
+  const q = (document.getElementById('fieldSearchInput')?.value || '').toLowerCase();
+  const list = document.getElementById('fieldsToggleList');
+  if(!list) return;
+  Array.from(list.children).forEach(child=>{
+    const label = child.textContent.toLowerCase();
+    if(label.includes(q)) child.classList.remove('hidden');
+    else child.classList.add('hidden');
+  });
+}
+
+function resetFieldsToDefault(){
+  hiddenColumns = {};
+  columnOrder = [
+    'col-idx', 'col-name', 'col-picture', 'col-ic', 'col-passport', 
+    'col-gender', 'col-age', 'col-dob', 'col-dobf', 'col-nat', 
+    'col-visa', 'col-passcopy', 'col-visacopy', 'col-mofabio', 
+    'col-fit', 'col-trip', 'col-issue', 'col-expire', 'col-notes',
+    'col-board', 'col-train', 'col-insuran', 'col-pakej', 'col-ejen'
+  ];
+  localStorage.removeItem('jemaahColOrder');
+  localStorage.removeItem('jemaahHiddenColumns');
+  renderTableHeader();
+  filterAndRenderJemaahGrid();
+  buildHideFieldsList();
+  applyHiddenColumns();
+}
+
+function toggleHideFieldsDropdown() {
+    const drop = document.getElementById('hideFieldsDropdown');
+    if (!drop) return;
+    const isHidden = drop.classList.contains('hidden');
+    if(isHidden){
+      buildHideFieldsList();
+      drop.classList.remove('hidden');
+    } else {
+      drop.classList.add('hidden');
+    }
+}
+
+function toggleColumnVisibility(colClass, isVisible) {
+    hiddenColumns[colClass] = !isVisible;
+    localStorage.setItem('jemaahHiddenColumns', JSON.stringify(hiddenColumns));
+    applyHiddenColumns();
+    buildHideFieldsList();
+}
+
+function applyHiddenColumns() {
 
 function buildHideFieldsList() {
     const listContainer = document.getElementById('fieldsToggleList');
