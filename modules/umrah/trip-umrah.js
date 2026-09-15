@@ -14,41 +14,14 @@ let selectOptions = {
     tempoh: ['11H 9M', '12H 10M', '9H 7M', '13H 10M', '17H 15M', '10H 7M']
 };
 
-let tripFilters = { hijri: 'All', month: 'All', search: '' };
 
-function getHijriFieldValue(rec){
-  const f = rec.fields;
-  // Try all possible field names
-  let val = f['Hijri Season'] || f['Hijri Year'] || f['Musim Hijri'] || f['Hijri'] || f['HIJRI'] || '';
-  if(val) return val.toString().trim().toUpperCase();
-  // Auto fallback from Mula Pakej date
-  const mula = f['Mula Pakej'];
-  if(mula){
-    const d = new Date(mula);
-    if(!isNaN(d)){
-      // Approximate Hijri mapping - 1448H = Jul 2026 - May 2027, 1449H = Jun 2027 onwards
-      // You can adjust these cutoffs
-      if(d < new Date('2027-05-15')) return '1448H';
-      if(d < new Date('2028-05-01')) return '1449H';
-      return '1450H';
-    }
+
+
   }
   return '1448H'; // default
 }
-function getMonthKeyFromDate(dateStr){
-  if(!dateStr) return 'TBC';
-  const d = new Date(dateStr);
-  if(isNaN(d)) return 'TBC';
-  const months = ['JAN','FEB','MAR','APR','MEI','JUN','JUL','OGOS','SEPT','OKT','NOV','DIS'];
-  return months[d.getMonth()] + ' ' + d.getFullYear();
-}
-function getMonthShort(dateStr){
-  if(!dateStr) return 'TBC';
-  const d = new Date(dateStr);
-  if(isNaN(d)) return 'TBC';
-  const months = ['JAN','FEB','MAR','APR','MEI','JUN','JUL','OGOS','SEPT','OKT','NOV','DIS'];
-  return months[d.getMonth()];
-}
+
+
 
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -206,6 +179,185 @@ function renderTripSidebarList(records) {
 }
 
 let _tripDetailVersion = 0;
+
+// === V11 SIDEBAR: Hijri filter + Month grouped layout ===
+let tripFilters = { hijri: 'All', search: '' };
+
+function getHijriFieldValue(rec){
+  const f = rec.fields;
+  let val = f['Hijri Season'] || f['Hijri Year'] || f['Musim Hijri'] || f['Hijri'] || '';
+  if(val) return val.toString().trim().toUpperCase();
+  const mula = f['Mula Pakej'];
+  if(mula){
+    const d = new Date(mula);
+    if(!isNaN(d)){
+      if(d < new Date('2027-05-15')) return '1448H';
+      if(d < new Date('2028-05-01')) return '1449H';
+      return '1450H';
+    }
+  }
+  return '1448H';
+}
+function getMonthKeyLong(dateStr){
+  if(!dateStr) return 'TBC';
+  const d = new Date(dateStr);
+  if(isNaN(d)) return 'TBC';
+  const months = ['JANUARI','FEBRUARI','MAC','APRIL','MEI','JUN','JULAI','OGOS','SEPTEMBER','OKTOBER','NOVEMBER','DISEMBER'];
+  return months[d.getMonth()] + ' ' + d.getFullYear();
+}
+function getStatusBadgeForCard(status, occupied, total){
+  const s = (status||'').toUpperCase();
+  const avail = (total||0) - (occupied||0);
+  if(s.includes('PAST')) return {label:'PAST TRIP', dot:'bg-slate-300', cls:'bg-slate-100 text-slate-600 border-slate-200'};
+  if(s.includes('ONGOING') || s.includes('BERJALAN')) return {label:'ONGOING', dot:'bg-amber-400', cls:'bg-amber-50 text-amber-700 border-amber-200'};
+  if(s.includes('CLOSED') || s.includes('FULL') || avail<=0) return {label:'CLOSED', dot:'bg-red-400', cls:'bg-red-50 text-red-700 border-red-200'};
+  if(s.includes('AVAILABLE') || avail>0) return {label:'AVAILABLE', dot:'bg-green-400', cls:'bg-green-50 text-green-700 border-green-200'};
+  return {label: s || 'AVAILABLE', dot:'bg-slate-300', cls:'bg-slate-50 text-slate-600 border-slate-200'};
+}
+
+function renderTripSidebarList(records){
+  const container = document.getElementById('tripSidebarContainer');
+  if(!container) return;
+  const prevScroll = container.scrollTop;
+
+  // Apply filters
+  let filtered = records.slice();
+  if(tripFilters.search){
+    const q = tripFilters.search.toLowerCase();
+    filtered = filtered.filter(rec=>{
+      const f=rec.fields;
+      const rawTrip=(f['Trip']||'').toLowerCase();
+      const airline=(f['Penerbangan']||'').toLowerCase();
+      const sektor=(f['Sektor']||'').toLowerCase();
+      return rawTrip.includes(q)||airline.includes(q)||sektor.includes(q);
+    });
+  }
+  if(tripFilters.hijri !== 'All'){
+    filtered = filtered.filter(rec=> getHijriFieldValue(rec) === tripFilters.hijri);
+  }
+
+  // Sort by Mula Pakej date
+  filtered.sort((a,b)=>{
+    const da = new Date(a.fields['Mula Pakej']||'9999-12-31');
+    const db = new Date(b.fields['Mula Pakej']||'9999-12-31');
+    return da - db;
+  });
+
+  container.innerHTML = '';
+  if(filtered.length===0){
+    container.innerHTML = '<div class="text-center py-10 text-slate-400 text-xs">Tiada trip untuk filter ini.</div>';
+    updateHijriFilterTabs(records);
+    return;
+  }
+
+  // Group by month
+  const monthGroups = {};
+  filtered.forEach(rec=>{
+    const key = getMonthKeyLong(rec.fields['Mula Pakej']);
+    if(!monthGroups[key]) monthGroups[key]=[];
+    monthGroups[key].push(rec);
+  });
+
+  Object.keys(monthGroups).forEach(monthKey=>{
+    const trips = monthGroups[monthKey];
+    // Month header
+    const header = document.createElement('div');
+    header.className = 'flex items-center justify-between mt-5 mb-2 first:mt-0';
+    header.innerHTML = `<div class="flex items-center gap-1.5"><span class="text-[12px]">📅</span><span class="text-[11px] font-extrabold tracking-wide text-[#8B1A1A] uppercase">${monthKey}</span></div><span class="text-[10px] font-bold bg-pink-50 text-pink-700 border border-pink-100 px-2 py-0.5 rounded-full">${trips.length} Trip</span>`;
+    container.appendChild(header);
+
+    trips.forEach(rec=>{
+      const f = rec.fields;
+      const rawTripTitle = f['Trip'] || 'TBC';
+      const displayTitle = cleanTripName(rawTripTitle);
+      const airline = f['Penerbangan'] || 'N/A';
+      const tempoh = f['Tempoh Pakej'] || '';
+      const sektor = f['Sektor'] || 'KUL-JED/JED-KUL';
+      const occupied = parseInt(f['Occupied seat'] || f['Total Jemaah'] || 0);
+      const total = parseInt(f['Total Seat'] || 0);
+      const available = total - occupied;
+      const status = f['Status'] || '';
+      const isSelected = selectedTripRecord && selectedTripRecord.id === rec.id;
+      const statusBadge = getStatusBadgeForCard(status, occupied, total);
+      const airlineStyle = getAirlineBadgeStyle(airline);
+
+      const card = document.createElement('div');
+      card.setAttribute('data-trip-id', rec.id);
+      // Selected style vs normal - mimic image_8ad3d3 but with selection
+      if(isSelected){
+        card.className = 'p-3 rounded-xl border-2 border-[#8B1A1A] bg-[#FFF8F8] cursor-pointer transition mb-2.5 shadow-sm';
+      } else {
+        card.className = 'p-3 rounded-xl border border-slate-200 bg-white hover:border-slate-300 cursor-pointer transition mb-2.5';
+      }
+      card.onclick = () => renderTripDetailForm(rec);
+
+      let bottomInfo = '';
+      if(available <= 0 || statusBadge.label==='CLOSED' || statusBadge.label==='PAST TRIP'){
+        bottomInfo = `<span class="text-[10px] text-slate-400">Tamat / Ditutup</span>`;
+      } else if(available <= 5){
+        bottomInfo = `<span class="text-[11px] font-bold text-red-600">Baki: ${available} Seat</span>`;
+      } else {
+        bottomInfo = `<span class="text-[10px] text-slate-400">${occupied}/${total} Jemaah</span>`;
+      }
+
+      card.innerHTML = `
+        <div class="flex items-start justify-between gap-2">
+          <h4 class="font-bold text-[12px] text-slate-900 leading-snug flex-1">${displayTitle}</h4>
+          <div class="flex items-center gap-1 shrink-0">
+            <span class="${statusBadge.cls} border text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full ${statusBadge.dot}"></span>${statusBadge.label}</span>
+            ${tempoh ? `<span class="bg-slate-50 text-slate-600 border border-slate-200 text-[9px] font-bold px-1.5 py-0.5 rounded-full">${tempoh}</span>` : ''}
+            <span class="${airlineStyle.bg} ${airlineStyle.text} ${airlineStyle.border} border text-[9px] font-bold px-1.5 py-0.5 rounded-full">${airline}</span>
+          </div>
+        </div>
+        <div class="flex items-center justify-between mt-1.5">
+          <span class="text-[10px] text-slate-500 font-medium">${sektor}</span>
+          ${bottomInfo}
+        </div>
+      `;
+      container.appendChild(card);
+    });
+  });
+
+  requestAnimationFrame(()=>{
+    container.scrollTop = prevScroll;
+    const selectedEl = container.querySelector('[data-trip-id="'+(selectedTripRecord?.id||'')+'"]');
+    if(selectedEl){
+      const rect = selectedEl.getBoundingClientRect();
+      const contRect = container.getBoundingClientRect();
+      if(rect.top < contRect.top || rect.bottom > contRect.bottom){
+        selectedEl.scrollIntoView({block:'nearest', behavior:'auto'});
+      }
+    }
+  });
+
+  updateHijriFilterTabs(records);
+}
+
+function updateHijriFilterTabs(allRecords){
+  const cont = document.getElementById('hijriFilterTabs');
+  if(!cont) return;
+  const counts = {};
+  allRecords.forEach(r=>{ const h=getHijriFieldValue(r); counts[h]=(counts[h]||0)+1; });
+  const keys = Object.keys(counts).sort();
+  const allKeys = ['All', ...keys];
+  cont.innerHTML = allKeys.map(k=>{
+    const active = tripFilters.hijri === k;
+    const label = k==='All' ? 'SEMUA' : k;
+    const cnt = k==='All' ? allRecords.length : counts[k];
+    return `<button onclick="setHijriFilter('${k}')" class="px-3 py-1.5 rounded-full text-[11px] font-bold border transition whitespace-nowrap ${active ? 'bg-slate-900 text-white border-slate-900 shadow' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">${label} <span class="opacity-60 text-[10px]">${cnt}</span></button>`;
+  }).join('');
+}
+function setHijriFilter(val){
+  tripFilters.hijri = val;
+  renderTripSidebarList(allTripUmrahRecords);
+}
+function filterTripSidebar(){
+  const q = document.getElementById('searchTripSidebar').value.toLowerCase();
+  tripFilters.search = q;
+  renderTripSidebarList(allTripUmrahRecords);
+}
+
+
 function renderTripDetailForm(rec) {
     _tripDetailVersion++;
     const currentVersion = _tripDetailVersion;
@@ -367,7 +519,7 @@ async function updateAirtableField(recId, fieldName, value){
 }
 async function deleteTripRecord(recId){ if(!confirm('Adakah anda pasti nak padam rekod Trip ini dari Airtable?')) return; const url=`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/PAKEJ%20UMRAH/${recId}`; try{ const response=await fetch(url,{method:'DELETE',headers:{Authorization:`Bearer ${AIRTABLE_PAT}`}}); if(response.ok){fetchTripUmrahData();}}catch(err){alert('Gagal memadam rekod.');} }
 function extractDynamicOptions(records){ records.forEach(r=>{ const f=r.fields; const checkAndPush=(val,targetArray)=>{ if(!val) return; const clean=normalizeDashFormat(val); if(clean&&!targetArray.includes(clean)){targetArray.push(clean);} }; const checkHijri=(val)=>{ if(!val) return; const c=val.toString().trim().toUpperCase(); if(c && !selectOptions.hijri.includes(c)) selectOptions.hijri.push(c); if(c && !selectOptions.hijri.includes(c.replace('H',''))){} }; checkHijri(f['Hijri Season']||f['Hijri Year']||f['Hijri']); checkAndPush(f['Group (if relevant)'], selectOptions.group); checkAndPush(f['Sektor'], selectOptions.sektor); checkAndPush(f['Penerbangan'], selectOptions.penerbangan); checkAndPush(f['Musim'], selectOptions.musim); checkAndPush(f['Tempoh Pakej'], selectOptions.tempoh); }); }
-function filterTripSidebar(){ const query=document.getElementById('searchTripSidebar').value.toLowerCase(); tripFilters.search = query; renderTripSidebarList(allTripUmrahRecords); }
+
 function filterTripJemaahTable(q){ const query=(q||'').toLowerCase(); const container=document.getElementById('modul-pakej-umrah'); if(!container) return; const rows=container.querySelectorAll('table tbody tr'); rows.forEach(tr=>{ const txt=tr.textContent.toLowerCase(); tr.style.display=txt.includes(query)?'':'none'; }); }
 function closeTripAddCustomerModal(){ const modal=document.getElementById('tripAddCustomerModal'); if(modal){ modal.classList.add('hidden'); modal.style.display='none'; } }
 function openTripAddCustomerModal(){ let modal=document.getElementById('tripAddCustomerModal'); const tripName=(typeof selectedTripRecord!=='undefined'&&selectedTripRecord)?(selectedTripRecord.fields['Trip']||'') : ''; if(!modal){ modal=document.createElement('div'); modal.id='tripAddCustomerModal'; modal.className='fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4'; modal.innerHTML=`<div class="bg-white rounded-3xl shadow-2xl p-6 md:p-8 max-w-lg w-full border border-slate-100"><div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-100"><div class="flex items-center space-x-2.5"><div class="w-9 h-9 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center"><i class="fa-solid fa-user-plus"></i></div><div><h3 class="font-extrabold text-slate-900 text-base">Tambah Jemaah Baru</h3><p class="text-[11px] text-slate-500">${tripName ? 'Trip: '+tripName : ''}</p></div></div><button onclick="closeTripAddCustomerModal()" class="text-slate-400 hover:text-slate-700 p-1"><i class="fa-solid fa-xmark text-lg"></i></button></div><form onsubmit="submitTripAddCustomer(event)" class="space-y-3 text-xs"><div><label class="block font-bold text-slate-700 mb-1">Nama Penuh *</label><input type="text" id="tripAddName" required placeholder="NAMA PENUH" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none font-semibold uppercase"></div><div class="grid grid-cols-2 gap-3"><div><label class="block font-bold text-slate-700 mb-1">No IC</label><input type="text" id="tripAddIC" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none"></div><div><label class="block font-bold text-slate-700 mb-1">Passport No</label><input type="text" id="tripAddPassport" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none"></div></div><div><label class="block font-bold text-slate-700 mb-1">Trip</label><input type="text" id="tripAddTrip" value="${tripName}" readonly class="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl font-bold text-slate-600"></div><div class="flex gap-3 pt-3"><button type="button" onclick="closeTripAddCustomerModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl">Batal</button><button type="submit" class="flex-1 bg-slate-900 hover:bg-black text-white font-bold py-2.5 rounded-xl shadow-xs">Simpan</button></div></form></div>`; document.body.appendChild(modal); modal.addEventListener('click', (e)=>{ if(e.target===modal) closeTripAddCustomerModal(); }); } else { modal.style.display='flex'; modal.classList.remove('hidden'); const inp=modal.querySelector('#tripAddTrip'); if(inp) inp.value=tripName; } }
