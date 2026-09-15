@@ -199,7 +199,7 @@
                         </div>
                     </div>
 
-                    <!-- NEW: Calendar View + Upcoming 15 Days -->
+                    <!-- NEW: Calendar View + Upcoming 30 Days -->
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-6">
                         <!-- Calendar -->
                         <div class="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6">
@@ -230,14 +230,14 @@
                             <div class="flex items-center gap-3 mt-4 pt-4 border-t border-slate-100 text-[10px]">
                                 <div class="flex items-center gap-1.5"><span class="w-2 h-2 bg-emerald-500 rounded-full"></span> Ada Trip</div>
                                 <div class="flex items-center gap-1.5"><span class="w-2 h-2 bg-slate-900 rounded-full"></span> Hari Ini</div>
-                                <div class="flex items-center gap-1.5"><span class="w-2 h-2 bg-amber-400 rounded-full"></span> Dalam 15 Hari</div>
+                                <div class="flex items-center gap-1.5"><span class="w-2 h-2 bg-amber-400 rounded-full"></span> Dalam 30 Hari</div>
                             </div>
                         </div>
 
-                        <!-- Upcoming 15 Days -->
+                        <!-- Upcoming 30 Days -->
                         <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 flex flex-col">
                             <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-sm font-extrabold text-slate-900 tracking-tight">Dalam 15 Hari</h3>
+                                <h3 class="text-sm font-extrabold text-slate-900 tracking-tight">Dalam 30 Hari</h3>
                                 <span class="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-full" id="upcomingCount">0 Trip</span>
                             </div>
                             <div id="upcomingTripsList" class="space-y-2.5 flex-1 overflow-y-auto max-h-[340px] pr-1">
@@ -247,17 +247,7 @@
                         </div>
                     </div>
 
-                    <!-- Active Season Info -->
-                    <div class="bg-gradient-to-r from-slate-50 to-emerald-50/50 border border-slate-200/60 rounded-2xl p-4 flex items-center justify-between mt-5">
-                        <div class="flex items-center gap-3">
-                            <div class="w-8 h-8 bg-slate-900 text-white rounded-xl flex items-center justify-center text-xs"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
-                            <div>
-                                <p class="text-xs font-bold text-slate-900">Musim Aktif Auto-Switch</p>
-                                <p class="text-[11px] text-slate-600">Sistem auto tukar dari <span id="autoSwitchFrom" class="font-bold">1448H</span> ke <span id="autoSwitchTo" class="font-bold">1449H</span> bila semua trip 1448H tamat. Tarikh akhir musim: <span id="seasonEndDate" class="font-bold">-</span></p>
-                            </div>
-                        </div>
-                        <span class="text-[10px] bg-white border border-slate-200 px-2.5 py-1 rounded-full font-bold text-slate-700" id="seasonStatus">Aktif: 1448H</span>
-                    </div>
+                    
                 </section>
                 <section id="modul-pakej-umrah" class="tab-content hidden"></section>
                 <section id="modul-jemaah-umrah" class="tab-content hidden"></section>
@@ -300,20 +290,13 @@
     }
 
     function determineActiveHijriSeason(trips){
-      if(!trips || trips.length===0) return {active:'1448H', nextSeason:'1449H', seasonMap:{}};
-      // Group by hijri season - V38 FIX: if no hijri season field, fallback to all trips as 1448H
+      if(!trips || trips.length===0) return '1448H';
+      // Group by hijri season
       const seasonMap = {};
-      let hasAnyHijri = false;
       trips.forEach(rec=>{
         const f = rec.fields || {};
-        let hijri = getHijriSeasonFromField(f['Hijri Season'] || '');
-        if(!hijri || hijri===''){
-          // Fallback: if no hijri season, treat as 1448H for now (or extract from date)
-          // This prevents calendar showing 0 trips when Hijri Season field empty
-          hijri = '1448H';
-        } else {
-          hasAnyHijri = true;
-        }
+        const hijri = getHijriSeasonFromField(f['Hijri Season'] || '');
+        if(!hijri || hijri==='') return;
         const mula = f['Mula Pakej'] ? new Date(f['Mula Pakej']) : null;
         if(!mula || isNaN(mula)) return;
         if(!seasonMap[hijri]) seasonMap[hijri] = { trips: [], maxDate: mula, minDate: mula, hasUpcoming: false };
@@ -321,11 +304,6 @@
         if(mula > seasonMap[hijri].maxDate) seasonMap[hijri].maxDate = mula;
         if(mula < seasonMap[hijri].minDate) seasonMap[hijri].minDate = mula;
       });
-      
-      // If no hijri at all, default to 1448H with all trips
-      if(Object.keys(seasonMap).length===0){
-        seasonMap['1448H'] = { trips: trips, maxDate: new Date(), minDate: new Date(), hasUpcoming: true };
-      }
       
       const today = new Date(); today.setHours(0,0,0,0);
       const seasons = Object.keys(seasonMap).sort(); // 1448H, 1449H...
@@ -368,11 +346,7 @@
     }
 
     function updateStatsForActiveSeason(trips, jemaah){
-      let result = determineActiveHijriSeason(trips);
-      // Handle if result is string (old version) or object
-      if(typeof result === 'string'){
-        result = {active: result, nextSeason: (parseInt(result)+1)+'H', seasonMap:{}};
-      }
+      const result = determineActiveHijriSeason(trips);
       activeHijriSeason = result.active;
       
       // Update labels
@@ -461,10 +435,9 @@
       const daysInMonth = new Date(year, month+1, 0).getDate();
       const today = new Date(); today.setHours(0,0,0,0);
       
-      // Build trip dates map - V38 FIX for image_bebc88.png
+      // Build trip dates map for active season
       const tripByDate = {};
-      const sourceTrips = (allTripDataForCalendar && allTripDataForCalendar.length>0) ? allTripDataForCalendar : (typeof cachedTrips !== 'undefined' ? cachedTrips : []);
-      sourceTrips.forEach(rec=>{
+      allTripDataForCalendar.forEach(rec=>{
         const mula = rec.fields['Mula Pakej'];
         if(!mula) return;
         const d = new Date(mula);
@@ -477,32 +450,37 @@
       let html = '';
       // Empty cells before first day
       for(let i=0;i<firstDay;i++){
-        html += `<div class="h-16"></div>`;
+        html += `<div class="h-20"></div>`;
       }
       // Days
       for(let day=1; day<=daysInMonth; day++){
         const date = new Date(year, month, day);
         const isToday = date.getTime() === today.getTime();
         const diffDays = Math.ceil((date - today) / (1000*60*60*24));
-        const isWithin15 = diffDays >=0 && diffDays <=15;
+        const isWithin30 = diffDays >=0 && diffDays <=30;
         const trips = tripByDate[day] || [];
         const hasTrip = trips.length > 0;
         
-        let classes = 'h-16 p-1.5 rounded-xl border text-left relative transition cursor-pointer hover:bg-slate-50 ';
-        if(isToday) classes += 'bg-slate-900 text-white border-slate-900 ';
-        else if(hasTrip && isWithin15) classes += 'bg-amber-50 border-amber-200 ';
-        else if(hasTrip) classes += 'bg-emerald-50 border-emerald-200 ';
-        else classes += 'bg-white border-slate-100 ';
+        let classes = 'h-20 p-2 rounded-xl border text-left relative transition cursor-pointer hover:shadow-sm ';
+        if(isToday) classes += 'bg-slate-900 text-white border-slate-900 shadow-md ';
+        else if(hasTrip && isWithin30) classes += 'bg-amber-50 border-amber-200 hover:bg-amber-100 ';
+        else if(hasTrip) classes += 'bg-emerald-50/80 border-emerald-200 hover:bg-emerald-100/80 ';
+        else classes += 'bg-white border-slate-100 hover:bg-slate-50 ';
         
-        let dot = '';
+        // V39: Instead of dot, show 1 TRIP / 2 TRIP badge
+        let badge = '';
         if(hasTrip){
-          dot = `<div class="absolute bottom-1 left-1.5 flex gap-0.5">${trips.slice(0,3).map(()=>`<span class="w-1 h-1 bg-emerald-500 rounded-full"></span>`).join('')}${trips.length>3?`<span class="text-[8px] font-bold ml-0.5">+${trips.length-3}</span>`:''}</div>`;
+          const countText = trips.length === 1 ? '1 TRIP' : `${trips.length} TRIP`;
+          const cleanFirst = cleanTripNameForDisplay(trips[0].fields['Trip']||'Trip').substring(0,18);
+          badge = `<div class="mt-1">
+            <div class="text-[9px] font-black px-1.5 py-0.5 rounded-md inline-block ${isToday?'bg-white text-slate-900':'bg-slate-900 text-white'}">${countText}</div>
+            <div class="mt-1 text-[8px] font-bold leading-tight ${isToday?'text-white/70':'text-slate-600'} truncate">${cleanFirst}</div>
+          </div>`;
         }
         
-        html += `<div class="${classes}" onclick="showTripsForDate(${year},${month},${day})" title="${hasTrip? trips.length + ' trip':''}">
-          <div class="text-[11px] font-bold ${isToday?'text-white': hasTrip?'text-emerald-800':'text-slate-700'}">${day}</div>
-          ${hasTrip? `<div class="mt-0.5 text-[9px] font-bold leading-tight ${isToday?'text-white/80':'text-emerald-700'} truncate">${trips[0].fields['Trip'] ? trips[0].fields['Trip'].substring(0,12) : 'Trip'}</div>`:''}
-          ${dot}
+        html += `<div class="${classes}" onclick="showTripsForDate(${year},${month},${day})" title="${hasTrip? trips.map(t=>cleanTripNameForDisplay(t.fields['Trip'])).join(', ') : ''}">
+          <div class="text-[11px] font-bold ${isToday?'text-white': hasTrip?'text-slate-800':'text-slate-700'}">${day}</div>
+          ${badge}
         </div>`;
       }
       grid.innerHTML = html;
@@ -514,13 +492,26 @@
     }
 
     function showTripsForDate(year,month,day){
-      const trips = allTripDataForCalendar.filter(rec=>{
-        const d = new Date(rec.fields['Mula Pakej']);
-        return d.getFullYear()===year && d.getMonth()===month && d.getDate()===day;
+      const sourceTrips = (typeof cachedTrips !== 'undefined' && cachedTrips.length>0) ? cachedTrips : (allTripDataForCalendar||[]);
+      // V39: Check if date is within trip range, not just start date
+      const trips = sourceTrips.filter(rec=>{
+        const mula = new Date(rec.fields['Mula Pakej']);
+        const tamat = rec.fields['Tamat Pakej'] ? new Date(rec.fields['Tamat Pakej']) : mula;
+        if(isNaN(mula)) return false;
+        const target = new Date(year, month, day);
+        target.setHours(0,0,0,0);
+        mula.setHours(0,0,0,0);
+        tamat.setHours(0,0,0,0);
+        return target >= mula && target <= tamat;
       });
       if(trips.length===0) return;
-      // Switch to pakej-umrah tab and highlight? For now alert formal
-      alert(`Trip pada ${day}/${month+1}/${year}:\n\n` + trips.map(t=>`- ${t.fields['Trip']||'TBC'} (${t.fields['Penerbangan']||''})`).join('\n'));
+      const cleanList = trips.map(t=>{
+        const clean = cleanTripNameForDisplay(t.fields['Trip']||'TBC');
+        const mula = new Date(t.fields['Mula Pakej']).toLocaleDateString('ms-MY');
+        const tamat = t.fields['Tamat Pakej'] ? new Date(t.fields['Tamat Pakej']).toLocaleDateString('ms-MY') : '';
+        return `- ${clean} (${mula} - ${tamat}) [${t.fields['Penerbangan']||''}]`;
+      }).join('\n');
+      alert(`Trip pada ${day}/${month+1}/${year}:\n\n` + cleanList);
     }
 
     function renderUpcoming15Days(){
@@ -529,13 +520,13 @@
       if(!list) return;
       
       const today = new Date(); today.setHours(0,0,0,0);
-      const in15 = new Date(); in15.setDate(today.getDate()+15);
+      const in30 = new Date(); in30.setDate(today.getDate()+15);
       
       const upcoming = allTripDataForCalendar.filter(rec=>{
         const mula = rec.fields['Mula Pakej'] ? new Date(rec.fields['Mula Pakej']) : null;
         if(!mula) return false;
         mula.setHours(0,0,0,0);
-        return mula >= today && mula <= in15;
+        return mula >= today && mula <= in30;
       }).sort((a,b)=> new Date(a.fields['Mula Pakej']) - new Date(b.fields['Mula Pakej']));
       
       if(countEl) countEl.textContent = `${upcoming.length} Trip`;
@@ -543,7 +534,7 @@
       if(upcoming.length===0){
         list.innerHTML = `<div class="text-center py-8 text-slate-400 text-xs">
           <i class="fa-solid fa-calendar-check text-2xl mb-2 text-slate-200"></i>
-          <p>Tiada trip dalam 15 hari akan datang</p>
+          <p>Tiada trip dalam 30 hari akan datang</p>
           <p class="text-[10px] mt-1">Musim ${activeHijriSeason} - semua trip telah berlepas atau belum dijadualkan</p>
         </div>`;
         return;
@@ -581,109 +572,20 @@
       // This event may not exist, so we poll
     });
 
-    // V38 FIX for image_bebc88.png - tak keluar trip sebab allTripUmrahRecords belum fetch di home page
-    // Home page tidak trigger fetchTripUmrahData, jadi data kosong. Kita perlu fetch sendiri atau tunggu dari modul trip-umrah
-    function getTripData(){
-      // Check multiple sources - V37 uses window.allTripRecords, not allTripUmrahRecords
-      if(window.allTripUmrahRecords && window.allTripUmrahRecords.length>0) return window.allTripUmrahRecords;
-      if(window.allTripRecords && window.allTripRecords.length>0) return window.allTripRecords;
-      if(window.allTripDataForCalendar && window.allTripDataForCalendar.length>0) return window.allTripDataForCalendar;
-      // Also check global let allTripUmrahRecords if exposed
-      try{
-        if(typeof allTripUmrahRecords !== 'undefined' && allTripUmrahRecords.length>0) return allTripUmrahRecords;
-      }catch(e){}
-      return [];
-    }
-    
-    function getJemaahData(){
-      if(window.allJemaahUmrahRecords && window.allJemaahUmrahRecords.length>0) return window.allJemaahUmrahRecords;
-      if(window.allJemaahRecords && window.allJemaahRecords.length>0) return window.allJemaahRecords;
-      try{
-        if(typeof allJemaahUmrahRecords !== 'undefined' && allJemaahUmrahRecords.length>0) return allJemaahUmrahRecords;
-      }catch(e){}
-      return [];
-    }
-
-    // Auto-fetch trips if not loaded yet (home page doesn't auto fetch)
-    async function autoFetchIfNeeded(){
-      const existing = getTripData();
-      if(existing.length>0) return existing;
-      console.log('V38 auto-fetch trips for calendar - home page has no data yet, fetching from Airtable...');
-      // Try to call fetchTripUmrahData if available (from trip-umrah.js)
-      if(typeof window.fetchTripUmrahData === 'function'){
-        try{
-          await window.fetchTripUmrahData();
-          // After fetch, get data again
-          return getTripData();
-        }catch(e){ console.warn('autoFetch via fetchTripUmrahData failed', e); }
-      }
-      // Fallback: direct fetch via API
-      try{
-        const pat = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat');
-        const base = window.AIRTABLE_BASE_ID || localStorage.getItem('effah_base_id');
-        if(!pat || !base) return [];
-        const url = `https://api.airtable.com/v0/${base}/PAKEJ%20UMRAH?sort[0][field]=Mula%20Pakej&sort[0][direction]=asc&pageSize=100`;
-        const res = await fetch(url, {headers:{Authorization:`Bearer ${pat}`}});
-        const data = await res.json();
-        const records = (data.records||[]).filter(r=>r && r.id && r.fields);
-        window.allTripUmrahRecords = records;
-        window.allTripRecords = records;
-        console.log('V38 direct fetch got', records.length, 'trips');
-        return records;
-      }catch(e){
-        console.warn('V38 direct fetch failed', e);
-        return [];
-      }
-    }
-
-    // Poll for data - more robust
-    let pollCount = 0;
-    setInterval(async function(){
-      pollCount++;
-      let trips = getTripData();
-      let jemaah = getJemaahData();
-      
-      // If no trips after 3 seconds, try auto-fetch
-      if(trips.length===0 && pollCount===3){
-        trips = await autoFetchIfNeeded();
-        jemaah = getJemaahData();
-      }
-      
-      if(trips.length>0 && trips !== cachedTrips){
-        cachedTrips = trips;
-        cachedJemaah = jemaah;
-        console.log('V38 found trips:', trips.length, 'jemaah:', jemaah.length);
+    // Poll for allTripUmrahRecords
+    setInterval(function(){
+      if(window.allTripUmrahRecords && window.allTripUmrahRecords.length>0 && window.allTripUmrahRecords !== cachedTrips){
+        cachedTrips = window.allTripUmrahRecords;
+        if(window.allJemaahUmrahRecords) cachedJemaah = window.allJemaahUmrahRecords;
         updateStatsForActiveSeason(cachedTrips, cachedJemaah);
       }
-      if(jemaah.length>0 && jemaah !== cachedJemaah){
-        cachedJemaah = jemaah;
+      if(window.allJemaahUmrahRecords && window.allJemaahUmrahRecords.length>0 && window.allJemaahUmrahRecords !== cachedJemaah){
+        cachedJemaah = window.allJemaahUmrahRecords;
         if(cachedTrips.length>0) updateStatsForActiveSeason(cachedTrips, cachedJemaah);
-      }
-      
-      // If still no trips after 10 polls, show message
-      if(pollCount===10 && trips.length===0){
-        const grid = document.getElementById('calendarGrid');
-        if(grid) grid.innerHTML = `<div class="text-center py-8 col-span-7 text-slate-400 text-xs">Tiada data trip. Sila klik Refresh di Trip Umrah atau semak API Key.</div>`;
-        const list = document.getElementById('upcomingTripsList');
-        if(list) list.innerHTML = `<div class="text-center py-8 text-slate-400 text-xs">Tiada data. Data trip belum dimuatkan.</div>`;
       }
     }, 1000);
 
-    // Also trigger on DOMContentLoaded and after login
-    document.addEventListener('DOMContentLoaded', function(){
-      setTimeout(async ()=>{
-        const trips = await autoFetchIfNeeded();
-        if(trips.length>0) updateStatsForActiveSeason(trips, getJemaahData());
-      }, 1500);
-    });
-
-    // Listen for custom event from trip module
-    window.addEventListener('tripDataLoaded', function(e){
-      console.log('V38 tripDataLoaded event', e.detail);
-      if(e.detail && e.detail.records) updateStatsForActiveSeason(e.detail.records, getJemaahData());
-    });
-
-    console.log('✅ V38 Calendar + Auto Hijri Season logic loaded - fixed image_bebc88.png no trips');
+    console.log('✅ V38 Calendar + Auto Hijri Season logic loaded');
     </script>
 
     <script src="js/config.js"></script>
