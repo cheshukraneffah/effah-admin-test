@@ -408,23 +408,23 @@
       renderCalendar();
       renderUpcoming30Days();
     }
-    // V41: 15-color palette with consistent color per trip ID - fixes image_aafbe2.png duplicate & color change
+    // V42: 15-color palette consistent per trip ID, like image_11a9de but without date alt text (image_9f1123) - only name
     const TRIP_COLORS = [
-      { id: 0, bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-200', dot: 'bg-emerald-500', light: 'bg-emerald-50/40' },
-      { id: 1, bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200', dot: 'bg-blue-500', light: 'bg-blue-50/40' },
-      { id: 2, bg: 'bg-amber-100', text: 'text-amber-800', border: 'border-amber-200', dot: 'bg-amber-500', light: 'bg-amber-50/40' },
-      { id: 3, bg: 'bg-rose-100', text: 'text-rose-800', border: 'border-rose-200', dot: 'bg-rose-500', light: 'bg-rose-50/40' },
-      { id: 4, bg: 'bg-violet-100', text: 'text-violet-800', border: 'border-violet-200', dot: 'bg-violet-500', light: 'bg-violet-50/40' },
-      { id: 5, bg: 'bg-cyan-100', text: 'text-cyan-800', border: 'border-cyan-200', dot: 'bg-cyan-500', light: 'bg-cyan-50/40' },
-      { id: 6, bg: 'bg-orange-100', text: 'text-orange-800', border: 'border-orange-200', dot: 'bg-orange-500', light: 'bg-orange-50/40' },
-      { id: 7, bg: 'bg-teal-100', text: 'text-teal-800', border: 'border-teal-200', dot: 'bg-teal-500', light: 'bg-teal-50/40' },
-      { id: 8, bg: 'bg-pink-100', text: 'text-pink-800', border: 'border-pink-200', dot: 'bg-pink-500', light: 'bg-pink-50/40' },
-      { id: 9, bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-200', dot: 'bg-indigo-500', light: 'bg-indigo-50/40' },
-      { id: 10, bg: 'bg-lime-100', text: 'text-lime-800', border: 'border-lime-200', dot: 'bg-lime-500', light: 'bg-lime-50/40' },
-      { id: 11, bg: 'bg-sky-100', text: 'text-sky-800', border: 'border-sky-200', dot: 'bg-sky-500', light: 'bg-sky-50/40' },
-      { id: 12, bg: 'bg-fuchsia-100', text: 'text-fuchsia-800', border: 'border-fuchsia-200', dot: 'bg-fuchsia-500', light: 'bg-fuchsia-50/40' },
-      { id: 13, bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200', dot: 'bg-yellow-500', light: 'bg-yellow-50/40' },
-      { id: 14, bg: 'bg-slate-100', text: 'text-slate-800', border: 'border-slate-200', dot: 'bg-slate-500', light: 'bg-slate-50/40' }
+      { bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-200', dot: 'bg-emerald-500' },
+      { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200', dot: 'bg-blue-500' },
+      { bg: 'bg-amber-100', text: 'text-amber-800', border: 'border-amber-200', dot: 'bg-amber-500' },
+      { bg: 'bg-rose-100', text: 'text-rose-800', border: 'border-rose-200', dot: 'bg-rose-500' },
+      { bg: 'bg-violet-100', text: 'text-violet-800', border: 'border-violet-200', dot: 'bg-violet-500' },
+      { bg: 'bg-cyan-100', text: 'text-cyan-800', border: 'border-cyan-200', dot: 'bg-cyan-500' },
+      { bg: 'bg-orange-100', text: 'text-orange-800', border: 'border-orange-200', dot: 'bg-orange-500' },
+      { bg: 'bg-teal-100', text: 'text-teal-800', border: 'border-teal-200', dot: 'bg-teal-500' },
+      { bg: 'bg-pink-100', text: 'text-pink-800', border: 'border-pink-200', dot: 'bg-pink-500' },
+      { bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-200', dot: 'bg-indigo-500' },
+      { bg: 'bg-lime-100', text: 'text-lime-800', border: 'border-lime-200', dot: 'bg-lime-500' },
+      { bg: 'bg-sky-100', text: 'text-sky-800', border: 'border-sky-200', dot: 'bg-sky-500' },
+      { bg: 'bg-fuchsia-100', text: 'text-fuchsia-800', border: 'border-fuchsia-200', dot: 'bg-fuchsia-500' },
+      { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200', dot: 'bg-yellow-500' },
+      { bg: 'bg-slate-100', text: 'text-slate-800', border: 'border-slate-200', dot: 'bg-slate-500' }
     ];
     function getTripColor(rec){
       const id = rec.id || rec.fields['Trip'] || '0';
@@ -433,7 +433,7 @@
       return TRIP_COLORS[hash % TRIP_COLORS.length];
     }
 
-    function renderCalendar(){
+        function renderCalendar(){
       const grid = document.getElementById('calendarGrid');
       const label = document.getElementById('calendarMonthLabel');
       if(!grid) return;
@@ -443,9 +443,10 @@
       const firstDay = new Date(year, month, 1).getDay();
       const daysInMonth = new Date(year, month+1, 0).getDate();
       const today = new Date(); today.setHours(0,0,0,0);
-      // V41 FIX: separate active vs starting to avoid duplicate image_addff3.png
+      
+      // V42: Like image_11a9de - highlight full range 10-20 Dis, show bar on every day in range, not just start
+      // But without alt text date below (image_9f1123), only name - fixes image_0bd6fe vs image_11a9de
       const activeByDate = {};
-      const startingByDate = {};
       const sourceTrips = (cachedTrips.length>0) ? cachedTrips : (allTripDataForCalendar||[]);
       sourceTrips.forEach(rec=>{
         const f = rec.fields || {};
@@ -455,11 +456,6 @@
         const mula = new Date(mulaStr);
         const tamat = tamatStr ? new Date(tamatStr) : mula;
         if(isNaN(mula)) return;
-        if(mula.getMonth()===month && mula.getFullYear()===year){
-          const d = mula.getDate();
-          if(!startingByDate[d]) startingByDate[d] = [];
-          startingByDate[d].push(rec);
-        }
         const cur = new Date(mula); cur.setHours(0,0,0,0);
         const end = new Date(tamat); end.setHours(0,0,0,0);
         while(cur <= end){
@@ -472,43 +468,34 @@
           if(cur > new Date(year, month+1, 10)) break;
         }
       });
+
       let html = '';
       for(let i=0;i<firstDay;i++){ html += '<div class="h-[88px]"></div>'; }
       for(let day=1; day<=daysInMonth; day++){
         const date = new Date(year, month, day);
         const isToday = date.getTime() === today.getTime();
         const activeTrips = activeByDate[day] || [];
-        const startingTrips = startingByDate[day] || [];
         const hasActive = activeTrips.length > 0;
-        const hasStarting = startingTrips.length > 0;
+        
         let classes = 'h-[88px] p-2 rounded-xl border text-left relative transition cursor-pointer hover:shadow-sm flex flex-col ';
         if(isToday) classes += 'bg-white border-slate-900 border-2 shadow-sm ring-2 ring-slate-900/10 ';
-        else if(hasStarting) classes += 'bg-white border-slate-200 hover:border-slate-300 ';
-        else if(hasActive) classes += 'bg-slate-50/60 border-slate-100 hover:bg-slate-50 ';
+        else if(hasActive) classes += 'bg-white border-slate-200 hover:border-slate-300 ';
         else classes += 'bg-white border-slate-100 hover:bg-slate-50 ';
+        
         let content = '';
-        if(hasStarting){
-          content = startingTrips.slice(0,2).map(rec=>{
+        if(hasActive){
+          // V42: Show up to 3 trips as colored bars, consistent color per trip ID (repeat 15 colors), only name, no date text - fixes image_9f1123
+          content = activeTrips.slice(0,3).map(rec=>{
             const clean = cleanTripNameForDisplay(rec.fields['Trip']||'Trip');
             const color = getTripColor(rec);
-            const mula = new Date(rec.fields['Mula Pakej']);
-            const tamat = rec.fields['Tamat Pakej'] ? new Date(rec.fields['Tamat Pakej']) : mula;
-            const rangeText = `${String(mula.getDate()).padStart(2,'0')} ${mula.toLocaleDateString('ms-MY',{month:'short'}).toUpperCase()} - ${String(tamat.getDate()).padStart(2,'0')} ${tamat.toLocaleDateString('ms-MY',{month:'short'}).toUpperCase()}`;
-            return `<div class="mt-1 px-1.5 py-1 rounded-md border text-[8px] font-bold leading-tight flex items-center gap-1 ${color.bg} ${color.text} ${color.border}" title="${clean}"><span class="w-1.5 h-1.5 rounded-full ${color.dot} shrink-0"></span><span class="truncate">${clean.substring(0,22)}</span></div><div class="text-[7px] text-slate-500 font-medium px-1 truncate">${rangeText}</div>`;
+            // Only name, no date alt text below - per user request image_9f1123.png tu tak perlu
+            return `<div class="mt-1 px-2 py-1 rounded-md border text-[8px] font-bold leading-tight flex items-center gap-1.5 ${color.bg} ${color.text} ${color.border} truncate" title="${clean}"><span class="w-1.5 h-1.5 rounded-full ${color.dot} shrink-0"></span><span class="truncate">${clean.substring(0,24)}</span></div>`;
           }).join('');
-          if(startingTrips.length>2){
-            content += `<div class="mt-1 text-[8px] font-bold text-slate-500 px-1">+${startingTrips.length-2} trip lagi</div>`;
+          if(activeTrips.length>3){
+            content += `<div class="mt-1 text-[7px] font-bold text-slate-400 px-1">+${activeTrips.length-3} lagi</div>`;
           }
-          const extraActive = activeTrips.filter(a=> !startingTrips.some(s=> s.id===a.id));
-          if(extraActive.length>0){
-            content += `<div class="mt-1 text-[7px] text-slate-400 px-1">• ${extraActive.length} aktif lain</div>`;
-          }
-        } else if(hasActive){
-          // V41: no duplicate bar, just show active count without repeating same name every day - fixes image_addff3.png duplicate
-          const firstActive = activeTrips[0];
-          const color = getTripColor(firstActive);
-          content = `<div class="mt-2 px-1.5 py-1 rounded-md ${color.light} border ${color.border} text-[7px] font-bold ${color.text} truncate">• ${activeTrips.length} trip dalam tempoh</div><div class="mt-1 text-[7px] text-slate-400 px-1 truncate">${activeTrips.map(r=>cleanTripNameForDisplay(r.fields['Trip']).substring(0,10)).join(', ')}</div>`;
         }
+        
         html += '<div class="'+classes+'" onclick="showTripsForDate('+year+','+month+','+day+')" title="'+(hasActive ? activeTrips.map(t=>cleanTripNameForDisplay(t.fields['Trip'])).join(', ') : '')+'"><div class="flex items-center justify-between"><span class="text-[11px] '+(isToday?'font-black text-slate-900':'font-bold text-slate-700')+'">'+day+'</span>'+(isToday?'<span class="text-[8px] font-black bg-slate-900 text-white px-1.5 py-0.5 rounded-full">HARI INI</span>':'')+'</div>'+content+'</div>';
       }
       grid.innerHTML = html;
