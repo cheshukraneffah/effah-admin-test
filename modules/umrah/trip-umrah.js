@@ -114,7 +114,7 @@ async function fetchTripUmrahData() {
           if(stillExists){
             renderTripDetailForm(stillExists);
             if(typeof fetchJemaahUmrahData === 'function'){
-              fetchJemaahUmrahData(true).then(()=>{ renderTripDetailForm(stillExists); });
+              const _fetchId = stillExists.id; fetchJemaahUmrahData(true).then(()=>{ const curId = selectedTripRecord ? selectedTripRecord.id : null; if(curId && curId !== _fetchId){ console.log('Race guard: user switched to', curId, 'skip', _fetchId); return; } const sc=document.getElementById('tripSidebarContainer'); const savedScroll=sc?sc.scrollTop:0; const upd = allTripUmrahRecords.find(r=>r.id===_fetchId)||stillExists; renderTripDetailForm(upd); setTimeout(()=>{ const s2=document.getElementById('tripSidebarContainer'); if(s2) s2.scrollTop=savedScroll; },0); });
             }
           } else if (allTripUmrahRecords.length > 0) {
             renderTripDetailForm(allTripUmrahRecords[0]);
@@ -321,7 +321,6 @@ async function updateAirtableField(recId, fieldName, value){
   }
 }
 async function deleteTripRecord(recId){ if(!confirm('Adakah anda pasti nak padam rekod Trip ini dari Airtable?')) return; const url=`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/PAKEJ%20UMRAH/${recId}`; try{ const response=await fetch(url,{method:'DELETE',headers:{Authorization:`Bearer ${AIRTABLE_PAT}`}}); if(response.ok){fetchTripUmrahData();}}catch(err){alert('Gagal memadam rekod.');} }
-function getStatusBadgeHtml(status){ if(!status) return '<span class="text-slate-400 font-bold">⚪ PAST TRIP</span>'; if(status.includes('AVAILABLE')){return `<span class="text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg text-xs">🟢 AVAILABLE</span>`;}else if(status.includes('CLOSED')){return `<span class="text-rose-700 font-bold bg-rose-50 border border-rose-200 px-3 py-1 rounded-lg text-xs">🔴 CLOSED</span>`;}else if(status.includes('ONGOING')){return `<span class="text-amber-700 font-bold bg-amber-50 border border-amber-200 px-3 py-1 rounded-lg text-xs">🟡 ONGOING</span>`;}else{return `<span class="text-slate-700 font-bold bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg text-xs">⚪ ${status}</span>`;} }
 function extractDynamicOptions(records){ records.forEach(r=>{ const f=r.fields; const checkAndPush=(val,targetArray)=>{ if(!val) return; const clean=normalizeDashFormat(val); if(clean&&!targetArray.includes(clean)){targetArray.push(clean);} }; checkAndPush(f['Group (if relevant)'], selectOptions.group); checkAndPush(f['Sektor'], selectOptions.sektor); checkAndPush(f['Penerbangan'], selectOptions.penerbangan); checkAndPush(f['Musim'], selectOptions.musim); checkAndPush(f['Tempoh Pakej'], selectOptions.tempoh); }); }
 function filterTripSidebar(){ const query=document.getElementById('searchTripSidebar').value.toLowerCase(); const filtered=allTripUmrahRecords.filter(rec=>{ const f=rec.fields; const rawTrip=(f['Trip']||'').toLowerCase(); const cleanTrip=cleanTripName(rawTrip).toLowerCase(); const airline=(f['Penerbangan']||'').toLowerCase(); return rawTrip.includes(query)||cleanTrip.includes(query)||airline.includes(query); }); renderTripSidebarList(filtered); }
 function filterTripJemaahTable(q){ const query=(q||'').toLowerCase(); const container=document.getElementById('modul-pakej-umrah'); if(!container) return; const rows=container.querySelectorAll('table tbody tr'); rows.forEach(tr=>{ const txt=tr.textContent.toLowerCase(); tr.style.display=txt.includes(query)?'':'none'; }); }
@@ -363,3 +362,19 @@ async function exportTripPdf(){
   doc.save(fileName);
 }
 // ===== MODAL HANDLED BY index.html V21 - No local override =====
+
+
+function getStatusBadgeHtml(status){
+  if(!status) return '<span class="text-slate-500 font-bold bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg text-xs">PAST TRIP</span>';
+  let s = status.toString();
+  // Remove all emoji characters commonly used
+  s = s.replace(/[🟢🔴🟡⚪🟣🔵🟠⚫⚪]/g, '');
+  s = s.replace(/\uD83D[\uDF00-\uDFFF]|\uD83C[\uDF00-\uDFFF]/g, '');
+  let clean = s.replace(/[^A-Z ]/gi, ' ').replace(/\s+/g, ' ').trim().toUpperCase();
+  if(clean.includes('AVAILABLE')){ return '<span class="text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg text-xs">🟢 AVAILABLE</span>'; }
+  if(clean.includes('CLOSED')){ return '<span class="text-rose-700 font-bold bg-rose-50 border border-rose-200 px-3 py-1 rounded-lg text-xs">🔴 CLOSED</span>'; }
+  if(clean.includes('ONGOING')){ return '<span class="text-amber-700 font-bold bg-amber-50 border border-amber-200 px-3 py-1 rounded-lg text-xs">🟡 ONGOING</span>'; }
+  if(clean.includes('PAST')){ return '<span class="text-slate-600 font-bold bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg text-xs">⚪ PAST TRIP</span>'; }
+  return '<span class="text-slate-700 font-bold bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg text-xs">'+clean+'</span>';
+}
+
