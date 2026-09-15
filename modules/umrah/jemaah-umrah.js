@@ -3,7 +3,8 @@ let allJemaahUmrahRecords = [];
 let rawTripRecordsList = []; 
 let tripMap = {}; 
 let selectedTripFilter = null;
-let selectedHijriFilter = null; // V47: takde SEMUA, filtered siap2 dari season paling awal - image_836e06.png fix filtered duplicate
+let selectedHijriFilter = null; // V48: no SEMUA, earliest season, image_ed1e16 + image_3d8c43
+let isJemaahLoading = false;
 
  // AUTO-FILL GLOBAL PAT - FINAL
 try{
@@ -62,6 +63,7 @@ let columnWidths = JSON.parse(localStorage.getItem('jemaahColWidths')) || { ...d
 
 // CLEANED: override removed - using global var from config.js
 
+function getJemaahHijriSeasonFromField(val){ if(!val) return ''; const m=val.toString().toUpperCase().match(/(\d{4})H/); return m?m[0]:val.toString().trim().toUpperCase(); }
 function cleanTripName(raw){
   if(!raw) return 'TBC';
   let s = String(raw);
@@ -100,6 +102,11 @@ function renderJemaahUmrahHTML() {
             
             <div id="jemaahTripSidebar" class="w-full lg:w-72 bg-white rounded-2xl border border-slate-300 shadow-xs p-3.5 flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
                 
+                <!-- V48: Hijri pills with alt text 29 TRIP (619) + loading spin image_3d8c43 + image_ed1e16 -->
+                <div id="jemaahHijriFilterTabs" class="flex flex-wrap gap-2 mb-3 px-1">
+                    <div class="text-[10px] text-slate-400 animate-pulse flex items-center gap-1"><i class="fa-solid fa-spinner fa-spin"></i> Memuat musim...</div>
+                </div>
+
                 <div class="flex items-center justify-between px-2 pb-3 mb-2 border-b border-slate-200">
                     <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Views / Filter Trip</span>
                     <div class="flex items-center space-x-1">
@@ -115,18 +122,13 @@ function renderJemaahUmrahHTML() {
                     </div>
                 </div>
 
-                <!-- V47: Hijri Season tabs - takde SEMUA, filtered dari season paling awal - fix image_836e06.png -->
-                <div id="jemaahHijriFilterTabs" class="flex flex-wrap gap-1.5 mb-3 px-1">
-                    <div class="text-[10px] text-slate-400 animate-pulse">Memuat hijri...</div>
-                </div>
-
                 <div class="relative mb-3">
                     <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
                     <input type="text" id="searchTripViewInput" onkeyup="filterTripViewSidebar()" placeholder="Find a view..." 
                         class="w-full text-xs pl-8 pr-3 py-1.5 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400">
                 </div>
 
-                <div id="jemaahViewsSidebar" class="space-y-1 overflow-y-auto flex-1 max-h-[60vh] pr-1">
+                <div id="jemaahViewsSidebar" class="space-y-1 overflow-y-auto flex-1 max-h-[72vh] pr-1">
                     <div class="text-center py-8 text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuat views...</div>
                 </div>
             </div>
@@ -362,11 +364,6 @@ function injectResizerStyles() {
     document.head.appendChild(style);
 }
 
-function getJemaahHijriSeasonFromField(val){
-  if(!val) return '';
-  const m = val.toString().toUpperCase().match(/(\d{4})H/);
-  return m ? m[0] : val.toString().trim().toUpperCase();
-}
 function cleanTripName(tripName) {
     if (!tripName) return 'TBC';
     return tripName.replace(/^[\d\/]+\s*\|\s*/i, '').trim();
@@ -390,16 +387,8 @@ async function fetchTripMapping() {
             const rawName = r.fields['Trip'] || r.fields['NAME'] || 'TBC';
             const rawHijri = r.fields['Hijri Season'] || '';
             const hijri = getJemaahHijriSeasonFromField(rawHijri);
-            tripMap[r.id] = {
-                title: cleanTripName(rawName),
-                mula: r.fields['Mula Pakej'] || '',
-                tamat: r.fields['Tamat Pakej'] || '',
-                hijri: hijri
-            };
-            const cleanTitle = cleanTripName(rawName);
-            if(cleanTitle && cleanTitle !== 'TBC'){
-              tripMap[cleanTitle] = tripMap[r.id];
-            }
+            tripMap[r.id] = { title: cleanTripName(rawName), mula: r.fields['Mula Pakej']||'', tamat: r.fields['Tamat Pakej']||'', hijri: hijri };
+            const ct=cleanTripName(rawName); if(ct && ct!=='TBC'){ tripMap[ct]=tripMap[r.id]; }
         });
     } catch (e) {
         console.error("Error fetching trip map:", e);
@@ -464,18 +453,8 @@ async function fetchJemaahUmrahData(isManualClick = false) {
 }
 
 function getJemaahHijriForRecord(jemaahRec){
-  const tripField = jemaahRec.fields['TRIP'];
-  if(!tripField) return '';
-  const rawId = Array.isArray(tripField) ? tripField[0] : tripField;
-  if(!rawId) return '';
-  if(rawId.startsWith && rawId.startsWith('rec') && typeof tripMap !== 'undefined' && tripMap[rawId]){
-    return tripMap[rawId].hijri || '';
-  }
-  const title = typeof cleanTripName === 'function' ? cleanTripName(rawId) : rawId;
-  if(typeof tripMap !== 'undefined' && tripMap[title]) return tripMap[title].hijri || '';
-  return '';
+  const tf=jemaahRec.fields['TRIP']; if(!tf) return ''; const raw=Array.isArray(tf)?tf[0]:tf; if(!raw) return ''; if(raw.startsWith && raw.startsWith('rec') && tripMap[raw]) return tripMap[raw].hijri||''; const title=cleanTripName(raw); if(tripMap[title]) return tripMap[title].hijri||''; for(let k in tripMap){ if(tripMap[k].title===title) return tripMap[k].hijri||''; } return '';
 }
-
 function getResolvedTripName(tripField) {
     if (!tripField) return 'TBC';
     let rawVal = Array.isArray(tripField) ? tripField[0] : tripField;
@@ -487,56 +466,89 @@ function getResolvedTripName(tripField) {
     return cleanTripName(rawVal);
 }
 
+
 function renderJemaahHijriTabs(){
   const container = document.getElementById('jemaahHijriFilterTabs');
   if(!container) return;
-  const counts = {};
-  let tbcCount = 0;
+  const jemaahCounts = {};
+  const tripCounts = {};
+  let tbcJemaah = 0;
+  // Count trips per hijri
+  rawTripRecordsList.forEach(r=>{
+    const hij = tripMap[r.id]?.hijri || '';
+    if(!hij) return;
+    tripCounts[hij] = (tripCounts[hij]||0)+1;
+  });
   (allJemaahUmrahRecords||[]).forEach(j=>{
     const hij = getJemaahHijriForRecord(j);
-    if(!hij){ tbcCount++; return; }
-    counts[hij] = (counts[hij]||0)+1;
+    if(!hij){ tbcJemaah++; return; }
+    jemaahCounts[hij] = (jemaahCounts[hij]||0)+1;
   });
-  const order = ['1448H','1449H','1450H'];
-  let existingHijri = Object.keys(counts).filter(h=>counts[h]>0);
-  // Sort by numeric
+  let existingHijri = Object.keys(jemaahCounts).filter(h=>jemaahCounts[h]>0);
+  // Also include hijri that has trips but 0 jemaah? include tripCounts
+  Object.keys(tripCounts).forEach(h=>{ if(!existingHijri.includes(h) && tripCounts[h]>0) existingHijri.push(h); });
   existingHijri.sort((a,b)=> parseInt(a)-parseInt(b));
-  // Auto-select earliest if null - takde SEMUA, filtered siap2 dari season paling awal
   if(!selectedHijriFilter && existingHijri.length>0){
-    selectedHijriFilter = existingHijri[0]; // 1448H
+    selectedHijriFilter = existingHijri[0];
   }
+  // If still no hijri but has TBC
+  if(!selectedHijriFilter && tbcJemaah>0) selectedHijriFilter='TBC';
+
   let html = ``;
   existingHijri.forEach(h=>{
-    const c = counts[h]||0;
+    const jc = jemaahCounts[h]||0;
+    const tc = tripCounts[h]||0;
     const active = selectedHijriFilter===h;
-    html += `<button onclick="setJemaahHijriFilter('${h}')" class="px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${active ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}">${h} <span class="ml-1 opacity-70">(${c})</span></button>`;
+    const isLoadingThis = isJemaahLoading && active;
+    // V48 design: pill like image_3d8c43 - 1448H + alt text 29 TRIP (619)
+    html += `<button onclick="setJemaahHijriFilter('${h}')" class="px-3.5 py-2 rounded-2xl text-[11px] font-bold border transition flex flex-col items-start leading-none gap-0.5 ${active ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'} ${isLoadingThis?'opacity-70':''}">
+      <span class="flex items-center gap-1.5">${isLoadingThis?'<i class=\"fa-solid fa-spinner fa-spin text-[10px]"></i>':''}${h}</span>
+      <span class="text-[9px] font-semibold opacity-70 tracking-wide">${tc} TRIP (${jc})</span>
+    </button>`;
   });
-  if(tbcCount>0){
+  if(tbcJemaah>0){
     const active = selectedHijriFilter==='TBC';
-    html += `<button onclick="setJemaahHijriFilter('TBC')" class="px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${active ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}">TBC <span class="ml-1 opacity-70">(${tbcCount})</span></button>`;
+    const isLoadingThis = isJemaahLoading && active;
+    html += `<button onclick="setJemaahHijriFilter('TBC')" class="px-3.5 py-2 rounded-2xl text-[11px] font-bold border transition flex flex-col items-start leading-none gap-0.5 ${active ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'} ${isLoadingThis?'opacity-70':''}">
+      <span class="flex items-center gap-1.5">${isLoadingThis?'<i class=\"fa-solid fa-spinner fa-spin text-[10px]"></i>':''}TBC</span>
+      <span class="text-[9px] font-semibold opacity-70 tracking-wide">${tbcJemaah} jemaah</span>
+    </button>`;
   }
   container.innerHTML = html || `<div class="text-[10px] text-slate-400">Tiada musim</div>`;
 }
 
 function setJemaahHijriFilter(hijri){
+  if(isJemaahLoading) return;
+  if(selectedHijriFilter===hijri) return;
   selectedHijriFilter = hijri;
-  if(hijri === 'TBC'){
-    selectedTripFilter = 'TBC';
-  } else {
-    // If trip filter doesn't match hijri, clear it
-    if(selectedTripFilter && selectedTripFilter !== 'ALL' && selectedTripFilter !== 'TBC'){
-      const hijForTrip = tripMap[selectedTripFilter]?.hijri || '';
-      if(hijForTrip !== hijri) selectedTripFilter = null;
-    }
-  }
+  isJemaahLoading = true;
   renderJemaahHijriTabs();
-  renderViewsSidebar();
-  filterAndRenderJemaahGrid();
+  // Show loading in table
+  const tbody = document.getElementById('jemaahTableBody');
+  if(tbody){
+    tbody.innerHTML = `<tr><td colspan="19" class="text-center py-16"><div class="inline-flex flex-col items-center gap-2 text-slate-500"><i class="fa-solid fa-spinner fa-spin text-xl text-slate-900"></i><span class="text-xs font-bold">Memuat ${hijri}...</span></div></td></tr>`;
+  }
   const titleEl = document.getElementById('currentViewTitle');
   if(titleEl){
     if(hijri==='TBC') titleEl.textContent = 'TBC / TANPA TRIP';
     else titleEl.textContent = `JEMAAH MUSIM ${hijri}`;
   }
+  // Use setTimeout to allow UI paint before heavy filter
+  setTimeout(()=>{
+    if(hijri==='TBC'){
+      selectedTripFilter='TBC';
+    } else {
+      // Clear trip filter if its hijri mismatches
+      if(selectedTripFilter && selectedTripFilter!=='ALL' && selectedTripFilter!=='TBC'){
+        const hijForTrip = tripMap[selectedTripFilter]?.hijri || '';
+        if(hijForTrip!==hijri) selectedTripFilter=null;
+      }
+    }
+    renderViewsSidebar();
+    filterAndRenderJemaahGrid();
+    isJemaahLoading=false;
+    renderJemaahHijriTabs();
+  }, 50);
 }
 
 function renderViewsSidebar() {
@@ -544,11 +556,10 @@ function renderViewsSidebar() {
     if (!container) return;
     container.innerHTML = '';
 
-    renderJemaahHijriTabs();
-
+    // V48: TBC dekat list boleh remove kot sebab kat pill atas dah ada - image_ed1e16
+    // So only ALL JEMAAH in baseViews, TBC removed from list
     const baseViews = [
-        { id: 'ALL', name: 'ALL JEMAAH', icon: 'fa-table' },
-        { id: 'TBC', name: 'TBC / TANPA TRIP', icon: 'fa-folder-open' }
+        { id: 'ALL', name: 'ALL JEMAAH', icon: 'fa-table' }
     ];
 
     baseViews.forEach(v => {
@@ -565,21 +576,19 @@ function renderViewsSidebar() {
     container.appendChild(hr);
 
     let tripsToShow = rawTripRecordsList;
-    if(selectedHijriFilter && selectedHijriFilter !== 'TBC'){
+    if(selectedHijriFilter && selectedHijriFilter!=='TBC'){
       tripsToShow = rawTripRecordsList.filter(rec=>{
         const hij = tripMap[rec.id]?.hijri || '';
-        return hij === selectedHijriFilter;
+        return hij===selectedHijriFilter;
       });
-    } else if(selectedHijriFilter === 'TBC'){
-      tripsToShow = [];
+    } else if(selectedHijriFilter==='TBC'){
+      tripsToShow=[];
     }
 
     tripsToShow.forEach(rec => {
         const title = tripMap[rec.id] ? tripMap[rec.id].title : cleanTripName(rec.fields['Trip']);
         if (!title || title === 'TBC') return;
-
         const isActive = selectedTripFilter === title;
-
         const btn = document.createElement('button');
         btn.onclick = () => selectTripFilter(title, title);
         btn.className = `w-full text-left p-2 px-3 rounded-xl text-xs font-semibold transition flex items-center space-x-2.5 ${isActive ? 'bg-slate-100 text-slate-900 border border-slate-300/80 shadow-2xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`;
@@ -594,6 +603,7 @@ function renderViewsSidebar() {
       container.appendChild(empty);
     }
 }
+
 
 function selectTripFilter(tripId, displayTitle) {
     selectedTripFilter = tripId;
@@ -659,13 +669,11 @@ function filterAndRenderJemaahGrid() {
 
     let filtered = [...allJemaahUmrahRecords];
 
-    // V47 FIX for image_836e06.png: Identifier filtered has already been declared - declare sekali je
-    // Filter by hijri first - takde SEMUA, start dari season paling awal
     if(selectedHijriFilter){
-      if(selectedHijriFilter === 'TBC'){
+      if(selectedHijriFilter==='TBC'){
         filtered = filtered.filter(r=> !getJemaahHijriForRecord(r));
       } else {
-        filtered = filtered.filter(r=> getJemaahHijriForRecord(r) === selectedHijriFilter);
+        filtered = filtered.filter(r=> getJemaahHijriForRecord(r)===selectedHijriFilter);
       }
     }
 
