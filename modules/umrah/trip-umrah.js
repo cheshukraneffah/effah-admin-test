@@ -1,4 +1,4 @@
-// V23 FINAL - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
+// V24 FINAL - strict hijri Season only (no auto calc) fix TBC image_0e0e43.png, fix 422 by sending only name image_b8057a.png - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
 // Check this comment exists on live site to confirm deployment
 // Variable Global Simpan Data & Options
 let allTripUmrahRecords = [];
@@ -16,7 +16,7 @@ let selectOptions = {
     tempoh: ['11H 9M', '12H 10M', '9H 7M', '13H 10M', '17H 15M', '10H 7M']
 };
 
-console.log('🟢 Trip Umrah V23 FINAL LOADED - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
+console.log('🟢 Trip Umrah V24 FINAL LOADED - strict hijri only (fix TBC blank) + fix 422 metadata API - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
 console.log('✅ Hijri Season field should be at line ~284');
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -232,18 +232,16 @@ function filterTripSidebar(){
 
 function getHijriFieldValue(rec){
   const f = rec.fields;
-  let val = f['Hijri Season'] || f['Hijri Year'] || f['Musim Hijri'] || f['Hijri'] || '';
-  if(val) return val.toString().trim().toUpperCase();
-  const mula = f['Mula Pakej'];
-  if(mula){
-    const d = new Date(mula);
-    if(!isNaN(d)){
-      if(d < new Date('2027-05-15')) return '1448H';
-      if(d < new Date('2028-05-01')) return '1449H';
-      return '1450H';
-    }
+  // V24 FIX for image_0e0e43.png: Strictly follow Hijri Season field only, no auto-calc
+  // Previously it auto-calculated from Mula Pakej date causing TBC blank to appear under 1448H
+  // User wants: if blank, return '' so it only appears under SEMUA, not under any hijri tab
+  let val = f['Hijri Season'];
+  // Also check alternative field names but only if Hijri Season is undefined, not blank
+  if(val===undefined || val===null){
+    val = f['Hijri Year'] || f['Musim Hijri'] || f['Hijri'] || '';
   }
-  return '1448H';
+  if(!val) return ''; // blank -> no hijri, will only show in SEMUA
+  return val.toString().trim().toUpperCase();
 }
 function getMonthKeyLong(dateStr){
   if(!dateStr) return 'TBC';
@@ -642,17 +640,14 @@ async function addNewSelectOptionViaMetadata(recId, fieldName, categoryKey, sele
       updateAirtableField(recId, fieldName, cleanOpt);
       return;
     }
-    // V23 FIX for image_899518.png: 422 Changing field's type not supported
-    // Airtable metadata API doesn't like id in choices when patching - map to name+color only
-    const cleanedExisting = existingChoices.map(c=>{
-      // Keep only name and color, strip id to avoid type change error
-      const obj = {name: c.name};
-      if(c.color) obj.color = c.color;
-      return obj;
-    });
+    // V24 FIX for image_b8057a.png & image_899518.png: 422 Changing field's type not supported
+    // Airtable API is very strict - send only {name} without id and without color
+    // Previous V23 sent color which still caused 422
+    const cleanedExisting = existingChoices.map(c=> ({name: c.name}));
     const newChoices = [...cleanedExisting, {name: cleanOpt}];
-    // Update field via metadata API - must send only options.choices
+    // Update field via metadata API
     const patchUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${table.id}/fields/${field.id}`;
+    console.log('PATCH choices payload', JSON.stringify({options:{choices:newChoices}}));
     const patchRes = await fetch(patchUrl, {
       method:'PATCH',
       headers:{Authorization:`Bearer ${AIRTABLE_PAT}`, 'Content-Type':'application/json'},
