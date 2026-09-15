@@ -28,7 +28,7 @@ function renderTripUmrahHTML() {
                     <div id="hijriFilterTabs" class="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide"></div>
                     <div class="mt-3 p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                         <div class="flex items-center justify-between mb-2">
-                            <span class="text-[10px] font-bold text-slate-500 tracking-widest">FILTER LANJUTAN</span>
+                            <span class="text-[10px] font-bold text-slate-500 tracking-widest">FILTER</span>
                             <button onclick="clearAdvancedFilters()" class="text-[10px] text-slate-400 hover:text-slate-700 font-bold">Reset</button>
                         </div>
                         <div class="grid grid-cols-2 gap-2">
@@ -279,6 +279,7 @@ function renderTripDetailForm(rec) {
                 <div class="grid grid-cols-2 gap-3"><div><label class="block font-bold text-slate-600 mb-1">Mula Pakej</label><input type="date" value="${f['Mula Pakej'] || ''}" onchange="updateAirtableField('${id}', 'Mula Pakej', this.value)" class="w-full p-2 border border-slate-200 rounded-xl focus:ring-1 focus:ring-slate-400 focus:outline-none"></div><div><label class="block font-bold text-slate-600 mb-1">Tamat Pakej</label><input type="date" value="${f['Tamat Pakej'] || ''}" onchange="updateAirtableField('${id}', 'Tamat Pakej', this.value)" class="w-full p-2 border border-slate-200 rounded-xl focus:ring-1 focus:ring-slate-400 focus:outline-none"></div></div>
                 <div><label class="block font-bold text-slate-600 mb-1">Penerbangan</label>${buildSelectDropdown(id, 'Penerbangan', f['Penerbangan'], selectOptions.penerbangan, 'penerbangan')}</div>
                 <div><label class="block font-bold text-slate-600 mb-1">Musim</label>${buildSelectDropdown(id, 'Musim', f['Musim'], selectOptions.musim, 'musim')}</div>
+                <div><label class="block font-bold text-slate-600 mb-1">Hijri Season</label>${buildSelectDropdown(id, 'Hijri Season', f['Hijri Season'] || getHijriFieldValue(rec), selectOptions.hijri, 'hijri')}</div>
                 <div><label class="block font-bold text-slate-600 mb-1">Tempoh Pakej</label>${buildSelectDropdown(id, 'Tempoh Pakej', f['Tempoh Pakej'], selectOptions.tempoh, 'tempoh')}</div>
                 <div><label class="block font-bold text-slate-600 mb-1">Status</label><div class="pt-1.5">${getStatusBadgeHtml(f['Status'])}</div></div>
                 <div><label class="block font-bold text-slate-600 mb-1">Occupied Seat</label><input type="text" value="${f['Occupied seat'] || 0}" disabled class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 cursor-not-allowed"></div>
