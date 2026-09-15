@@ -1207,40 +1207,21 @@ function getStatusBadgeHtml(status){
 
 
 function getAirlineBadgeStyle(airline){
+  // V44 FIX for image_ec142c.png & image_facc0f.png: pill putih tak nampak bila unselect
+  // User request: remove semua color airline, biar semua sama uniform, takde color by airline
   const a = (airline||'').toUpperCase().trim();
-  if(a.includes('EMIRATES')) return {bg:'bg-red-50', text:'text-red-700', border:'border-red-200', dot:'bg-[#D71921]', dotText:'●'};
-  if(a.includes('OMAN')) return {bg:'bg-[#FFF8E7]', text:'text-[#8B6F47]', border:'border-[#E8D5B5]', dot:'bg-[#C5A880]', dotText:'●'};
-  if(a.includes('QATAR')) return {bg:'bg-[#FDF0F3]', text:'text-[#5C0D2F]', border:'border-[#E8C4CC]', dot:'bg-[#5C0D2F]', dotText:'●'};
-  if(a.includes('SAUDIA') || a.includes('SAUDI')) return {bg:'bg-green-50', text:'text-green-800', border:'border-green-200', dot:'bg-[#006C35]', dotText:'●'};
-  if(a.includes('TURKISH')) return {bg:'bg-red-50', text:'text-red-800', border:'border-red-200', dot:'bg-[#C70A0C]', dotText:'●'};
-  if(a.includes('MALAYSIA') || a==='MAS' || a.includes(' MALAYSIA AIR')) return {bg:'bg-blue-50', text:'text-blue-800', border:'border-blue-200', dot:'bg-[#003B95]', dotText:'●'};
-  if(a.includes('ETIHAD')) return {bg:'bg-amber-50', text:'text-amber-900', border:'border-amber-200', dot:'bg-[#C9A86A]', dotText:'●'};
-  if(a.includes('KUWAIT')) return {bg:'bg-sky-50', text:'text-sky-800', border:'border-sky-200', dot:'bg-[#0071BB]', dotText:'●'};
-  
-  // For any new airline - generate consistent color from name hash
   if(!a || a==='N/A') return {bg:'bg-slate-100', text:'text-slate-500', border:'border-slate-200', dot:'bg-slate-400', dotText:'●'};
-  
-  const palette = [
-    {bg:'bg-orange-50', text:'text-orange-800', border:'border-orange-200', dot:'bg-orange-600'},
-    {bg:'bg-blue-50', text:'text-blue-800', border:'border-blue-200', dot:'bg-blue-600'},
-    {bg:'bg-purple-50', text:'text-purple-800', border:'border-purple-200', dot:'bg-purple-600'},
-    {bg:'bg-pink-50', text:'text-pink-800', border:'border-pink-200', dot:'bg-pink-600'},
-    {bg:'bg-teal-50', text:'text-teal-800', border:'border-teal-200', dot:'bg-teal-600'},
-    {bg:'bg-indigo-50', text:'text-indigo-800', border:'border-indigo-200', dot:'bg-indigo-600'},
-    {bg:'bg-amber-50', text:'text-amber-800', border:'border-amber-200', dot:'bg-amber-600'},
-    {bg:'bg-cyan-50', text:'text-cyan-800', border:'border-cyan-200', dot:'bg-cyan-600'},
-  ];
-  // Simple hash
-  let hash = 0;
-  for(let i=0;i<a.length;i++){ hash = (hash*31 + a.charCodeAt(i)) % 100000; }
-  const picked = palette[hash % palette.length];
-  return {...picked, dotText:'●'};
+  // Uniform neutral style for all airlines - no color coding
+  return {bg:'bg-slate-100', text:'text-slate-700', border:'border-slate-200', dot:'bg-slate-500', dotText:'●'};
 }
 function getAirlineBadgeHtml(airline, isSelected){
   const style = getAirlineBadgeStyle(airline);
+  // V44 FIX: uniform pill, no airline color, ensure contrast - image_facc0f.png white font invisible fix
   if(isSelected){
-    return `<span class="bg-white/15 text-white border border-white/20 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide flex items-center gap-1.5 w-fit"><span class="w-3.5 h-3.5 rounded-full ${style.dot} flex items-center justify-center text-[8px] text-white"></span>${airline}</span>`;
+    // Dark card selected - white text on translucent bg, dot neutral
+    return `<span class="bg-white/15 text-white border border-white/20 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide flex items-center gap-1.5 w-fit"><span class="w-3.5 h-3.5 rounded-full bg-white/60 flex items-center justify-center text-[8px] text-slate-900">●</span>${airline}</span>`;
   }
-  return `<span class="${style.bg} ${style.text} ${style.border} border text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide flex items-center gap-1.5 w-fit"><span class="w-3.5 h-3.5 rounded-full ${style.dot} flex items-center justify-center text-[8px] text-white"></span>${airline}</span>`;
+  // Light card unselected - dark text on light bg, always visible
+  return `<span class="bg-slate-100 text-slate-700 border-slate-200 border text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide flex items-center gap-1.5 w-fit"><span class="w-3.5 h-3.5 rounded-full bg-slate-400 flex items-center justify-center text-[8px] text-white">●</span>${airline}</span>`;
 }
 
