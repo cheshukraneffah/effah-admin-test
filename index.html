@@ -204,7 +204,7 @@
                             <div class="flex items-center justify-between mb-5">
                                 <div>
                                     <h3 class="text-sm font-extrabold text-slate-900 tracking-tight">Kalendar Trip Umrah</h3>
-                                    <p class="text-[11px] text-slate-500 mt-1">Musim <span id="calendarActiveSeason" class="font-bold text-slate-800">1448H</span> • Highlight full range 10-20 Dis</p>
+                                    <p class="text-[11px] text-slate-500 mt-1">Musim <span id="calendarActiveSeason" class="font-bold text-slate-800">1448H</span> </p>
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <button onclick="changeCalendarMonth(-1)" class="w-8 h-8 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center hover:bg-slate-100 transition"><i class="fa-solid fa-chevron-left text-[11px]"></i></button>
@@ -301,7 +301,8 @@
       const seasonMap = {};
       trips.forEach(rec=>{
         const f = rec.fields || {};
-        let hijri = getHijriSeasonFromField(f['Hijri Season'] || '') || '1448H';
+        let hijri = getHijriSeasonFromField(f['Hijri Season'] || '');
+        if(!hijri) return;
         const mula = f['Mula Pakej'] ? new Date(f['Mula Pakej']) : null;
         if(!mula || isNaN(mula)) return;
         if(!seasonMap[hijri]) seasonMap[hijri] = { trips: [], maxDate: mula, minDate: mula };
@@ -376,11 +377,15 @@
       if(umrahLabel) umrahLabel.textContent = 'Trip Umrah Musim '+activeHijriSeason;
       if(jemaahLabel) jemaahLabel.textContent = 'Jemaah Musim '+activeHijriSeason;
       if(calendarSeason) calendarSeason.textContent = activeHijriSeason;
+      // V44 FIX: jangan hardcoded fallback blank jadi 1448H - fetch dari data je, blank hanya di SEMUA (31), bukan 1448H (29)
+      // Home sepatutnya 29 sama dengan tab 1448H (29), bukan 30
       let filteredTrips = trips.filter(r=>{
-        const hijri = getHijriSeasonFromField(r.fields['Hijri Season']||'') || '1448H';
+        const raw = r.fields['Hijri Season']||'';
+        const hijri = getHijriSeasonFromField(raw);
+        if(!hijri) return false; // blank jangan kira sebagai 1448H
         return hijri === activeHijriSeason;
       });
-      if(filteredTrips.length===0) filteredTrips = trips;
+      // Jangan fallback ke semua trips - kalau 0, tunjuk 0
       const statUmrah = document.getElementById('statUmrahCount');
       const statUmrahSub = document.getElementById('statUmrahSub');
       if(statUmrah) statUmrah.textContent = filteredTrips.length;
@@ -389,21 +394,21 @@
       if(jemaah && jemaah.length>0){
         const map = {};
         trips.forEach(t=>{
-          const h = getHijriSeasonFromField(t.fields['Hijri Season']||'') || '1448H';
+          const h = getHijriSeasonFromField(t.fields['Hijri Season']||'') || ''; // jangan hardcoded fallback, biar blank stay blank
           map[t.id] = h;
           const tn = (t.fields['Trip']||'').toString(); if(tn) map[tn]=h;
         });
         jemaahCount = jemaah.filter(j=>{
           const tl = j.fields['TRIP']; const tid = Array.isArray(tl)?tl[0]:tl;
           const tn = (j.fields['Trip Name']||'').toString();
-          const hij = map[tid] || map[tn] || '1448H';
+          const hij = map[tid] || map[tn] || '';
           return hij === activeHijriSeason;
         }).length;
       }
       const statJemaah = document.getElementById('statJemaahUmrahCount');
       const statJemaahSub = document.getElementById('statJemaahSub');
       if(statJemaah) statJemaah.textContent = jemaahCount || filteredTrips.reduce((s,t)=> s + (parseInt(t.fields['Total Jemaah']||0)),0) || 0;
-      if(statJemaahSub) statJemaahSub.textContent = activeHijriSeason+' Sahaja';
+      if(statJemaahSub) statJemaahSub.textContent = 'Jemaah Didaftarkan';
       allTripDataForCalendar = filteredTrips.length>0 ? filteredTrips : trips;
       renderCalendar();
       renderUpcoming30Days();
