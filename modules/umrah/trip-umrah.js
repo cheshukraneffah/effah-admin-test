@@ -1,4 +1,4 @@
-// V28 FINAL - ALL SELECTIONS FROM AIRTABLE, no hardcoded, AIRASIA etc auto appear - auto fetch field choices from Airtable so manual AIRASIA appears, text only add new option with proper error for Allow new options - add new option TEXT ONLY (no color/id) as requested, direct PATCH then metadata fallback - baki logic image_55ef73.png green >5 red <=5, closed no baki, remove +Add New Option to fix 422 image_c4c6ad.png, strict hijri fix TBC - strict hijri Season only (no auto calc) fix TBC image_0e0e43.png, fix 422 by sending only name image_b8057a.png - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
+// V31 FINAL - fix from Airtable Omni AI image_6a56b9.png: typecast:true for direct PATCH image_64cd05.png, metadata with existing ids + new name only image_6be327.png image_740339.png image_3e9405.png, recommended approach image_b5cba5.png - user says already enabled but still 422 INVALID_MULTIPLE_CHOICE, so use manual add workaround + auto-load from Airtable, filters dynamic image_4fafaf.png - filters NOT hardcoded (image_4fafaf.png) merge with Airtable choices, fix AIR ARABIA error image_5ecfc0.png image_cd48ad.png by requiring Allow new options - ALL SELECTIONS FROM AIRTABLE, no hardcoded, AIRASIA etc auto appear - auto fetch field choices from Airtable so manual AIRASIA appears, text only add new option with proper error for Allow new options - add new option TEXT ONLY (no color/id) as requested, direct PATCH then metadata fallback - baki logic image_55ef73.png green >5 red <=5, closed no baki, remove +Add New Option to fix 422 image_c4c6ad.png, strict hijri fix TBC - strict hijri Season only (no auto calc) fix TBC image_0e0e43.png, fix 422 by sending only name image_b8057a.png - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
 // Check this comment exists on live site to confirm deployment
 // Variable Global Simpan Data & Options
 let allTripUmrahRecords = [];
@@ -17,7 +17,7 @@ let selectOptions = {
     tempoh: []
 };
 
-console.log('🟢 Trip Umrah V28 FINAL LOADED - all selections fetch from Airtable no hardcoded - auto load field choices AIRASIA + text only fix - text only add new option - baki all green>5 red<=5 + remove add new option 422 fix - strict hijri only (fix TBC blank) + fix 422 metadata API - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
+console.log('🟢 Trip Umrah V31 FINAL LOADED - fix with typecast:true + metadata with ids - workaround for Airtable block even when enabled - filters dynamic from Airtable + fix add new option allow new options - all selections fetch from Airtable no hardcoded - auto load field choices AIRASIA + text only fix - text only add new option - baki all green>5 red<=5 + remove add new option 422 fix - strict hijri only (fix TBC blank) + fix 422 metadata API - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
 console.log('✅ Hijri Season field should be at line ~284');
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -144,10 +144,15 @@ function updateAdvancedFilterOptions(){
   (allTripUmrahRecords||[]).forEach(r=>{
     const f=r.fields;
     if(f['Mula Pakej']) monthSet.add(getMonthKeyLong(f['Mula Pakej']));
-    if(f['Penerbangan']) airlineSet.add(f['Penerbangan']);
-    if(f['Tempoh Pakej']) tempohSet.add(f['Tempoh Pakej']);
-    if(f['Musim']) musimSet.add(f['Musim']);
+    if(f['Penerbangan']) airlineSet.add(normalizeDashFormat(f['Penerbangan']));
+    if(f['Tempoh Pakej']) tempohSet.add(normalizeDashFormat(f['Tempoh Pakej']));
+    if(f['Musim']) musimSet.add(normalizeDashFormat(f['Musim']));
   });
+  // V29: Merge with Airtable field choices so filters show ALL options from Airtable, not just used ones
+  // This makes filters NOT hardcoded - fully dynamic from Airtable
+  (selectOptions.penerbangan||[]).forEach(opt=> airlineSet.add(opt));
+  (selectOptions.tempoh||[]).forEach(opt=> tempohSet.add(opt));
+  (selectOptions.musim||[]).forEach(opt=> musimSet.add(opt));
   // --- SORTING LOGIC ---
   const monthOrder = {'JANUARI':1,'FEBRUARI':2,'MAC':3,'APRIL':4,'MEI':5,'JUN':6,'JULAI':7,'OGOS':8,'SEPTEMBER':9,'OKTOBER':10,'NOVEMBER':11,'DISEMBER':12};
   function parseMonthKey(key){
@@ -664,62 +669,121 @@ function handleDropdownChange(recId, fieldName, selectEl, categoryKey){
 }
 
 async function addNewSelectOptionTextOnly(recId, fieldName, categoryKey, selectEl){
-  const raw = prompt(`Add new option untuk ${fieldName}:\n\nTaip text je, contoh: AIRASIA`);
+  const raw = prompt(`Add new option untuk ${fieldName}:\n\nTaip text je, contoh: AIR ARABIA`);
   if(!raw || raw.trim()===''){ selectEl.value=''; return; }
   const cleanOpt = normalizeDashFormat(raw.trim().toUpperCase());
   
-  // TEXT ONLY: hantar text je ke Airtable
-  console.log(`V27 TEXT ONLY: Trying to add "${cleanOpt}" to ${fieldName}`);
+  // V31 FIX from Airtable Omni - image_64cd05.png: Need typecast:true
+  // Issue 1 - Direct record PATCH fails INVALID_MULTIPLE_CHOICE because missing typecast:true
+  console.log(`V31: Adding "${cleanOpt}" to ${fieldName} with typecast:true - fix from Omni AI image_64cd05.png`);
   const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/PAKEJ%20UMRAH/${recId}`;
   try {
     const res = await fetch(url, {
       method:'PATCH',
       headers:{Authorization:`Bearer ${AIRTABLE_PAT}`,'Content-Type':'application/json'},
-      body: JSON.stringify({fields:{[fieldName]: cleanOpt}})
+      body: JSON.stringify({
+        typecast: true,
+        fields:{[fieldName]: cleanOpt}
+      })
     });
     const data = await res.json();
     if(res.ok){
-      console.log(`✅ TEXT ONLY success - Airtable accepted "${cleanOpt}"`);
-      if(!selectOptions[categoryKey].includes(cleanOpt)) selectOptions[categoryKey].push(cleanOpt);
+      console.log(`✅ V31 typecast:true success - "${cleanOpt}" added and assigned to record in one shot - image_b5cba5.png recommended`);
+      if(!selectOptions[categoryKey].includes(cleanOpt)){
+        selectOptions[categoryKey].push(cleanOpt);
+        selectOptions[categoryKey].sort();
+      }
       const targetRec = allTripUmrahRecords.find(r=>r.id===recId);
       if(targetRec) targetRec.fields[fieldName]=cleanOpt;
       if(selectedTripRecord && selectedTripRecord.id===recId) selectedTripRecord.fields[fieldName]=cleanOpt;
       selectEl.value=cleanOpt;
+      await fetchAirtableFieldChoices();
+      updateAdvancedFilterOptions();
       if(typeof tripFilters !== 'undefined' && (tripFilters.hijri!=='All' || tripFilters.month!=='All' || tripFilters.airline!=='All' || tripFilters.tempoh!=='All' || tripFilters.musim!=='All' || (tripFilters.search&&tripFilters.search!==''))){
         filterTripSidebar();
       } else {
         renderTripSidebarList(allTripUmrahRecords);
       }
-      // Also update Airtable field choices cache
-      await fetchAirtableFieldChoices();
       return;
     } else {
-      // If error is about invalid option, it means field doesn't allow new options
-      console.warn('Direct PATCH failed', data);
-      const msg = data.error?.message || '';
-      if(msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('option') || res.status===422){
-        throw new Error('FIELD_NOT_ALLOW_NEW_OPTIONS');
-      }
-      throw new Error(msg || 'Direct PATCH failed');
+      console.warn('typecast:true PATCH failed, trying metadata API with correct shape - image_6be327.png image_740339.png', data);
+      throw new Error(data.error?.message || 'typecast PATCH failed');
     }
   } catch(e){
-    console.warn('TEXT ONLY direct failed:', e.message);
-    if(e.message==='FIELD_NOT_ALLOW_NEW_OPTIONS'){
-      alert(`Airtable tak benarkan tambah "${cleanOpt}" sebab field "${fieldName}" tak tick "Allow users to create new options".\n\nCara fix:\n1. Buka Airtable > PAKEJ UMRAH > Field ${fieldName}\n2. Click Customize field type\n3. ENABLE "Allow users to create new options" (scroll bawah)\n4. Save\n5. Cuba balik Add New Option\n\nAtau tambah manual: Field ${fieldName} > + Add option > ${cleanOpt} > Save, lepas tu reload portal (V27 akan auto-load AIRASIA dari Airtable).`);
-    } else {
-      alert(`Gagal tambah "${cleanOpt}": ${e.message}\n\nTambah manual di Airtable: Field ${fieldName} > + Add option > ${cleanOpt}`);
-    }
-    // Revert select
-    selectEl.value='';
-    // Still add locally for now so user sees it, but will disappear on reload if not in Airtable
-    if(!selectOptions[categoryKey].includes(cleanOpt)){
-      selectOptions[categoryKey].push(cleanOpt);
-      // Rebuild dropdown
-      const currentVal = selectedTripRecord ? selectedTripRecord.fields[fieldName] : '';
-      selectEl.innerHTML = `<option value="">-- Pilih --</option>` + selectOptions[categoryKey].map(opt=> `<option value="${opt}" ${opt===currentVal?'selected':''}>${opt}</option>`).join('') + `<option value="__ADD_NEW__" style="font-weight:bold;color:#8B1E3F">+ Add New Option...</option>`;
+    console.warn('V31 typecast method failed:', e.message, '- trying metadata field PATCH with ids + name only');
+    // Issue 2 fix - Metadata field PATCH - image_6be327.png image_740339.png
+    // Must send existing choices WITH ids + new choice name only, and only options (no type)
+    try {
+      const metaUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`;
+      const tablesRes = await fetch(metaUrl, {headers:{Authorization:`Bearer ${AIRTABLE_PAT}`}});
+      if(!tablesRes.ok){
+        const err = await tablesRes.json();
+        throw new Error(err.error?.message || 'Metadata fetch failed');
+      }
+      const tablesData = await tablesRes.json();
+      const table = (tablesData.tables||[]).find(t=> t.name==='PAKEJ UMRAH');
+      if(!table) throw new Error('Table PAKEJ UMRAH not found');
+      const field = (table.fields||[]).find(f=> f.name===fieldName);
+      if(!field) throw new Error(`Field ${fieldName} not found`);
+      const existingChoices = field.options?.choices||[];
+      // Check if already exists
+      if(existingChoices.some(c=> c.name.toUpperCase()===cleanOpt.toUpperCase())){
+        // Already exists, just assign with typecast
+        const res2 = await fetch(url, {
+          method:'PATCH',
+          headers:{Authorization:`Bearer ${AIRTABLE_PAT}`,'Content-Type':'application/json'},
+          body: JSON.stringify({typecast:true, fields:{[fieldName]: cleanOpt}})
+        });
+        if(res2.ok){
+          console.log(`✅ Already exists, assigned "${cleanOpt}"`);
+          selectEl.value=cleanOpt;
+          return;
+        }
+      }
+      // Correct shape: existing choices with id + name, new choice name only - image_740339.png
+      const choicesWithIds = existingChoices.map(c=> ({id: c.id, name: c.name}));
+      const newChoices = [...choicesWithIds, {name: cleanOpt}];
+      console.log('V31 Metadata PATCH correct shape:', JSON.stringify({options:{choices:newChoices}}));
+      const patchUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${table.id}/fields/${field.id}`;
+      const patchRes = await fetch(patchUrl, {
+        method:'PATCH',
+        headers:{Authorization:`Bearer ${AIRTABLE_PAT}`, 'Content-Type':'application/json'},
+        body: JSON.stringify({options:{choices:newChoices}})
+      });
+      const patchData = await patchRes.json();
+      if(!patchRes.ok){
+        console.error('Metadata PATCH failed - image_3e9405.png', patchData);
+        throw new Error(patchData.error?.message || 'Metadata PATCH failed');
+      }
+      console.log(`✅ V31 Metadata success - added "${cleanOpt}" to ${fieldName} - image_3e9405.png`);
+      if(!selectOptions[categoryKey].includes(cleanOpt)){
+        selectOptions[categoryKey].push(cleanOpt);
+        selectOptions[categoryKey].sort();
+      }
+      // Now assign to record with typecast
+      const assignRes = await fetch(url, {
+        method:'PATCH',
+        headers:{Authorization:`Bearer ${AIRTABLE_PAT}`,'Content-Type':'application/json'},
+        body: JSON.stringify({typecast:true, fields:{[fieldName]: cleanOpt}})
+      });
+      if(assignRes.ok){
+        const targetRec = allTripUmrahRecords.find(r=>r.id===recId);
+        if(targetRec) targetRec.fields[fieldName]=cleanOpt;
+        if(selectedTripRecord && selectedTripRecord.id===recId) selectedTripRecord.fields[fieldName]=cleanOpt;
+        selectEl.value=cleanOpt;
+        await fetchAirtableFieldChoices();
+        updateAdvancedFilterOptions();
+      }
+    } catch(e2){
+      console.error('V31 Both methods failed', e2);
+      alert(`Gagal tambah "${cleanOpt}" via API.\n\nError: ${e2.message}\n\nCuba tambah manual di Airtable: Field ${fieldName} > + Add option > ${cleanOpt} - V31 akan auto-load lepas reload.`);
+      selectEl.value='';
     }
   }
 }
+
+
+
 
 
 
@@ -788,6 +852,7 @@ async function addNewSelectOptionViaMetadata_ORIG_DISABLED(recId, fieldName, cat
   }
 }
 async function updateAirtableField(recId, fieldName, value){
+  // V31: Always use typecast:true so new options can be created if allowed - image_64cd05.png
   if(!AIRTABLE_PAT||!AIRTABLE_BASE_ID) return;
   const sidebarContainer = document.getElementById('tripSidebarContainer');
   const savedScrollTop = sidebarContainer ? sidebarContainer.scrollTop : 0;
