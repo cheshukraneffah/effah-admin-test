@@ -458,10 +458,4 @@ function getAirlineBadgeStyle(airline){
 }
 function getAirlineBadgeHtml(airline, isSelected){
   const style = getAirlineBadgeStyle(airline);
-  if(isSelected){
-    return `<span class="bg-white/15 text-white border border-white/20 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide flex items-center gap-1.5 w-fit"><span class="w-3.5 h-3.5 rounded-full ${style.dot} flex items-center justify-center text-[8px] text-white"></span>${airline}</span>`;
-  }
-  return `<span class="${style.bg} ${style.text} ${style.border} border text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide flex items-center gap-1.5 w-fit"><span class="w-3.5 h-3.5 rounded-full ${style.dot} flex items-center justify-center text-[8px] text-white"></span>${airline}</span>`;
-}
-
 
