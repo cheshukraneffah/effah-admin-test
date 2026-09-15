@@ -1,4 +1,4 @@
-// V20 FINAL - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
+// V21 FINAL - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
 // Check this comment exists on live site to confirm deployment
 // Variable Global Simpan Data & Options
 let allTripUmrahRecords = [];
@@ -16,7 +16,7 @@ let selectOptions = {
     tempoh: ['11H 9M', '12H 10M', '9H 7M', '13H 10M', '17H 15M', '10H 7M']
 };
 
-console.log('🟢 Trip Umrah V20 FINAL LOADED - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
+console.log('🟢 Trip Umrah V21 FINAL LOADED - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
 console.log('✅ Hijri Season field should be at line ~284');
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -206,7 +206,15 @@ function updateAdvancedFilterOptions(){
 
 function setHijriFilter(val){ tripFilters.hijri=val; filterTripSidebar(); updateHijriFilterTabs(); }
 function setAdvancedFilter(type, val){ tripFilters[type]=val; filterTripSidebar(); }
-function clearAdvancedFilters(){ tripFilters={hijri:'All',search:'',month:'All',airline:'All',tempoh:'All',musim:'All'}; const s=document.getElementById('searchTripSidebar'); if(s) s.value=''; filterTripSidebar(); updateHijriFilterTabs(); }
+function clearAdvancedFilters(){ 
+  // V21 FIX: Preserve hijri tab when pressing Reset - only reset Bulan/Airline/Tempoh/Musim + Search
+  // Previously it reset hijri to 'All' causing SEMUA tab to be selected (bug in image_93c7e9.png)
+  const currentHijri = tripFilters.hijri;
+  tripFilters={hijri:currentHijri,search:'',month:'All',airline:'All',tempoh:'All',musim:'All'}; 
+  const s=document.getElementById('searchTripSidebar'); if(s) s.value=''; 
+  filterTripSidebar(); 
+  updateHijriFilterTabs(); 
+}
 function filterTripSidebar(){
   const searchInput = document.getElementById('searchTripSidebar');
   if(searchInput) tripFilters.search = searchInput.value.toLowerCase();
