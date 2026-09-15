@@ -1,4 +1,4 @@
-// V16 FINAL - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
+// V17 FINAL - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
 // Check this comment exists on live site to confirm deployment
 // Variable Global Simpan Data & Options
 let allTripUmrahRecords = [];
@@ -15,6 +15,9 @@ let selectOptions = {
     musim: ['LOW SEASON', 'MID SEASON', 'HIGH SEASON'],
     tempoh: ['11H 9M', '12H 10M', '9H 7M', '13H 10M', '17H 15M', '10H 7M']
 };
+
+console.log('🟢 Trip Umrah V17 FINAL LOADED - Hijri tabs fixed - Hijri 1448H/1449H/1450H -', new Date().toISOString());
+console.log('✅ Hijri Season field should be at line ~284');
 
 document.addEventListener('DOMContentLoaded', () => {
     renderTripUmrahHTML();
@@ -98,6 +101,76 @@ function renderTripUmrahHTML() {
 
 
 let tripFilters = { hijri: 'All', search: '', month: 'All', airline: 'All', tempoh: 'All', musim: 'All' };
+
+function updateHijriFilterTabs(){
+  const container = document.getElementById('hijriFilterTabs');
+  if(!container) return;
+  const counts = {};
+  let total = 0;
+  (allTripUmrahRecords||[]).forEach(r=>{
+    const h = getHijriFieldValue(r);
+    if(!h) return;
+    counts[h] = (counts[h]||0)+1;
+    total++;
+  });
+  const order = ['1448H','1449H','1450H'];
+  const sortedHijri = Object.keys(counts).sort((a,b)=>{
+    const ia = order.indexOf(a); const ib = order.indexOf(b);
+    if(ia!==-1 && ib!==-1) return ia-ib;
+    if(ia!==-1) return -1;
+    if(ib!==-1) return 1;
+    return a.localeCompare(b);
+  });
+  // Ensure all 3 options always shown even if 0
+  order.forEach(o=>{ if(!(o in counts)) counts[o]=counts[o]||0; });
+  const allHijri = order.filter(o=>counts[o]!==undefined || sortedHijri.includes(o));
+  // Build tabs
+  let html = `<button onclick="setHijriFilter('All')" class="px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${tripFilters.hijri==='All' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}">SEMUA ${total>0?`<span class="ml-1 opacity-70">(${total})</span>`:''}</button>`;
+  allHijri.forEach(h=>{
+    const c = counts[h]||0;
+    const active = tripFilters.hijri===h;
+    html += `<button onclick="setHijriFilter('${h}')" class="px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${active ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}">${h} ${c>0?`<span class="ml-1 opacity-70">(${c})</span>`:''}</button>`;
+  });
+  container.innerHTML = html;
+  updateAdvancedFilterOptions();
+}
+
+function updateAdvancedFilterOptions(){
+  const monthSet = new Set(); const airlineSet = new Set(); const tempohSet = new Set(); const musimSet = new Set();
+  (allTripUmrahRecords||[]).forEach(r=>{
+    const f=r.fields;
+    if(f['Mula Pakej']) monthSet.add(getMonthKeyLong(f['Mula Pakej']));
+    if(f['Penerbangan']) airlineSet.add(f['Penerbangan']);
+    if(f['Tempoh Pakej']) tempohSet.add(f['Tempoh Pakej']);
+    if(f['Musim']) musimSet.add(f['Musim']);
+  });
+  const selMonth = document.getElementById('filterMonth');
+  const selAirline = document.getElementById('filterAirline');
+  const selTempoh = document.getElementById('filterTempoh');
+  const selMusim = document.getElementById('filterMusim');
+  if(selMonth){ const cur = tripFilters.month; let opts='<option value="All">Bulan: Semua</option>'; Array.from(monthSet).sort().forEach(m=>{ opts+=`<option value="${m}" ${cur===m?'selected':''}>${m}</option>`; }); selMonth.innerHTML=opts; }
+  if(selAirline){ const cur = tripFilters.airline; let opts='<option value="All">Airline: Semua</option>'; Array.from(airlineSet).sort().forEach(a=>{ opts+=`<option value="${a}" ${cur===a?'selected':''}>${a}</option>`; }); selAirline.innerHTML=opts; }
+  if(selTempoh){ const cur = tripFilters.tempoh; let opts='<option value="All">Tempoh: Semua</option>'; Array.from(tempohSet).sort().forEach(t=>{ opts+=`<option value="${t}" ${cur===t?'selected':''}>${t}</option>`; }); selTempoh.innerHTML=opts; }
+  if(selMusim){ const cur = tripFilters.musim; let opts='<option value="All">Musim: Semua</option>'; Array.from(musimSet).sort().forEach(m=>{ opts+=`<option value="${m}" ${cur===m?'selected':''}>${m}</option>`; }); selMusim.innerHTML=opts; }
+}
+
+function setHijriFilter(val){ tripFilters.hijri=val; filterTripSidebar(); updateHijriFilterTabs(); }
+function setAdvancedFilter(type, val){ tripFilters[type]=val; filterTripSidebar(); }
+function clearAdvancedFilters(){ tripFilters={hijri:'All',search:'',month:'All',airline:'All',tempoh:'All',musim:'All'}; const s=document.getElementById('searchTripSidebar'); if(s) s.value=''; filterTripSidebar(); updateHijriFilterTabs(); }
+function filterTripSidebar(){
+  const searchInput = document.getElementById('searchTripSidebar');
+  if(searchInput) tripFilters.search = searchInput.value.toLowerCase();
+  let filtered = allTripUmrahRecords||[];
+  if(tripFilters.hijri!=='All') filtered = filtered.filter(r=> getHijriFieldValue(r)===tripFilters.hijri);
+  if(tripFilters.month!=='All') filtered = filtered.filter(r=> getMonthKeyLong(r.fields['Mula Pakej'])===tripFilters.month);
+  if(tripFilters.airline!=='All') filtered = filtered.filter(r=> (r.fields['Penerbangan']||'')===tripFilters.airline);
+  if(tripFilters.tempoh!=='All') filtered = filtered.filter(r=> (r.fields['Tempoh Pakej']||'')===tripFilters.tempoh);
+  if(tripFilters.musim!=='All') filtered = filtered.filter(r=> (r.fields['Musim']||'')===tripFilters.musim);
+  if(tripFilters.search) filtered = filtered.filter(r=>{ const title=(r.fields['Trip']||'').toLowerCase(); return title.includes(tripFilters.search); });
+  renderTripSidebarList(filtered);
+  updateHijriFilterTabs();
+}
+
 
 function getHijriFieldValue(rec){
   const f = rec.fields;
@@ -193,6 +266,8 @@ async function fetchTripUmrahData() {
         } else if (allTripUmrahRecords.length > 0) {
           renderTripDetailForm(allTripUmrahRecords[0]);
         }
+        // After initial load, populate hijri tabs
+        try{ updateHijriFilterTabs(); }catch(e){}
     } catch (err) {
         if (container) container.innerHTML = '<div class="text-center py-10 text-rose-500 text-xs">Gagal muat data. Semak API Key.</div>';
     }
@@ -221,6 +296,7 @@ function renderTripSidebarList(records) {
     });
     // Restore scroll after render
     requestAnimationFrame(()=>{
+      try{ updateHijriFilterTabs(); }catch(e){}
       container.scrollTop = prevScroll;
       // Also ensure selected card is visible but don't jump to top
       const selectedEl = container.querySelector('[data-trip-id="'+(selectedTripRecord?.id||'')+'"]');
@@ -397,7 +473,6 @@ async function updateAirtableField(recId, fieldName, value){
 }
 async function deleteTripRecord(recId){ if(!confirm('Adakah anda pasti nak padam rekod Trip ini dari Airtable?')) return; const url=`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/PAKEJ%20UMRAH/${recId}`; try{ const response=await fetch(url,{method:'DELETE',headers:{Authorization:`Bearer ${AIRTABLE_PAT}`}}); if(response.ok){fetchTripUmrahData();}}catch(err){alert('Gagal memadam rekod.');} }
 function extractDynamicOptions(records){ records.forEach(r=>{ const f=r.fields; const checkAndPush=(val,targetArray)=>{ if(!val) return; const clean=normalizeDashFormat(val); if(clean&&!targetArray.includes(clean)){targetArray.push(clean);} }; checkAndPush(f['Group (if relevant)'], selectOptions.group); checkAndPush(f['Sektor'], selectOptions.sektor); checkAndPush(f['Penerbangan'], selectOptions.penerbangan); checkAndPush(f['Musim'], selectOptions.musim); checkAndPush(f['Tempoh Pakej'], selectOptions.tempoh); }); }
-function filterTripSidebar(){ const query=document.getElementById('searchTripSidebar').value.toLowerCase(); const filtered=allTripUmrahRecords.filter(rec=>{ const f=rec.fields; const rawTrip=(f['Trip']||'').toLowerCase(); const cleanTrip=cleanTripName(rawTrip).toLowerCase(); const airline=(f['Penerbangan']||'').toLowerCase(); return rawTrip.includes(query)||cleanTrip.includes(query)||airline.includes(query); }); renderTripSidebarList(filtered); }
 function filterTripJemaahTable(q){ const query=(q||'').toLowerCase(); const container=document.getElementById('modul-pakej-umrah'); if(!container) return; const rows=container.querySelectorAll('table tbody tr'); rows.forEach(tr=>{ const txt=tr.textContent.toLowerCase(); tr.style.display=txt.includes(query)?'':'none'; }); }
 function closeTripAddCustomerModal(){ const modal=document.getElementById('tripAddCustomerModal'); if(modal){ modal.classList.add('hidden'); modal.style.display='none'; } }
 function openTripAddCustomerModal(){ let modal=document.getElementById('tripAddCustomerModal'); const tripName=(typeof selectedTripRecord!=='undefined'&&selectedTripRecord)?(selectedTripRecord.fields['Trip']||'') : ''; if(!modal){ modal=document.createElement('div'); modal.id='tripAddCustomerModal'; modal.className='fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4'; modal.innerHTML=`<div class="bg-white rounded-3xl shadow-2xl p-6 md:p-8 max-w-lg w-full border border-slate-100"><div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-100"><div class="flex items-center space-x-2.5"><div class="w-9 h-9 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center"><i class="fa-solid fa-user-plus"></i></div><div><h3 class="font-extrabold text-slate-900 text-base">Tambah Jemaah Baru</h3><p class="text-[11px] text-slate-500">${tripName ? 'Trip: '+tripName : ''}</p></div></div><button onclick="closeTripAddCustomerModal()" class="text-slate-400 hover:text-slate-700 p-1"><i class="fa-solid fa-xmark text-lg"></i></button></div><form onsubmit="submitTripAddCustomer(event)" class="space-y-3 text-xs"><div><label class="block font-bold text-slate-700 mb-1">Nama Penuh *</label><input type="text" id="tripAddName" required placeholder="NAMA PENUH" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none font-semibold uppercase"></div><div class="grid grid-cols-2 gap-3"><div><label class="block font-bold text-slate-700 mb-1">No IC</label><input type="text" id="tripAddIC" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none"></div><div><label class="block font-bold text-slate-700 mb-1">Passport No</label><input type="text" id="tripAddPassport" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none"></div></div><div><label class="block font-bold text-slate-700 mb-1">Trip</label><input type="text" id="tripAddTrip" value="${tripName}" readonly class="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl font-bold text-slate-600"></div><div class="flex gap-3 pt-3"><button type="button" onclick="closeTripAddCustomerModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl">Batal</button><button type="submit" class="flex-1 bg-slate-900 hover:bg-black text-white font-bold py-2.5 rounded-xl shadow-xs">Simpan</button></div></form></div>`; document.body.appendChild(modal); modal.addEventListener('click', (e)=>{ if(e.target===modal) closeTripAddCustomerModal(); }); } else { modal.style.display='flex'; modal.classList.remove('hidden'); const inp=modal.querySelector('#tripAddTrip'); if(inp) inp.value=tripName; } }
@@ -493,5 +568,4 @@ function getAirlineBadgeHtml(airline, isSelected){
   }
   return `<span class="${style.bg} ${style.text} ${style.border} border text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide flex items-center gap-1.5 w-fit"><span class="w-3.5 h-3.5 rounded-full ${style.dot} flex items-center justify-center text-[8px] text-white"></span>${airline}</span>`;
 }
-
 
