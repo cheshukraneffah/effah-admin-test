@@ -301,7 +301,8 @@
       const seasonMap = {};
       trips.forEach(rec=>{
         const f = rec.fields || {};
-        let hijri = getHijriSeasonFromField(f['Hijri Season'] || '') || '1448H';
+        let hijri = getHijriSeasonFromField(f['Hijri Season'] || '');
+        if(!hijri) return;
         const mula = f['Mula Pakej'] ? new Date(f['Mula Pakej']) : null;
         if(!mula || isNaN(mula)) return;
         if(!seasonMap[hijri]) seasonMap[hijri] = { trips: [], maxDate: mula, minDate: mula };
@@ -376,11 +377,13 @@
       if(umrahLabel) umrahLabel.textContent = 'Trip Umrah Musim '+activeHijriSeason;
       if(jemaahLabel) jemaahLabel.textContent = 'Jemaah Musim '+activeHijriSeason;
       if(calendarSeason) calendarSeason.textContent = activeHijriSeason;
+      // V40 FIX for image_378d27.png - 30 vs 29 mismatch: blank Hijri should NOT count as 1448H
+      // Blank Hijri only appears in SEMUA (31), not in 1448H (29). So exact match only.
       let filteredTrips = trips.filter(r=>{
-        const hijri = getHijriSeasonFromField(r.fields['Hijri Season']||'') || '1448H';
+        const hijri = getHijriSeasonFromField(r.fields['Hijri Season']||'');
         return hijri === activeHijriSeason;
       });
-      if(filteredTrips.length===0) filteredTrips = trips;
+      // Do NOT fallback to all trips - if no match, show 0, not 30
       const statUmrah = document.getElementById('statUmrahCount');
       const statUmrahSub = document.getElementById('statUmrahSub');
       if(statUmrah) statUmrah.textContent = filteredTrips.length;
@@ -403,7 +406,10 @@
       const statJemaah = document.getElementById('statJemaahUmrahCount');
       const statJemaahSub = document.getElementById('statJemaahSub');
       if(statJemaah) statJemaah.textContent = jemaahCount || filteredTrips.reduce((s,t)=> s + (parseInt(t.fields['Total Jemaah']||0)),0) || 0;
-      if(statJemaahSub) statJemaahSub.textContent = activeHijriSeason+' Sahaja';
+      if(statJemaahSub) statJemaahSub.textContent = 'Jemaah Didaftarkan';
+      // Update main trip subtext too
+      const tripSub = document.getElementById('statUmrahSub');
+      if(tripSub) tripSub.textContent = filteredTrips.length+' Rekod Musim Ini';
       allTripDataForCalendar = filteredTrips.length>0 ? filteredTrips : trips;
       renderCalendar();
       renderUpcoming30Days();
@@ -441,7 +447,7 @@
         }
       });
       let html = '';
-      for(let i=0;i<firstDay;i++){ html += '<div class="h-20"></div>'; }
+      for(let i=0;i<firstDay;i++){ html += '<div class="h-[88px]"></div>'; }
       for(let day=1; day<=daysInMonth; day++){
         const date = new Date(year, month, day);
         const isToday = date.getTime() === today.getTime();
@@ -449,19 +455,36 @@
         const isWithin30 = diffDays >=0 && diffDays <=30;
         const trips = tripByDate[day] || [];
         const hasTrip = trips.length > 0;
-        let classes = 'h-20 p-2 rounded-xl border text-left relative transition cursor-pointer hover:shadow-sm ';
-        if(isToday) classes += 'bg-slate-900 text-white border-slate-900 shadow-md ';
-        else if(hasTrip && isWithin30) classes += 'bg-amber-50 border-amber-200 hover:bg-amber-100 ';
-        else if(hasTrip) classes += 'bg-emerald-50/80 border-emerald-200 hover:bg-emerald-100/80 ';
+        // V40 FIX for image_0096da.png - no black box, bold only, 2 trips = two layers, Airtable style with color
+        let classes = 'h-[88px] p-2 rounded-xl border text-left relative transition cursor-pointer hover:shadow-sm flex flex-col ';
+        if(isToday) classes += 'bg-white border-slate-900 border-2 shadow-sm ring-2 ring-slate-900/10 ';
+        else if(hasTrip && isWithin30) classes += 'bg-amber-50/50 border-amber-200 hover:bg-amber-100/70 ';
+        else if(hasTrip) classes += 'bg-emerald-50/40 border-emerald-200/60 hover:bg-emerald-50 ';
         else classes += 'bg-white border-slate-100 hover:bg-slate-50 ';
-        let badge = '';
+        
+        let content = '';
         if(hasTrip){
-          const countText = trips.length === 1 ? '1 TRIP' : trips.length+' TRIP';
-          const cleanFirst = cleanTripNameForDisplay(trips[0].fields['Trip']||'Trip').substring(0,18);
-          badge = '<div class="mt-1"><div class="text-[9px] font-black px-1.5 py-0.5 rounded-md inline-block '+(isToday?'bg-white text-slate-900':'bg-slate-900 text-white')+'">'+countText+'</div><div class="mt-1 text-[8px] font-bold leading-tight '+(isToday?'text-white/70':'text-slate-600')+' truncate">'+cleanFirst+'</div></div>';
+          // Show up to 2 trips as layered bars, like Airtable but with color
+          const displayTrips = trips.slice(0,2);
+          content = displayTrips.map((rec, idx)=>{
+            const clean = cleanTripNameForDisplay(rec.fields['Trip']||'Trip');
+            const airline = (rec.fields['Penerbangan']||'').split(' ')[0] || '';
+            // Color by airline or by index
+            const colors = ['bg-emerald-100 text-emerald-800 border-emerald-200', 'bg-blue-100 text-blue-800 border-blue-200', 'bg-amber-100 text-amber-800 border-amber-200', 'bg-rose-100 text-rose-800 border-rose-200'];
+            const colorClass = colors[idx % colors.length];
+            // Date range for bar
+            const mula = new Date(rec.fields['Mula Pakej']);
+            const tamat = rec.fields['Tamat Pakej'] ? new Date(rec.fields['Tamat Pakej']) : mula;
+            const rangeText = `${String(mula.getDate()).padStart(2,'0')} ${mula.toLocaleDateString('ms-MY',{month:'short'}).toUpperCase()} - ${String(tamat.getDate()).padStart(2,'0')} ${tamat.toLocaleDateString('ms-MY',{month:'short'}).toUpperCase()}`;
+            return `<div class="mt-1 px-1.5 py-0.5 rounded-md border text-[8px] font-bold leading-tight truncate ${colorClass}" title="${clean}">${clean.substring(0,20)}</div>
+                    <div class="text-[7px] text-slate-500 font-medium px-1 truncate">${rangeText}</div>`;
+          }).join('');
+          if(trips.length>2){
+            content += `<div class="mt-1 text-[8px] font-bold text-slate-500 px-1">+${trips.length-2} more</div>`;
+          }
         }
-        const title = hasTrip ? trips.map(t=>cleanTripNameForDisplay(t.fields['Trip'])).join(', ') : '';
-        html += '<div class="'+classes+'" onclick="showTripsForDate('+year+','+month+','+day+')" title="'+title+'"><div class="text-[11px] font-bold '+(isToday?'text-white': hasTrip?'text-slate-800':'text-slate-700')+'">'+day+'</div>'+badge+'</div>';
+        
+        html += '<div class="'+classes+'" onclick="showTripsForDate('+year+','+month+','+day+')" title="'+(hasTrip ? trips.map(t=>cleanTripNameForDisplay(t.fields['Trip'])).join(', ') : '')+'"><div class="flex items-center justify-between"><span class="text-[11px] '+(isToday?'font-black text-slate-900':'font-bold text-slate-700')+'">'+day+'</span>'+(isToday?'<span class="text-[8px] font-black bg-slate-900 text-white px-1.5 py-0.5 rounded-full">HARI INI</span>':'')+'</div>'+content+'</div>';
       }
       grid.innerHTML = html;
     }
