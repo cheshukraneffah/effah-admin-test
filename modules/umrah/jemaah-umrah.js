@@ -867,7 +867,7 @@ function setJemaahHijriFilter(hijri){
 }
 
 
-function selectTripFilterfunction selectTripFilter(tripId, displayTitle) {
+function selectTripFilter(tripId, displayTitle) {
     selectedTripFilter = tripId;
     const titleEl = document.getElementById('currentViewTitle');
     if (titleEl) titleEl.textContent = displayTitle.toUpperCase();
