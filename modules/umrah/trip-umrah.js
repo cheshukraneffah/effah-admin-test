@@ -1,4 +1,4 @@
-// V31 FINAL - fix from Airtable Omni AI image_6a56b9.png: typecast:true for direct PATCH image_64cd05.png, metadata with existing ids + new name only image_6be327.png image_740339.png image_3e9405.png, recommended approach image_b5cba5.png - user says already enabled but still 422 INVALID_MULTIPLE_CHOICE, so use manual add workaround + auto-load from Airtable, filters dynamic image_4fafaf.png - filters NOT hardcoded (image_4fafaf.png) merge with Airtable choices, fix AIR ARABIA error image_5ecfc0.png image_cd48ad.png by requiring Allow new options - ALL SELECTIONS FROM AIRTABLE, no hardcoded, AIRASIA etc auto appear - auto fetch field choices from Airtable so manual AIRASIA appears, text only add new option with proper error for Allow new options - add new option TEXT ONLY (no color/id) as requested, direct PATCH then metadata fallback - baki logic image_55ef73.png green >5 red <=5, closed no baki, remove +Add New Option to fix 422 image_c4c6ad.png, strict hijri fix TBC - strict hijri Season only (no auto calc) fix TBC image_0e0e43.png, fix 422 by sending only name image_b8057a.png - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
+// V32 FINAL - fix image_bb9aa2.png trip switch back to old selected during fetch + image_cbb19c.png BATIK AIR delay 5-10 sec in detail, merge not overwrite for propagation delay, loading flag - fix from Airtable Omni AI image_6a56b9.png: typecast:true for direct PATCH image_64cd05.png, metadata with existing ids + new name only image_6be327.png image_740339.png image_3e9405.png, recommended approach image_b5cba5.png - user says already enabled but still 422 INVALID_MULTIPLE_CHOICE, so use manual add workaround + auto-load from Airtable, filters dynamic image_4fafaf.png - filters NOT hardcoded (image_4fafaf.png) merge with Airtable choices, fix AIR ARABIA error image_5ecfc0.png image_cd48ad.png by requiring Allow new options - ALL SELECTIONS FROM AIRTABLE, no hardcoded, AIRASIA etc auto appear - auto fetch field choices from Airtable so manual AIRASIA appears, text only add new option with proper error for Allow new options - add new option TEXT ONLY (no color/id) as requested, direct PATCH then metadata fallback - baki logic image_55ef73.png green >5 red <=5, closed no baki, remove +Add New Option to fix 422 image_c4c6ad.png, strict hijri fix TBC - strict hijri Season only (no auto calc) fix TBC image_0e0e43.png, fix 422 by sending only name image_b8057a.png - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
 // Check this comment exists on live site to confirm deployment
 // Variable Global Simpan Data & Options
 let allTripUmrahRecords = [];
@@ -17,7 +17,7 @@ let selectOptions = {
     tempoh: []
 };
 
-console.log('🟢 Trip Umrah V31 FINAL LOADED - fix with typecast:true + metadata with ids - workaround for Airtable block even when enabled - filters dynamic from Airtable + fix add new option allow new options - all selections fetch from Airtable no hardcoded - auto load field choices AIRASIA + text only fix - text only add new option - baki all green>5 red<=5 + remove add new option 422 fix - strict hijri only (fix TBC blank) + fix 422 metadata API - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
+console.log('🟢 Trip Umrah V32 FINAL LOADED - fix trip switch race + BATIK AIR delay - fix with typecast:true + metadata with ids - workaround for Airtable block even when enabled - filters dynamic from Airtable + fix add new option allow new options - all selections fetch from Airtable no hardcoded - auto load field choices AIRASIA + text only fix - text only add new option - baki all green>5 red<=5 + remove add new option 422 fix - strict hijri only (fix TBC blank) + fix 422 metadata API - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
 console.log('✅ Hijri Season field should be at line ~284');
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -302,16 +302,18 @@ async function fetchAirtableFieldChoices(){
       'Musim': 'musim',
       'Tempoh Pakej': 'tempoh'
     };
-    // Clear and repopulate from Airtable only
+    // V32 FIX for image_bb9aa2.png image_cbb19c.png - MERGE not overwrite to handle BATIK AIR propagation delay
+    // Airtable metadata can be 5-10 sec behind after creating new option via typecast, so keep locally added options
     Object.keys(fieldMap).forEach(airtableFieldName=>{
       const key = fieldMap[airtableFieldName];
       const field = (table.fields||[]).find(f=> f.name===airtableFieldName);
       if(field && field.options && field.options.choices){
-        const choices = field.options.choices.map(c=> c.name).filter(Boolean).map(c=> normalizeDashFormat(c));
-        // Sort for consistency
-        const unique = [...new Set(choices)].sort();
-        selectOptions[key] = unique;
-        console.log(`✅ V28 Loaded ${key} (${airtableFieldName}) from Airtable:`, unique);
+        const fetchedChoices = field.options.choices.map(c=> c.name).filter(Boolean).map(c=> normalizeDashFormat(c));
+        const existingLocal = selectOptions[key]||[];
+        // Merge fetched + existing local (keep local additions like BATIK AIR that may not yet be in metadata)
+        const merged = [...new Set([...fetchedChoices, ...existingLocal])].sort();
+        selectOptions[key] = merged;
+        console.log(`✅ V32 Loaded ${key} (${airtableFieldName}) from Airtable (merged):`, merged, 'fetched:', fetchedChoices, 'local:', existingLocal);
       } else {
         console.warn(`Field ${airtableFieldName} not found or has no choices`);
         if(!selectOptions[fieldMap[airtableFieldName]]) selectOptions[fieldMap[airtableFieldName]] = [];
@@ -324,6 +326,11 @@ async function fetchAirtableFieldChoices(){
 }
 
 async function fetchTripUmrahData() {
+    // V32 FIX for image_bb9aa2.png - show loading until fetch complete, prevent trip switch
+    window.tripDataLoading = true;
+    const _fetchStartTime = Date.now();
+    const _fetchStartSelectedId = selectedTripRecord ? selectedTripRecord.id : null;
+    console.log('🔄 V32 fetchTripUmrahData start, _fetchStartSelectedId:', _fetchStartSelectedId);
     try{
       if(typeof AIRTABLE_PAT === 'undefined' || !AIRTABLE_PAT){
         AIRTABLE_PAT = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat') || window.DEFAULT_PAT || 'patjxZg6G22e9OBuS.2a96ced64af7e931ee4d83f65c491adf1241813547d5d8e3a317f5bc6d9a8de7';
@@ -336,11 +343,14 @@ async function fetchTripUmrahData() {
       if(typeof updateApiStatusBadge === 'function') updateApiStatusBadge();
       if(typeof setApiOnline === 'function') setApiOnline();
     }catch(e){ console.warn('PAT auto-fill warning', e); }
-    if (!AIRTABLE_PAT || !AIRTABLE_BASE_ID) return;
-    // Fetch field choices first so AIRASIA manual appears
+    if (!AIRTABLE_PAT || !AIRTABLE_BASE_ID){
+      window.tripDataLoading = false;
+      return;
+    }
+    // Fetch field choices first so AIRASIA manual appears - V32 merge not overwrite
     await fetchAirtableFieldChoices();
     const container = document.getElementById('tripSidebarContainer');
-    if (container) container.innerHTML = '<div class="text-center py-10 text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuat data...</div>';
+    if (container) container.innerHTML = '<div class="text-center py-10 text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuat trip... Sila tunggu sampai habis fetch</div>';
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/PAKEJ%20UMRAH?sort[0][field]=Mula%20Pakej&sort[0][direction]=asc&sort[1][field]=Tamat%20Pakej&sort[1][direction]=asc`;
     try {
         const prevSelectedId = (selectedTripRecord && selectedTripRecord.id) ? selectedTripRecord.id : localStorage.getItem('effah_last_selected_trip');
@@ -362,24 +372,52 @@ async function fetchTripUmrahData() {
         if(typeof populateRoomingTripDropdown === 'function') populateRoomingTripDropdown();
         if(typeof window.populateRoomingTripDropdown === 'function') window.populateRoomingTripDropdown();
         window.allTripRecords = allTripUmrahRecords; // alias for rooming
+        // V32: Restore scroll after render
         setTimeout(()=>{ const sc = document.getElementById('tripSidebarContainer'); if(sc){ sc.scrollTop = prevScrollTop; console.log('Scroll restored to', prevScrollTop); } }, 100);
-        if(prevSelectedId){
+        // V32 FIX for image_bb9aa2.png - don't restore old trip if user already selected different one during fetch
+        const currentSelectedIdAfterFetch = selectedTripRecord ? selectedTripRecord.id : null;
+        const userSwitchedDuringFetch = _fetchStartSelectedId && currentSelectedIdAfterFetch && _fetchStartSelectedId !== currentSelectedIdAfterFetch;
+        console.log('V32 check restore - _fetchStartSelectedId:', _fetchStartSelectedId, 'currentAfterFetch:', currentSelectedIdAfterFetch, 'prevSelectedId:', prevSelectedId, 'userSwitched:', userSwitchedDuringFetch);
+        if(userSwitchedDuringFetch){
+          console.log('V32: User switched trip during fetch, skip auto-restore old trip - fix image_bb9aa2.png');
+        } else if(prevSelectedId){
           const stillExists = allTripUmrahRecords.find(r=> r.id === prevSelectedId);
           if(stillExists){
             renderTripDetailForm(stillExists);
             if(typeof fetchJemaahUmrahData === 'function'){
-              const _fetchId = stillExists.id; fetchJemaahUmrahData(true).then(()=>{ if(selectedTripRecord && selectedTripRecord.id !== _fetchId){ return; }  const curId = selectedTripRecord ? selectedTripRecord.id : null; if(curId && curId !== _fetchId){ console.log('Race guard: user switched to', curId, 'skip', _fetchId); return; } const sc=document.getElementById('tripSidebarContainer'); const savedScroll=sc?sc.scrollTop:0; const upd = allTripUmrahRecords.find(r=>r.id===_fetchId)||stillExists; renderTripDetailForm(upd); setTimeout(()=>{ const s2=document.getElementById('tripSidebarContainer'); if(s2) s2.scrollTop=savedScroll; },0); });
+              const _fetchId = stillExists.id; 
+              fetchJemaahUmrahData(true).then(()=>{ 
+                // V32 race guard: check if user switched after this fetch started
+                if(selectedTripRecord && selectedTripRecord.id !== _fetchId){ 
+                  console.log('V32 Race guard: user switched to', selectedTripRecord.id, 'skip re-render', _fetchId); 
+                  return; 
+                }  
+                const curId = selectedTripRecord ? selectedTripRecord.id : null; 
+                if(curId && curId !== _fetchId){ 
+                  console.log('V32 Race guard 2: user switched to', curId, 'skip', _fetchId); 
+                  return; 
+                } 
+                const sc=document.getElementById('tripSidebarContainer'); 
+                const savedScroll=sc?sc.scrollTop:0; 
+                const upd = allTripUmrahRecords.find(r=>r.id===_fetchId)||stillExists; 
+                renderTripDetailForm(upd); 
+                setTimeout(()=>{ const s2=document.getElementById('tripSidebarContainer'); if(s2) s2.scrollTop=savedScroll; },0); 
+              });
             }
-          } else if (allTripUmrahRecords.length > 0) {
+          } else if (allTripUmrahRecords.length > 0 && !currentSelectedIdAfterFetch) {
             renderTripDetailForm(allTripUmrahRecords[0]);
           }
-        } else if (allTripUmrahRecords.length > 0) {
+        } else if (allTripUmrahRecords.length > 0 && !currentSelectedIdAfterFetch) {
           renderTripDetailForm(allTripUmrahRecords[0]);
         }
         // After initial load, populate hijri tabs
         try{ updateHijriFilterTabs(); }catch(e){}
+        window.tripDataLoading = false;
+        console.log('✅ V32 fetchTripUmrahData complete in', (Date.now()-_fetchStartTime)+'ms - loading finished, now safe to select trip');
     } catch (err) {
+        console.error('fetchTripUmrahData error', err);
         if (container) container.innerHTML = '<div class="text-center py-10 text-rose-500 text-xs">Gagal muat data. Semak API Key.</div>';
+        window.tripDataLoading = false;
     }
 }
 
@@ -697,13 +735,24 @@ async function addNewSelectOptionTextOnly(recId, fieldName, categoryKey, selectE
       if(targetRec) targetRec.fields[fieldName]=cleanOpt;
       if(selectedTripRecord && selectedTripRecord.id===recId) selectedTripRecord.fields[fieldName]=cleanOpt;
       selectEl.value=cleanOpt;
-      await fetchAirtableFieldChoices();
+      // V32 FIX for image_cbb19c.png - don't immediately refetch metadata which may be stale (5-10 sec delay), keep local BATIK AIR
+      // Update filters and sidebar with local data first for instant feedback
       updateAdvancedFilterOptions();
       if(typeof tripFilters !== 'undefined' && (tripFilters.hijri!=='All' || tripFilters.month!=='All' || tripFilters.airline!=='All' || tripFilters.tempoh!=='All' || tripFilters.musim!=='All' || (tripFilters.search&&tripFilters.search!==''))){
         filterTripSidebar();
       } else {
         renderTripSidebarList(allTripUmrahRecords);
       }
+      // Then refresh from Airtable after 3 sec delay to handle propagation
+      setTimeout(async ()=>{
+        console.log('V32 delayed refresh of field choices after 3s for BATIK AIR propagation');
+        await fetchAirtableFieldChoices();
+        updateAdvancedFilterOptions();
+        // Re-render detail form to show BATIK AIR in dropdown - image_cbb19c.png
+        if(selectedTripRecord && selectedTripRecord.id===recId){
+          renderTripDetailForm(selectedTripRecord);
+        }
+      }, 3000);
       return;
     } else {
       console.warn('typecast:true PATCH failed, trying metadata API with correct shape - image_6be327.png image_740339.png', data);
