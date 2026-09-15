@@ -200,11 +200,7 @@ function renderJemaahUmrahHTML() {
                             </button>
 
                             <div id="hideFieldsDropdown" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 text-xs max-h-[420px] flex flex-col overflow-hidden">
-                                <div class="p-3 border-b border-slate-200 space-y-2">
-                                    <div class="flex items-center justify-between">
-                                        <div class="font-bold text-slate-700 text-[11px] uppercase">Find a field</div>
-                                        <button class="text-[11px] text-slate-400 hover:text-slate-600" onclick="document.getElementById('fieldSearchInput').value=''; filterFieldsList();"><i class="fa-solid fa-question-circle"></i></button>
-                                    </div>
+                                <div class="p-2.5 border-b border-slate-200">
                                     <div class="relative">
                                         <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400 text-[10px]"></i>
                                         <input type="text" id="fieldSearchInput" onkeyup="filterFieldsList()" placeholder="Find a field" class="w-full text-xs pl-7 pr-3 py-1.5 border border-slate-300 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400">
@@ -2554,4 +2550,102 @@ function filterJemaahTable() {
     modal.classList.remove('hidden');
     modal.style.display='flex';
   };
+
+// V54: Auto-close dropdowns when clicking outside - fix image_c96f0e.png double dropdown overlap
+document.addEventListener('click', function(e){
+  const sortDrop = document.getElementById('sortDropdownMenu');
+  const hideDrop = document.getElementById('hideFieldsDropdown');
+  const sortBtn = e.target.closest('[onclick*="toggleSortDropdown"]') || e.target.closest('button')?.parentElement?.querySelector('#sortDropdownMenu') ? null : null;
+  // Check if click is inside dropdown or its button
+  const isSortButton = e.target.closest('button[onclick="toggleSortDropdown()"]') || e.target.closest('button')?.innerHTML?.includes('Sort:');
+  const isHideButton = e.target.closest('button[onclick="toggleHideFieldsDropdown()"]') || e.target.closest('button')?.innerHTML?.includes('Edit/Arrange Fields');
+  const isInsideSort = sortDrop && sortDrop.contains(e.target);
+  const isInsideHide = hideDrop && hideDrop.contains(e.target);
+  
+  // More robust: check button ancestors
+  const sortButton = document.querySelector('button[onclick="toggleSortDropdown()"]');
+  const hideButton = document.querySelector('button[onclick="toggleHideFieldsDropdown()"]');
+  
+  const clickedSortButton = sortButton && (sortButton.contains(e.target) || e.target === sortButton || e.target.closest('button') === sortButton);
+  const clickedHideButton = hideButton && (hideButton.contains(e.target) || e.target === hideButton || e.target.closest('button') === hideButton);
+  
+  if(sortDrop && !sortDrop.classList.contains('hidden')){
+    if(!isInsideSort && !clickedSortButton && !e.target.closest('#sortDropdownMenu')){
+      // Only close if not clicking inside sort dropdown or its button
+      const isButton = e.target.closest('button') && e.target.closest('button').getAttribute('onclick')?.includes('toggleSortDropdown');
+      if(!isButton && !sortDrop.contains(e.target) && !(sortButton && sortButton.contains(e.target))){
+        sortDrop.classList.add('hidden');
+      }
+    }
+  }
+  if(hideDrop && !hideDrop.classList.contains('hidden')){
+    if(!isInsideHide && !clickedHideButton && !e.target.closest('#hideFieldsDropdown')){
+      const isButton = e.target.closest('button') && e.target.closest('button').getAttribute('onclick')?.includes('toggleHideFieldsDropdown');
+      if(!isButton && !hideDrop.contains(e.target) && !(hideButton && hideButton.contains(e.target))){
+        hideDrop.classList.add('hidden');
+      }
+    }
+  }
+});
+
+// Improved version: single handler for all dropdowns
+(function(){
+  const originalToggleSort = window.toggleSortDropdown;
+  const originalToggleHide = window.toggleHideFieldsDropdown;
+  
+  window.toggleSortDropdown = function(){
+    const drop = document.getElementById('sortDropdownMenu');
+    const hideDrop = document.getElementById('hideFieldsDropdown');
+    if(hideDrop) hideDrop.classList.add('hidden'); // Close other dropdown - fix image_c96f0e.png double
+    if(drop){
+      drop.classList.toggle('hidden');
+    } else if(originalToggleSort){
+      originalToggleSort();
+    }
+  };
+  
+  window.toggleHideFieldsDropdown = function(){
+    const drop = document.getElementById('hideFieldsDropdown');
+    const sortDrop = document.getElementById('sortDropdownMenu');
+    if(sortDrop) sortDrop.classList.add('hidden'); // Close other dropdown - fix image_c96f0e.png double
+    if(drop){
+      const isHidden = drop.classList.contains('hidden');
+      if(isHidden){
+        if(typeof buildHideFieldsList === 'function') buildHideFieldsList();
+        drop.classList.remove('hidden');
+      } else {
+        drop.classList.add('hidden');
+      }
+    } else if(originalToggleHide){
+      originalToggleHide();
+    }
+  };
+  
+  // Global click outside to close all dropdowns
+  document.addEventListener('click', function(event){
+    const sortDrop = document.getElementById('sortDropdownMenu');
+    const hideDrop = document.getElementById('hideFieldsDropdown');
+    const sortBtn = document.querySelector('button[onclick="toggleSortDropdown()"]');
+    const hideBtn = document.querySelector('button[onclick="toggleHideFieldsDropdown()"]');
+    
+    // If clicking outside both dropdowns and their buttons, close them
+    const clickedInsideSort = sortDrop && (sortDrop.contains(event.target) || (sortBtn && sortBtn.contains(event.target)));
+    const clickedInsideHide = hideDrop && (hideDrop.contains(event.target) || (hideBtn && hideBtn.contains(event.target)));
+    
+    if(!clickedInsideSort && sortDrop && !sortDrop.classList.contains('hidden')){
+      sortDrop.classList.add('hidden');
+    }
+    if(!clickedInsideHide && hideDrop && !hideDrop.classList.contains('hidden')){
+      // Don't close if clicking inside search input filtering
+      if(!event.target.closest('#fieldSearchInput') && !event.target.closest('#fieldsToggleList')){
+        // Check if it's not the toggle itself (already handled by contains)
+        if(!(hideBtn && hideBtn.contains(event.target))){
+          hideDrop.classList.add('hidden');
+        }
+      }
+    }
+  });
+})();
+
+
 })();
