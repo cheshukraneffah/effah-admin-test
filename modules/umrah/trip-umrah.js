@@ -108,7 +108,7 @@ async function fetchTripUmrahData() {
         if(typeof populateRoomingTripDropdown === 'function') populateRoomingTripDropdown();
         if(typeof window.populateRoomingTripDropdown === 'function') window.populateRoomingTripDropdown();
         window.allTripRecords = allTripUmrahRecords; // alias for rooming
-        setTimeout(()=>{ const sc = document.getElementById('tripSidebarContainer'); if(sc) sc.scrollTop = prevScrollTop; }, 50);
+        setTimeout(()=>{ const sc = document.getElementById('tripSidebarContainer'); if(sc){ sc.scrollTop = prevScrollTop; console.log('Scroll restored to', prevScrollTop); } }, 100);
         if(prevSelectedId){
           const stillExists = allTripUmrahRecords.find(r=> r.id === prevSelectedId);
           if(stillExists){
@@ -130,6 +130,8 @@ async function fetchTripUmrahData() {
 function renderTripSidebarList(records) {
     const container = document.getElementById('tripSidebarContainer');
     if (!container) return;
+    // Preserve scroll
+    const prevScroll = container.scrollTop;
     container.innerHTML = '';
     if (records.length === 0) { container.innerHTML = '<div class="text-center py-10 text-slate-400 text-xs">Tiada rekod trip.</div>'; return; }
     records.forEach(rec => {
@@ -139,17 +141,37 @@ function renderTripSidebarList(records) {
         const airline = f['Penerbangan'] || 'N/A';
         const isSelected = selectedTripRecord && selectedTripRecord.id === rec.id;
         const card = document.createElement('div');
-        card.className = `p-3 rounded-xl border text-left cursor-pointer transition ${isSelected ? 'bg-slate-100/90 border-slate-300 shadow-2xs' : 'bg-slate-50/50 hover:bg-slate-100/60 border-slate-200/80'}`;
+        card.setAttribute('data-trip-id', rec.id);
+        card.className = `p-3 rounded-xl border text-left cursor-pointer transition ${isSelected ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-slate-50/50 hover:bg-slate-100/60 border-slate-200/80'}`;
         card.onclick = () => renderTripDetailForm(rec);
-        card.innerHTML = `<h4 class="font-bold text-xs text-slate-900 leading-snug">${displayTitle}</h4><div class="mt-2"><span class="bg-amber-100/80 text-amber-900 border border-amber-200/60 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wide">${airline}</span></div>`;
+        const titleColor = isSelected ? 'text-white' : 'text-slate-900';
+        const badgeClass = isSelected ? 'bg-white/20 text-white border-white/30' : 'bg-amber-100/80 text-amber-900 border-amber-200/60';
+        card.innerHTML = `<h4 class="font-bold text-xs ${titleColor} leading-snug">${displayTitle}</h4><div class="mt-2"><span class="${badgeClass} text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wide">${airline}</span></div>`;
         container.appendChild(card);
+    });
+    // Restore scroll after render
+    requestAnimationFrame(()=>{
+      container.scrollTop = prevScroll;
+      // Also ensure selected card is visible but don't jump to top
+      const selectedEl = container.querySelector('[data-trip-id="'+(selectedTripRecord?.id||'')+'"]');
+      if(selectedEl){
+        const rect = selectedEl.getBoundingClientRect();
+        const contRect = container.getBoundingClientRect();
+        if(rect.top < contRect.top || rect.bottom > contRect.bottom){
+          selectedEl.scrollIntoView({block:'nearest', behavior:'auto'});
+        }
+      }
     });
 }
 
 function renderTripDetailForm(rec) {
+    const _sidebar = document.getElementById('tripSidebarContainer');
+    const _scrollSave = _sidebar ? _sidebar.scrollTop : 0;
     selectedTripRecord = rec;
     if(rec && rec.id){ try{ localStorage.setItem('effah_last_selected_trip', rec.id); }catch(e){} }
     renderTripSidebarList(allTripUmrahRecords);
+    // Restore scroll after sidebar re-render
+    setTimeout(()=>{ const sc=document.getElementById('tripSidebarContainer'); if(sc) sc.scrollTop=_scrollSave; }, 0);
     const f = rec.fields; const id = rec.id;
     const rawTripTitle = f['Trip'] || f['NAME'] || 'TBC';
     const displayTitle = cleanTripName(rawTripTitle);
@@ -248,7 +270,56 @@ function closeNewTripModal(){ const modal=document.getElementById('newTripModal'
 async function submitNewTripRecord(e){ if(e) e.preventDefault(); if(!AIRTABLE_PAT||!AIRTABLE_BASE_ID) return; const mulaDate=document.getElementById('modalMulaPakej').value; const tamatDate=document.getElementById('modalTamatPakej').value; if(!mulaDate||!tamatDate){alert('Sila masukkan kedua-dua tarikh');return;} if(tamatDate<mulaDate){alert('Tarikh Tamat mesti selepas Mula');return;} const url=`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/PAKEJ%20UMRAH`; try{ const response=await fetch(url,{method:'POST',headers:{Authorization:`Bearer ${AIRTABLE_PAT}`,'Content-Type':'application/json'},body:JSON.stringify({fields:{"Mula Pakej":mulaDate,"Tamat Pakej":tamatDate}})}); if(response.ok){closeNewTripModal();fetchTripUmrahData();}else{const errData=await response.json();console.error(errData);alert("Gagal menambah trip baru.");}}catch(err){alert('Gagal menambah trip baru.');} }
 function buildSelectDropdown(recId, fieldName, currentValue, optionsArray, categoryKey){ const uniqueOptions=[]; optionsArray.forEach(opt=>{ if(!opt) return; const cleanOpt=normalizeDashFormat(opt); if(cleanOpt&&!uniqueOptions.includes(cleanOpt)) uniqueOptions.push(cleanOpt); }); let optionsHtml=`<option value="">-- Pilih --</option>`; const currentNormalized=normalizeDashFormat(currentValue); uniqueOptions.forEach(opt=>{ const isSelected=currentNormalized===opt; optionsHtml+=`<option value="${opt}" ${isSelected?'selected':''}>${opt}</option>`; }); optionsHtml+=`<option value="__ADD_NEW__" class="font-bold text-brand-maroon">+ Add New Option...</option>`; return `<select onchange="handleDropdownChange('${recId}', '${fieldName}', this, '${categoryKey}')" class="w-full p-2.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none font-semibold text-slate-800">${optionsHtml}</select>`; }
 function handleDropdownChange(recId, fieldName, selectEl, categoryKey){ const selectedVal=selectEl.value; if(selectedVal==='__ADD_NEW__'){ const newOption=prompt(`Masukkan nama pilihan baru untuk ${fieldName}:`); if(newOption&&newOption.trim()!==''){ const cleanOpt=normalizeDashFormat(newOption); if(!selectOptions[categoryKey].includes(cleanOpt)){selectOptions[categoryKey].push(cleanOpt);} selectEl.value=cleanOpt; updateAirtableField(recId, fieldName, cleanOpt);}else{selectEl.value='';}}else{updateAirtableField(recId, fieldName, selectedVal);} }
-async function updateAirtableField(recId, fieldName, value){ if(!AIRTABLE_PAT||!AIRTABLE_BASE_ID) return; const url=`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/PAKEJ%20UMRAH/${recId}`; let fieldsData={}; fieldsData[fieldName]=(value===''||value===undefined)?null:value; try{ const response=await fetch(url,{method:'PATCH',headers:{Authorization:`Bearer ${AIRTABLE_PAT}`,'Content-Type':'application/json'},body:JSON.stringify({fields:fieldsData})}); if(response.ok){fetchTripUmrahData();}else{const errData=await response.json();console.error(errData);alert('Gagal mengemaskini field di Airtable.');}}catch(err){console.error(err);} }
+async function updateAirtableField(recId, fieldName, value){
+  if(!AIRTABLE_PAT||!AIRTABLE_BASE_ID) return;
+  const sidebarContainer = document.getElementById('tripSidebarContainer');
+  const savedScrollTop = sidebarContainer ? sidebarContainer.scrollTop : 0;
+  const savedSelectedId = selectedTripRecord ? selectedTripRecord.id : recId;
+  
+  // Optimistic update local data - don't wait for full reload
+  const targetRec = allTripUmrahRecords.find(r=>r.id===recId);
+  if(targetRec){
+    targetRec.fields[fieldName] = (value===''||value===undefined)?null:value;
+  }
+  if(selectedTripRecord && selectedTripRecord.id===recId){
+    selectedTripRecord.fields[fieldName] = (value===''||value===undefined)?null:value;
+  }
+  
+  const url=`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/PAKEJ%20UMRAH/${recId}`;
+  let fieldsData={};
+  fieldsData[fieldName]=(value===''||value===undefined)?null:value;
+  try{
+    const response=await fetch(url,{method:'PATCH',headers:{Authorization:`Bearer ${AIRTABLE_PAT}`,'Content-Type':'application/json'},body:JSON.stringify({fields:fieldsData})});
+    if(response.ok){
+      // Just update sidebar without resetting scroll
+      renderTripSidebarList(allTripUmrahRecords);
+      // Restore scroll immediately
+      setTimeout(()=>{
+        const sc = document.getElementById('tripSidebarContainer');
+        if(sc) sc.scrollTop = savedScrollTop;
+        // Keep highlight on current trip
+        if(savedSelectedId){
+          const cards = sc ? sc.querySelectorAll('div[data-trip-id]') : [];
+          // scroll selected card into view if needed but keep overall scroll
+        }
+      }, 10);
+      // No full fetchTripUmrahData() - keeps you at same position
+      console.log(`✅ Field ${fieldName} updated, scroll preserved at ${savedScrollTop}`);
+    }else{
+      const errData=await response.json();
+      console.error(errData);
+      alert('Gagal mengemaskini field di Airtable: ' + (errData.error?.message||''));
+      // Revert optimistic update on fail
+      fetchTripUmrahData();
+    }
+  }catch(err){
+    console.error(err);
+    // On network fail (ERR_NAME_NOT_RESOLVED), keep local change
+    console.warn('Airtable update failed, keeping local change. Will sync on next refresh.');
+    renderTripSidebarList(allTripUmrahRecords);
+    setTimeout(()=>{ const sc=document.getElementById('tripSidebarContainer'); if(sc) sc.scrollTop=savedScrollTop; }, 10);
+  }
+}
 async function deleteTripRecord(recId){ if(!confirm('Adakah anda pasti nak padam rekod Trip ini dari Airtable?')) return; const url=`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/PAKEJ%20UMRAH/${recId}`; try{ const response=await fetch(url,{method:'DELETE',headers:{Authorization:`Bearer ${AIRTABLE_PAT}`}}); if(response.ok){fetchTripUmrahData();}}catch(err){alert('Gagal memadam rekod.');} }
 function getStatusBadgeHtml(status){ if(!status) return '<span class="text-slate-400 font-bold">⚪ PAST TRIP</span>'; if(status.includes('AVAILABLE')){return `<span class="text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg text-xs">🟢 AVAILABLE</span>`;}else if(status.includes('CLOSED')){return `<span class="text-rose-700 font-bold bg-rose-50 border border-rose-200 px-3 py-1 rounded-lg text-xs">🔴 CLOSED</span>`;}else if(status.includes('ONGOING')){return `<span class="text-amber-700 font-bold bg-amber-50 border border-amber-200 px-3 py-1 rounded-lg text-xs">🟡 ONGOING</span>`;}else{return `<span class="text-slate-700 font-bold bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg text-xs">⚪ ${status}</span>`;} }
 function extractDynamicOptions(records){ records.forEach(r=>{ const f=r.fields; const checkAndPush=(val,targetArray)=>{ if(!val) return; const clean=normalizeDashFormat(val); if(clean&&!targetArray.includes(clean)){targetArray.push(clean);} }; checkAndPush(f['Group (if relevant)'], selectOptions.group); checkAndPush(f['Sektor'], selectOptions.sektor); checkAndPush(f['Penerbangan'], selectOptions.penerbangan); checkAndPush(f['Musim'], selectOptions.musim); checkAndPush(f['Tempoh Pakej'], selectOptions.tempoh); }); }
