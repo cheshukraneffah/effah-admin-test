@@ -133,7 +133,7 @@ function renderJemaahUmrahHTML() {
 
                 <div class="relative mb-3">
                     <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
-                    <input type="text" id="searchTripViewInput" onkeyup="filterTripViewSidebar()" placeholder="Find a view..." 
+                    <input type="text" id="searchTripViewInput" onkeyup="filterTripViewSidebar()" placeholder="Find a trip..." 
                         class="w-full text-xs pl-8 pr-3 py-1.5 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400">
                 </div>
 
