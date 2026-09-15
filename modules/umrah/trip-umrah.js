@@ -16,9 +16,6 @@ let selectOptions = {
     tempoh: ['11H 9M', '12H 10M', '9H 7M', '13H 10M', '17H 15M', '10H 7M']
 };
 
-console.log('🟢 Trip Umrah V17 FINAL LOADED - Hijri tabs fixed - Hijri 1448H/1449H/1450H -', new Date().toISOString());
-console.log('✅ Hijri Season field should be at line ~284');
-
 document.addEventListener('DOMContentLoaded', () => {
     renderTripUmrahHTML();
 });
