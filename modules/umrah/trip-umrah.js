@@ -1,4 +1,4 @@
-// V35 FINAL - fix image_df5dda.png Cannot read properties undefined reading M_ID intermittent, add global suppression + defensive checks filter invalid records, prevent console flooding - formal professional alert box ayat tanpa contoh image_3139c2.png, fix dropdown disabled + spinner Menambah skeleton during fetch - add new option loading skeleton spinning in dropdown image_bb9aa2.png, progress bar percent for initial load, fix flicker kejap ada kejap takde - fix image_bb9aa2.png trip switch back to old selected during fetch + image_cbb19c.png BATIK AIR delay 5-10 sec in detail, merge not overwrite for propagation delay, loading flag - fix from Airtable Omni AI image_6a56b9.png: typecast:true for direct PATCH image_64cd05.png, metadata with existing ids + new name only image_6be327.png image_740339.png image_3e9405.png, recommended approach image_b5cba5.png - user says already enabled but still 422 INVALID_MULTIPLE_CHOICE, so use manual add workaround + auto-load from Airtable, filters dynamic image_4fafaf.png - filters NOT hardcoded (image_4fafaf.png) merge with Airtable choices, fix AIR ARABIA error image_5ecfc0.png image_cd48ad.png by requiring Allow new options - ALL SELECTIONS FROM AIRTABLE, no hardcoded, AIRASIA etc auto appear - auto fetch field choices from Airtable so manual AIRASIA appears, text only add new option with proper error for Allow new options - add new option TEXT ONLY (no color/id) as requested, direct PATCH then metadata fallback - baki logic image_55ef73.png green >5 red <=5, closed no baki, remove +Add New Option to fix 422 image_c4c6ad.png, strict hijri fix TBC - strict hijri Season only (no auto calc) fix TBC image_0e0e43.png, fix 422 by sending only name image_b8057a.png - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
+// V36 FINAL - fix video flicker: renderTripSidebarList called 3 times causing list disappear, now only update selected state in renderTripDetailForm, not full re-render, progress bar smooth - fix image_df5dda.png Cannot read properties undefined reading M_ID intermittent, add global suppression + defensive checks filter invalid records, prevent console flooding - formal professional alert box ayat tanpa contoh image_3139c2.png, fix dropdown disabled + spinner Menambah skeleton during fetch - add new option loading skeleton spinning in dropdown image_bb9aa2.png, progress bar percent for initial load, fix flicker kejap ada kejap takde - fix image_bb9aa2.png trip switch back to old selected during fetch + image_cbb19c.png BATIK AIR delay 5-10 sec in detail, merge not overwrite for propagation delay, loading flag - fix from Airtable Omni AI image_6a56b9.png: typecast:true for direct PATCH image_64cd05.png, metadata with existing ids + new name only image_6be327.png image_740339.png image_3e9405.png, recommended approach image_b5cba5.png - user says already enabled but still 422 INVALID_MULTIPLE_CHOICE, so use manual add workaround + auto-load from Airtable, filters dynamic image_4fafaf.png - filters NOT hardcoded (image_4fafaf.png) merge with Airtable choices, fix AIR ARABIA error image_5ecfc0.png image_cd48ad.png by requiring Allow new options - ALL SELECTIONS FROM AIRTABLE, no hardcoded, AIRASIA etc auto appear - auto fetch field choices from Airtable so manual AIRASIA appears, text only add new option with proper error for Allow new options - add new option TEXT ONLY (no color/id) as requested, direct PATCH then metadata fallback - baki logic image_55ef73.png green >5 red <=5, closed no baki, remove +Add New Option to fix 422 image_c4c6ad.png, strict hijri fix TBC - strict hijri Season only (no auto calc) fix TBC image_0e0e43.png, fix 422 by sending only name image_b8057a.png - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
 // Check this comment exists on live site to confirm deployment
 // Variable Global Simpan Data & Options
 let allTripUmrahRecords = [];
@@ -98,7 +98,7 @@ function showDropdownLoadingSkeleton(selectEl, isLoading){
   }
 }
 
-console.log('🟢 Trip Umrah V35 FINAL LOADED - fix M_ID intermittent error - formal alerts + fixed dropdown skeleton - loading skeleton + progress bar + smooth - fix trip switch race + BATIK AIR delay - fix with typecast:true + metadata with ids - workaround for Airtable block even when enabled - filters dynamic from Airtable + fix add new option allow new options - all selections fetch from Airtable no hardcoded - auto load field choices AIRASIA + text only fix - text only add new option - baki all green>5 red<=5 + remove add new option 422 fix - strict hijri only (fix TBC blank) + fix 422 metadata API - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
+console.log('🟢 Trip Umrah V36 FINAL LOADED - fix video flicker kejap ada kejap takde - fix M_ID intermittent error - formal alerts + fixed dropdown skeleton - loading skeleton + progress bar + smooth - fix trip switch race + BATIK AIR delay - fix with typecast:true + metadata with ids - workaround for Airtable block even when enabled - filters dynamic from Airtable + fix add new option allow new options - all selections fetch from Airtable no hardcoded - auto load field choices AIRASIA + text only fix - text only add new option - baki all green>5 red<=5 + remove add new option 422 fix - strict hijri only (fix TBC blank) + fix 422 metadata API - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
 console.log('✅ Hijri Season field should be at line ~284');
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -472,19 +472,24 @@ async function fetchTripUmrahData() {
         });
         const statUmrah = document.getElementById('statUmrahCount');
         if (statUmrah) statUmrah.textContent = validTrips.length;
+        // V36: Update hijri tabs BEFORE rendering list to avoid flicker in video
+        try{ updateHijriFilterTabs(); }catch(e){}
         renderTripSidebarList(allTripUmrahRecords);
         // sync to rooming dropdown if exists
         if(typeof populateRoomingTripDropdown === 'function') populateRoomingTripDropdown();
         if(typeof window.populateRoomingTripDropdown === 'function') window.populateRoomingTripDropdown();
         window.allTripRecords = allTripUmrahRecords; // alias for rooming
-        // V32: Restore scroll after render
-        setTimeout(()=>{ const sc = document.getElementById('tripSidebarContainer'); if(sc){ sc.scrollTop = prevScrollTop; console.log('Scroll restored to', prevScrollTop); } }, 100);
+        // V32: Restore scroll after render - use rAF to avoid flicker
+        requestAnimationFrame(()=>{ 
+          const sc = document.getElementById('tripSidebarContainer'); 
+          if(sc){ sc.scrollTop = prevScrollTop; } 
+        });
         // V32 FIX for image_bb9aa2.png - don't restore old trip if user already selected different one during fetch
         const currentSelectedIdAfterFetch = selectedTripRecord ? selectedTripRecord.id : null;
         const userSwitchedDuringFetch = _fetchStartSelectedId && currentSelectedIdAfterFetch && _fetchStartSelectedId !== currentSelectedIdAfterFetch;
-        console.log('V32 check restore - _fetchStartSelectedId:', _fetchStartSelectedId, 'currentAfterFetch:', currentSelectedIdAfterFetch, 'prevSelectedId:', prevSelectedId, 'userSwitched:', userSwitchedDuringFetch);
+        console.log('V36 check restore - _fetchStartSelectedId:', _fetchStartSelectedId, 'currentAfterFetch:', currentSelectedIdAfterFetch, 'prevSelectedId:', prevSelectedId, 'userSwitched:', userSwitchedDuringFetch);
         if(userSwitchedDuringFetch){
-          console.log('V32: User switched trip during fetch, skip auto-restore old trip - fix image_bb9aa2.png');
+          console.log('V36: User switched trip during fetch, skip auto-restore old trip - fix video flicker');
         } else if(prevSelectedId){
           const stillExists = allTripUmrahRecords.find(r=> r.id === prevSelectedId);
           if(stillExists){
@@ -492,21 +497,32 @@ async function fetchTripUmrahData() {
             if(typeof fetchJemaahUmrahData === 'function'){
               const _fetchId = stillExists.id; 
               fetchJemaahUmrahData(true).then(()=>{ 
-                // V32 race guard: check if user switched after this fetch started
+                // V36 race guard: check if user switched after this fetch started - don't re-render sidebar
                 if(selectedTripRecord && selectedTripRecord.id !== _fetchId){ 
-                  console.log('V32 Race guard: user switched to', selectedTripRecord.id, 'skip re-render', _fetchId); 
+                  console.log('V36 Race guard: user switched to', selectedTripRecord.id, 'skip re-render', _fetchId); 
                   return; 
                 }  
                 const curId = selectedTripRecord ? selectedTripRecord.id : null; 
                 if(curId && curId !== _fetchId){ 
-                  console.log('V32 Race guard 2: user switched to', curId, 'skip', _fetchId); 
+                  console.log('V36 Race guard 2: user switched to', curId, 'skip', _fetchId); 
                   return; 
                 } 
+                // V36: Only update jemaah table part, not whole detail form to avoid sidebar flicker
+                // Find current detail workspace and only update jemaah section if needed
+                const upd = allTripUmrahRecords.find(r=>r.id===_fetchId)||stillExists; 
+                // Instead of full re-render, just ensure selected state is still correct
+                // The jemaah data is already updated via global allJemaahUmrahRecords, so we can skip full re-render
+                // If we must re-render, do it without touching sidebar
+                if(window._lastTripClickTime && Date.now() - window._lastTripClickTime < 1000){
+                  console.log('V36 skip re-render detail to avoid flicker - user recently clicked');
+                  return;
+                }
+                // Only re-render if still same trip and no recent click
                 const sc=document.getElementById('tripSidebarContainer'); 
                 const savedScroll=sc?sc.scrollTop:0; 
-                const upd = allTripUmrahRecords.find(r=>r.id===_fetchId)||stillExists; 
+                // V36: Render detail but preserve sidebar
                 renderTripDetailForm(upd); 
-                setTimeout(()=>{ const s2=document.getElementById('tripSidebarContainer'); if(s2) s2.scrollTop=savedScroll; },0); 
+                requestAnimationFrame(()=>{ const s2=document.getElementById('tripSidebarContainer'); if(s2) s2.scrollTop=savedScroll; });
               });
             }
           } else if (allTripUmrahRecords.length > 0 && !currentSelectedIdAfterFetch) {
@@ -666,9 +682,10 @@ function renderTripSidebarList(records) {
       });
     });
     
+    // V36: Don't call updateHijriFilterTabs inside rAF which triggers extra render and flicker
+    // Set scroll and selected scroll separately, no extra filter tab update
+    container.scrollTop = prevScroll;
     requestAnimationFrame(()=>{
-      try{ updateHijriFilterTabs(); }catch(e){}
-      container.scrollTop = prevScroll;
       const selectedEl = container.querySelector('[data-trip-id="'+(selectedTripRecord?.id||'')+'"]');
       if(selectedEl){
         const rect = selectedEl.getBoundingClientRect();
@@ -689,17 +706,27 @@ function renderTripDetailForm(rec) {
     const _scrollSave = _sidebar ? _sidebar.scrollTop : 0;
     selectedTripRecord = rec;
     if(rec && rec.id){ try{ localStorage.setItem('effah_last_selected_trip', rec.id); }catch(e){} }
-    // V18 FIX: Don't reset filter when clicking a trip - preserve current filtered list
-    // Previously: renderTripSidebarList(allTripUmrahRecords) -> caused bug where clicking 1449H trip shows all 31 trips
-    // Now: update only selected state, or re-apply current filters
-    const hasActiveFilter = tripFilters.hijri!=='All' || tripFilters.month!=='All' || tripFilters.airline!=='All' || tripFilters.tempoh!=='All' || tripFilters.musim!=='All' || (tripFilters.search&&tripFilters.search!=='');
-    if(hasActiveFilter){
-        // Re-apply filter but keep scroll
-        filterTripSidebar();
-        setTimeout(()=>{ const sc=document.getElementById('tripSidebarContainer'); if(sc) sc.scrollTop=_scrollSave; }, 10);
-    } else {
-        renderTripSidebarList(allTripUmrahRecords);
-        setTimeout(()=>{ const sc=document.getElementById('tripSidebarContainer'); if(sc) sc.scrollTop=_scrollSave; }, 10);
+    // V36 FIX for video flicker - DON'T re-render entire sidebar list when selecting trip
+    // Old code called renderTripSidebarList/filterTripSidebar every time -> causes kejap ada kejap takde in video
+    // Now only update selected state via DOM, no full re-render
+    const sidebar = document.getElementById('tripSidebarContainer');
+    if(sidebar){
+      // Remove selected class from all cards
+      sidebar.querySelectorAll('[data-trip-id]').forEach(card=>{
+        const isThisSelected = card.getAttribute('data-trip-id') === rec.id;
+        if(isThisSelected){
+          card.className = 'p-3 rounded-xl border text-left cursor-pointer transition bg-slate-900 text-white border-slate-900 shadow-md mb-2';
+          // Update inner colors for selected
+          const titleEl = card.querySelector('h4');
+          if(titleEl){ titleEl.className = 'font-bold text-[13px] text-white leading-snug flex-1'; }
+        } else {
+          card.className = 'p-3 rounded-xl border text-left cursor-pointer transition bg-white hover:bg-slate-50 border-slate-200/80 shadow-sm mb-2';
+          const titleEl = card.querySelector('h4');
+          if(titleEl){ titleEl.className = 'font-bold text-[13px] text-slate-800 leading-snug flex-1'; }
+        }
+      });
+      // Preserve scroll
+      setTimeout(()=>{ if(sidebar) sidebar.scrollTop = _scrollSave; }, 10);
     }
     // V35 FIX for image_df5dda.png - defensive check for rec and rec.fields to prevent M_ID error
     if(!rec || !rec.fields || typeof rec.fields !== 'object'){
