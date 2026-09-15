@@ -260,7 +260,7 @@ function renderTripDetailForm(rec) {
                 <div><label class="block font-bold text-slate-600 mb-1">Total Jemaah</label><input type="text" value="${f['Total Jemaah'] || 0}" disabled class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 cursor-not-allowed"></div>
                 <div><label class="block font-bold text-slate-600 mb-1">FIT Tickets</label><input type="text" value="${f['FIT Tickets'] || 0}" disabled class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 cursor-not-allowed"></div>
                 <div><label class="block font-bold text-slate-600 mb-1">Last Payment</label><input type="text" value="${f['Last Payment'] || '-'}" disabled class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 cursor-not-allowed"></div>
-                <div><label class="block font-bold text-slate-600 mb-1">Hijri Season (1448H/1449H)</label>${buildSelectDropdown(id, 'Hijri Season', getHijriFieldValue(rec), selectOptions.hijri, 'hijri')}</div><div class="md:col-span-2"><label class="block font-bold text-slate-600 mb-1">Sektor</label>${buildSelectDropdown(id, 'Sektor', f['Sektor'], selectOptions.sektor, 'sektor')}</div>
+                <div><label class="block font-bold text-slate-600 mb-1">Hijri Season</label>${buildSelectDropdown(id, 'Hijri Season', getHijriFieldValue(rec), selectOptions.hijri, 'hijri')}</div><div class="md:col-span-2"><label class="block font-bold text-slate-600 mb-1">Sektor</label>${buildSelectDropdown(id, 'Sektor', f['Sektor'], selectOptions.sektor, 'sektor')}</div>
             </div>
         </div>
         <div class="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-6 md:p-8">
