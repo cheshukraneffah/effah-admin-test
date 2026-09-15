@@ -2284,7 +2284,7 @@ function toggleHideFieldsDropdown() {
     const drop = document.getElementById('hideFieldsDropdown');
     if (!drop) return;
     const isHidden = drop.classList.contains('hidden');
-    if(isHidden){
+    if (isHidden) {
       buildHideFieldsList();
       drop.classList.remove('hidden');
     } else {
@@ -2297,35 +2297,6 @@ function toggleColumnVisibility(colClass, isVisible) {
     localStorage.setItem('jemaahHiddenColumns', JSON.stringify(hiddenColumns));
     applyHiddenColumns();
     buildHideFieldsList();
-}
-
-function applyHiddenColumns() {
-
-function buildHideFieldsList() {
-    const listContainer = document.getElementById('fieldsToggleList');
-    if (!listContainer) return;
-    listContainer.innerHTML = '';
-
-    columnDefinitions.forEach(col => {
-        const isHidden = hiddenColumns[col.key] || false;
-        const item = document.createElement('label');
-        item.className = "flex items-center space-x-2 p-1 hover:bg-slate-50 rounded cursor-pointer select-none";
-        item.innerHTML = `
-            <input type="checkbox" ${!isHidden ? 'checked' : ''} onchange="toggleColumnVisibility('${col.key}', this.checked)" class="rounded text-brand-maroon focus:ring-brand-maroon w-3.5 h-3.5">
-            <span class="text-slate-700 font-medium">${col.label}</span>
-        `;
-        listContainer.appendChild(item);
-    });
-}
-
-function toggleHideFieldsDropdown() {
-    const drop = document.getElementById('hideFieldsDropdown');
-    if (drop) drop.classList.toggle('hidden');
-}
-
-function toggleColumnVisibility(colClass, isVisible) {
-    hiddenColumns[colClass] = !isVisible;
-    applyHiddenColumns();
 }
 
 function applyHiddenColumns() {
