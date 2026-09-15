@@ -387,7 +387,7 @@ function getStatusBadgeHtml(status){
 function getAirlineBadgeStyle(airline){
   const a = (airline||'').toUpperCase().trim();
   if(a.includes('EMIRATES')) return {bg:'bg-red-50', text:'text-red-700', border:'border-red-200', dot:'bg-[#D71921]', dotText:'●'};
-  if(a.includes('OMAN')) return {bg:'bg-[#FFF8E7]', text:'text-[#8B6F47]', border:'border-[#E8D5B5]', dot:'bg-[#C5A880]', dotText:'✔'};
+  if(a.includes('OMAN')) return {bg:'bg-[#FFF8E7]', text:'text-[#8B6F47]', border:'border-[#E8D5B5]', dot:'bg-[#C5A880]', dotText:'●'};
   if(a.includes('QATAR')) return {bg:'bg-[#FDF0F3]', text:'text-[#5C0D2F]', border:'border-[#E8C4CC]', dot:'bg-[#5C0D2F]', dotText:'●'};
   if(a.includes('SAUDIA') || a.includes('SAUDI')) return {bg:'bg-green-50', text:'text-green-800', border:'border-green-200', dot:'bg-[#006C35]', dotText:'●'};
   if(a.includes('TURKISH')) return {bg:'bg-red-50', text:'text-red-800', border:'border-red-200', dot:'bg-[#C70A0C]', dotText:'●'};
@@ -417,9 +417,9 @@ function getAirlineBadgeStyle(airline){
 function getAirlineBadgeHtml(airline, isSelected){
   const style = getAirlineBadgeStyle(airline);
   if(isSelected){
-    return `<span class="bg-white/15 text-white border border-white/20 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide flex items-center gap-1.5 w-fit"><span class="w-3.5 h-3.5 rounded-full ${style.dot} flex items-center justify-center text-[8px] text-white">${style.dotText==='✔'?'✔':''}</span>${airline}</span>`;
+    return `<span class="bg-white/15 text-white border border-white/20 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide flex items-center gap-1.5 w-fit"><span class="w-3.5 h-3.5 rounded-full ${style.dot} flex items-center justify-center text-[8px] text-white"></span>${airline}</span>`;
   }
-  return `<span class="${style.bg} ${style.text} ${style.border} border text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide flex items-center gap-1.5 w-fit"><span class="w-3.5 h-3.5 rounded-full ${style.dot} flex items-center justify-center text-[8px] text-white">${style.dotText==='✔'?'✔':''}</span>${airline}</span>`;
+  return `<span class="${style.bg} ${style.text} ${style.border} border text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide flex items-center gap-1.5 w-fit"><span class="w-3.5 h-3.5 rounded-full ${style.dot} flex items-center justify-center text-[8px] text-white"></span>${airline}</span>`;
 }
 
 
