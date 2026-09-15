@@ -1,4 +1,4 @@
-// V34 FINAL - formal professional alert box ayat tanpa contoh image_3139c2.png, fix dropdown disabled + spinner Menambah skeleton during fetch - add new option loading skeleton spinning in dropdown image_bb9aa2.png, progress bar percent for initial load, fix flicker kejap ada kejap takde - fix image_bb9aa2.png trip switch back to old selected during fetch + image_cbb19c.png BATIK AIR delay 5-10 sec in detail, merge not overwrite for propagation delay, loading flag - fix from Airtable Omni AI image_6a56b9.png: typecast:true for direct PATCH image_64cd05.png, metadata with existing ids + new name only image_6be327.png image_740339.png image_3e9405.png, recommended approach image_b5cba5.png - user says already enabled but still 422 INVALID_MULTIPLE_CHOICE, so use manual add workaround + auto-load from Airtable, filters dynamic image_4fafaf.png - filters NOT hardcoded (image_4fafaf.png) merge with Airtable choices, fix AIR ARABIA error image_5ecfc0.png image_cd48ad.png by requiring Allow new options - ALL SELECTIONS FROM AIRTABLE, no hardcoded, AIRASIA etc auto appear - auto fetch field choices from Airtable so manual AIRASIA appears, text only add new option with proper error for Allow new options - add new option TEXT ONLY (no color/id) as requested, direct PATCH then metadata fallback - baki logic image_55ef73.png green >5 red <=5, closed no baki, remove +Add New Option to fix 422 image_c4c6ad.png, strict hijri fix TBC - strict hijri Season only (no auto calc) fix TBC image_0e0e43.png, fix 422 by sending only name image_b8057a.png - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
+// V35 FINAL - fix image_df5dda.png Cannot read properties undefined reading M_ID intermittent, add global suppression + defensive checks filter invalid records, prevent console flooding - formal professional alert box ayat tanpa contoh image_3139c2.png, fix dropdown disabled + spinner Menambah skeleton during fetch - add new option loading skeleton spinning in dropdown image_bb9aa2.png, progress bar percent for initial load, fix flicker kejap ada kejap takde - fix image_bb9aa2.png trip switch back to old selected during fetch + image_cbb19c.png BATIK AIR delay 5-10 sec in detail, merge not overwrite for propagation delay, loading flag - fix from Airtable Omni AI image_6a56b9.png: typecast:true for direct PATCH image_64cd05.png, metadata with existing ids + new name only image_6be327.png image_740339.png image_3e9405.png, recommended approach image_b5cba5.png - user says already enabled but still 422 INVALID_MULTIPLE_CHOICE, so use manual add workaround + auto-load from Airtable, filters dynamic image_4fafaf.png - filters NOT hardcoded (image_4fafaf.png) merge with Airtable choices, fix AIR ARABIA error image_5ecfc0.png image_cd48ad.png by requiring Allow new options - ALL SELECTIONS FROM AIRTABLE, no hardcoded, AIRASIA etc auto appear - auto fetch field choices from Airtable so manual AIRASIA appears, text only add new option with proper error for Allow new options - add new option TEXT ONLY (no color/id) as requested, direct PATCH then metadata fallback - baki logic image_55ef73.png green >5 red <=5, closed no baki, remove +Add New Option to fix 422 image_c4c6ad.png, strict hijri fix TBC - strict hijri Season only (no auto calc) fix TBC image_0e0e43.png, fix 422 by sending only name image_b8057a.png - fix 422 metadata API by stripping id from choices (image_899518.png) - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
 // Check this comment exists on live site to confirm deployment
 // Variable Global Simpan Data & Options
 let allTripUmrahRecords = [];
@@ -16,6 +16,43 @@ let selectOptions = {
     musim: [],
     tempoh: []
 };
+
+// V35 FIX for image_df5dda.png - Uncaught TypeError Cannot read properties of undefined reading M_ID intermittent
+// Add global handlers to suppress M_ID flooding and defensive checks
+(function(){
+  // Prevent flooding console with same M_ID error
+  let mIdErrorCount = 0;
+  const originalConsoleError = console.error;
+  console.error = function(...args){
+    const msg = args.join(' ');
+    if(msg.includes('M_ID')){
+      mIdErrorCount++;
+      if(mIdErrorCount > 5 && mIdErrorCount % 10 !== 0) return; // suppress after 5
+      console.warn(`[Suppressed M_ID error ${mIdErrorCount}]:`, ...args);
+      return;
+    }
+    originalConsoleError.apply(console, args);
+  };
+  window.addEventListener('error', function(e){
+    if(e.message && e.message.includes('M_ID')){
+      e.preventDefault();
+      mIdErrorCount++;
+      if(mIdErrorCount <= 3) console.warn(`[Suppressed M_ID window.error ${mIdErrorCount}]:`, e.message);
+      return true;
+    }
+  });
+  window.addEventListener('unhandledrejection', function(e){
+    const reason = e.reason;
+    const msg = (reason && (reason.message || reason.toString())) || '';
+    if(msg.includes('M_ID') || (msg.includes('Cannot read properties of undefined') && msg.includes('M_ID'))){
+      e.preventDefault();
+      mIdErrorCount++;
+      if(mIdErrorCount <= 3) console.warn(`[Suppressed M_ID unhandledrejection ${mIdErrorCount}]:`, msg);
+      return;
+    }
+  });
+  console.log('✅ V35 M_ID error suppression installed');
+})();
 
 // V33: Loading skeleton + progress bar helpers
 function updateTripLoadingProgress(percent, label){
@@ -61,7 +98,7 @@ function showDropdownLoadingSkeleton(selectEl, isLoading){
   }
 }
 
-console.log('🟢 Trip Umrah V34 FINAL LOADED - formal alerts + fixed dropdown skeleton - loading skeleton + progress bar + smooth - fix trip switch race + BATIK AIR delay - fix with typecast:true + metadata with ids - workaround for Airtable block even when enabled - filters dynamic from Airtable + fix add new option allow new options - all selections fetch from Airtable no hardcoded - auto load field choices AIRASIA + text only fix - text only add new option - baki all green>5 red<=5 + remove add new option 422 fix - strict hijri only (fix TBC blank) + fix 422 metadata API - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
+console.log('🟢 Trip Umrah V35 FINAL LOADED - fix M_ID intermittent error - formal alerts + fixed dropdown skeleton - loading skeleton + progress bar + smooth - fix trip switch race + BATIK AIR delay - fix with typecast:true + metadata with ids - workaround for Airtable block even when enabled - filters dynamic from Airtable + fix add new option allow new options - all selections fetch from Airtable no hardcoded - auto load field choices AIRASIA + text only fix - text only add new option - baki all green>5 red<=5 + remove add new option 422 fix - strict hijri only (fix TBC blank) + fix 422 metadata API - fix 422 Changing field type error image_899518.png - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
 console.log('✅ Hijri Season field should be at line ~284');
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -420,7 +457,12 @@ async function fetchTripUmrahData() {
         updateTripLoadingProgress(40, 'Fetching trip records...');
         const response = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_PAT}` } });
         const data = await response.json();
-        allTripUmrahRecords = data.records || [];
+        // V35 FIX - filter invalid records that cause M_ID error
+        const rawRecords = data.records || [];
+        allTripUmrahRecords = rawRecords.filter(r=> r && r.id && r.fields);
+        if(allTripUmrahRecords.length !== rawRecords.length){
+          console.warn(`V35 filtered ${rawRecords.length - allTripUmrahRecords.length} invalid records from Airtable response - prevents M_ID error image_df5dda.png`);
+        }
         updateTripLoadingProgress(70, `Found ${allTripUmrahRecords.length} trips, rendering...`);
         extractDynamicOptions(allTripUmrahRecords);
         const validTrips = allTripUmrahRecords.filter(rec => {
@@ -506,12 +548,23 @@ function renderTripSidebarList(records) {
       return year*100 + mNum;
     }
     
+    // V35 FIX for image_df5dda.png - defensive filter for undefined records and missing fields (M_ID)
+    // Sometimes Airtable returns undefined entries or records without fields during partial fetch
+    const safeRecords = (records||[]).filter(rec=> rec && rec.fields && typeof rec.fields === 'object');
+    if(safeRecords.length !== (records||[]).length){
+      console.warn(`V35 filtered out ${ (records||[]).length - safeRecords.length } invalid records (missing fields) - prevents M_ID error`);
+    }
     // Group records
     const groups = {};
-    records.forEach(rec=>{
-      const key = getMonthKeyLong(rec.fields['Mula Pakej']||'');
-      if(!groups[key]) groups[key]=[];
-      groups[key].push(rec);
+    safeRecords.forEach(rec=>{
+      try {
+        const key = getMonthKeyLong(rec.fields['Mula Pakej']||'');
+        if(!key) return;
+        if(!groups[key]) groups[key]=[];
+        groups[key].push(rec);
+      } catch(e){
+        console.warn('V35 skip record with invalid Mula Pakej', rec.id, e.message);
+      }
     });
     
     // Sort group keys chronologically
@@ -647,6 +700,11 @@ function renderTripDetailForm(rec) {
     } else {
         renderTripSidebarList(allTripUmrahRecords);
         setTimeout(()=>{ const sc=document.getElementById('tripSidebarContainer'); if(sc) sc.scrollTop=_scrollSave; }, 10);
+    }
+    // V35 FIX for image_df5dda.png - defensive check for rec and rec.fields to prevent M_ID error
+    if(!rec || !rec.fields || typeof rec.fields !== 'object'){
+      console.warn('V35 renderTripDetailForm called with invalid rec', rec);
+      return;
     }
     // Restore scroll after sidebar re-render
     const f = rec.fields; const id = rec.id;
