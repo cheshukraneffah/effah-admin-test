@@ -1,4 +1,4 @@
-// V21 FINAL - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
+// V22 FINAL - re-enable +Add New Option with metadata API (fix insufficient permission), need PAT with schema.bases:write - Reset button preserves hijri tab (fix image_93c7e9.png), don't switch to SEMUA - jemaah table max-h 55vh sticky header, remove +AddNewOption that caused insufficient permission, use metadata API - grouped by bulan like reference, preserve filter on detail update - hide empty hijri tabs, fix click filter bug, sort Bulan/Tempoh/Musim - FIX hijri tabs above searchbar - 2026-05-13 - FIX: Hijri Season field added (1448H/1449H/1450H only), FILTER tabs above searchbar, FILTER not FILTER LANJUTAN
 // Check this comment exists on live site to confirm deployment
 // Variable Global Simpan Data & Options
 let allTripUmrahRecords = [];
@@ -16,7 +16,7 @@ let selectOptions = {
     tempoh: ['11H 9M', '12H 10M', '9H 7M', '13H 10M', '17H 15M', '10H 7M']
 };
 
-console.log('🟢 Trip Umrah V21 FINAL LOADED - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
+console.log('🟢 Trip Umrah V22 FINAL LOADED - re-enable Add New Option via metadata API - reset preserves hijri tab - fixed jemaah scroll + add option permission - grouped by bulan + preserve filter on update - hide empty hijri + filter fix + sorted - Hijri 1448H/1449H/1450H -', new Date().toISOString());
 console.log('✅ Hijri Season field should be at line ~284');
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -581,9 +581,8 @@ async function submitNewTripRecord(e){ if(e) e.preventDefault(); if(!AIRTABLE_PA
 function buildSelectDropdown(recId, fieldName, currentValue, optionsArray, categoryKey){ 
   const uniqueOptions=[]; 
   optionsArray.forEach(opt=>{ if(!opt) return; const cleanOpt=normalizeDashFormat(opt); if(cleanOpt&&!uniqueOptions.includes(cleanOpt)) uniqueOptions.push(cleanOpt); }); 
-  // Also include current value if not in options (for legacy data)
   const currentNormalized=normalizeDashFormat(currentValue);
-  if(currentNormalized && !uniqueOptions.includes(currentNormalized) && currentNormalized!=='-- PILIH --'){
+  if(currentNormalized && !uniqueOptions.includes(currentNormalized) && currentNormalized!=='-- PILIH --' && currentNormalized!==''){
     uniqueOptions.unshift(currentNormalized);
   }
   let optionsHtml=`<option value="">-- Pilih --</option>`; 
@@ -591,10 +590,11 @@ function buildSelectDropdown(recId, fieldName, currentValue, optionsArray, categ
     const isSelected=currentNormalized===opt; 
     optionsHtml+=`<option value="${opt}" ${isSelected?'selected':''}>${opt}</option>`; 
   }); 
-  // V20: Removed + Add New Option... because Airtable API requires schema.bases:write and metadata API
-  // New options must be added via Airtable UI or via addNewSelectOption() which uses metadata API
-  // We keep a small link below dropdown instead
-  return `<select onchange="handleDropdownChange('${recId}', '${fieldName}', this, '${categoryKey}')" class="w-full p-2.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none font-semibold text-slate-800">${optionsHtml}</select>`; 
+  // V22: Re-enabled + Add New Option with metadata API (fix insufficient permission error from image_910fa6.png)
+  optionsHtml+=`<option value="__ADD_NEW__" class="font-bold text-[#8B1E3F]">+ Add New Option...</option>`;
+  return `<div class="relative">
+    <select onchange="handleDropdownChange('${recId}', '${fieldName}', this, '${categoryKey}')" class="w-full p-2.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none font-semibold text-slate-800">${optionsHtml}</select>
+  </div>`; 
 }
 function handleDropdownChange(recId, fieldName, selectEl, categoryKey){ 
   const selectedVal=selectEl.value; 
