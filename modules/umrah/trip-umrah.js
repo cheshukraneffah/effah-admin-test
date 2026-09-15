@@ -1215,13 +1215,10 @@ function getAirlineBadgeStyle(airline){
   return {bg:'bg-slate-100', text:'text-slate-700', border:'border-slate-200', dot:'bg-slate-500', dotText:'●'};
 }
 function getAirlineBadgeHtml(airline, isSelected){
-  const style = getAirlineBadgeStyle(airline);
-  // V44 FIX: uniform pill, no airline color, ensure contrast - image_facc0f.png white font invisible fix
+  // V45 FIX for image_2c0961.png: takperlu ada dot tu - remove dot, uniform pill only text
   if(isSelected){
-    // Dark card selected - white text on translucent bg, dot neutral
-    return `<span class="bg-white/15 text-white border border-white/20 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide flex items-center gap-1.5 w-fit"><span class="w-3.5 h-3.5 rounded-full bg-white/60 flex items-center justify-center text-[8px] text-slate-900">●</span>${airline}</span>`;
+    return `<span class="bg-white/15 text-white border border-white/20 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide w-fit">${airline}</span>`;
   }
-  // Light card unselected - dark text on light bg, always visible
-  return `<span class="bg-slate-100 text-slate-700 border-slate-200 border text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide flex items-center gap-1.5 w-fit"><span class="w-3.5 h-3.5 rounded-full bg-slate-400 flex items-center justify-center text-[8px] text-white">●</span>${airline}</span>`;
+  return `<span class="bg-slate-100 text-slate-700 border-slate-200 border text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide w-fit">${airline}</span>`;
 }
 
