@@ -415,6 +415,9 @@ function filterTripSidebar(){
 }
 
 
+function sortJemaahArray(arr, field, dir){ const sorted=[...arr].sort((a,b)=>{ let av=(a.fields[field]||'').toString().toUpperCase(); let bv=(b.fields[field]||'').toString().toUpperCase(); if(field==='AGE'){ const an=parseFloat(av)||0; const bn=parseFloat(bv)||0; return dir==='asc'?an-bn:bn-an; } if(av<bv) return dir==='asc'?-1:1; if(av>bv) return dir==='asc'?1:-1; return 0; }); return sorted; }
+function sortTripJemaahTable(field){ if(tripJemaahSortField===field){ tripJemaahSortDir=tripJemaahSortDir==='asc'?'desc':'asc'; }else{ tripJemaahSortField=field; tripJemaahSortDir='asc'; } currentTripJemaahList=sortJemaahArray(currentTripJemaahList, field, tripJemaahSortDir); const tbody=document.getElementById('tripJemaahTableBody'); if(tbody){ tbody.innerHTML=currentTripJemaahList.map((j,idx)=>{ const jf=j.fields; return `<tr class="hover:bg-slate-50"><td class="p-3 text-center text-slate-400 font-bold text-xs">${idx+1}</td><td class="p-3 font-bold text-slate-900 uppercase text-xs">${jf['NAME']||'-'}</td><td class="p-3"><div class="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400"><i class="fa-solid fa-user"></i></div></td><td class="p-3 text-xs"><span class="text-slate-300">-</span></td><td class="p-3 font-mono font-bold text-slate-700 text-xs">${jf['PASSPORT NO.']||'-'}</td><td class="p-3 text-slate-600 text-xs">${jf['AGE']||'-'}</td><td class="p-3"><span class="text-[10px] font-bold px-2.5 py-0.5 rounded-md border uppercase">${jf['GENDER']||'-'}</span></td><td class="p-3"><span class="bg-sky-100/80 text-sky-900 border border-sky-200 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase">${jf['NATIONALITY']||'MALAYSIA'}</span></td></tr>`; }).join(''); } }
+
 function renderTripDetailForm(rec) {
     _tripDetailVersion++;
     const currentVersion = _tripDetailVersion;
