@@ -489,10 +489,12 @@ async function fetchTripUmrahData() {
         // V36: Update hijri tabs BEFORE rendering list to avoid flicker in video
         try{ updateHijriFilterTabs(); }catch(e){}
         renderTripSidebarList(allTripUmrahRecords);
+        // Publish trip data before rooming tries to populate its dropdown.
+        window.allTripUmrahRecords = allTripUmrahRecords;
+        window.allTripRecords = allTripUmrahRecords;
         // sync to rooming dropdown if exists
         if(typeof populateRoomingTripDropdown === 'function') populateRoomingTripDropdown();
         if(typeof window.populateRoomingTripDropdown === 'function') window.populateRoomingTripDropdown();
-        window.allTripRecords = allTripUmrahRecords; // alias for rooming
         // V32: Restore scroll after render - use rAF to avoid flicker
         requestAnimationFrame(()=>{ 
           const sc = document.getElementById('tripSidebarContainer'); 

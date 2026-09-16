@@ -50,6 +50,36 @@ function getTripHijriForRooming(tripRec){
   return fields['Hijri Season'] || fields['HIJRI SEASON'] || fields['HIJRI'] || fields['MUSIM HIJRI'] || '';
 }
 
+function renderRoomingHijriTabs(){
+  const container=document.getElementById('roomingHijriTabs');
+  if(!container) return;
+  const trips=window.allTripUmrahRecords||window.allTripRecords||(typeof allTripUmrahRecords!=='undefined'?allTripUmrahRecords:[]);
+  const seasons=[...new Set(trips.map(getTripHijriForRooming).filter(Boolean))].sort();
+  if(!selectedRoomingHijriFilter && seasons.length>0){
+    selectedRoomingHijriFilter=seasons[0];
+    window.selectedRoomingHijriFilter=selectedRoomingHijriFilter;
+    localStorage.setItem('effah_rooming_hijri_filter', selectedRoomingHijriFilter);
+  }
+  if(seasons.length===0){
+    container.innerHTML='<span class="text-[10px] text-slate-400">Tiada musim hijri</span>';
+    return;
+  }
+  container.innerHTML=seasons.map(season=>{
+    const active=season===selectedRoomingHijriFilter;
+    const safeSeason=season.replace(/'/g,"\\'");
+    return `<button type="button" onclick="setRoomingHijriFilter('${safeSeason}')" class="px-3 py-1.5 rounded-full text-[11px] font-bold border ${active?'bg-slate-900 text-white border-slate-900':'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}">${season}</button>`;
+  }).join('');
+}
+
+function setRoomingHijriFilter(season){
+  selectedRoomingHijriFilter=season||null;
+  window.selectedRoomingHijriFilter=selectedRoomingHijriFilter;
+  if(selectedRoomingHijriFilter) localStorage.setItem('effah_rooming_hijri_filter', selectedRoomingHijriFilter);
+  else localStorage.removeItem('effah_rooming_hijri_filter');
+  renderRoomingHijriTabs();
+  populateRoomingTripDropdown();
+}
+
 let _roomingMetaCache = null;
 let _roomingMetaFetching = false;
 let _roomingFieldTypes = {}; // Store field types: singleSelect, multipleSelects
@@ -1276,7 +1306,7 @@ function hideRoomingLoading(){
 
 function populateRoomingTripDropdown(){
   const sel=document.getElementById('roomingTripSelect'); if(!sel) return;
-  let trips=[...(window.allTripUmrahRecords||window.allTripRecords||window.allTrips||[])];
+  let trips=[...(window.allTripUmrahRecords||window.allTripRecords||window.allTrips||(typeof allTripUmrahRecords!=='undefined'?allTripUmrahRecords:[]))];
   // Filter by hijri if selected
   if(selectedRoomingHijriFilter){
     trips=trips.filter(t=> getTripHijriForRooming(t)===selectedRoomingHijriFilter);
