@@ -353,6 +353,26 @@ async function submitNewTripRecord(e){
 }
 
 
+function buildSelectDropdown(recId, fieldName, currentValue, optionsArray, categoryKey){ 
+  const uniqueOptions=[]; 
+  optionsArray.forEach(opt=>{ if(!opt) return; const cleanOpt=normalizeDashFormat(opt); if(cleanOpt&&!uniqueOptions.includes(cleanOpt)) uniqueOptions.push(cleanOpt); }); 
+  const currentNormalized=normalizeDashFormat(currentValue);
+  if(currentNormalized && !uniqueOptions.includes(currentNormalized) && currentNormalized!=='-- PILIH --' && currentNormalized!==''){
+    uniqueOptions.unshift(currentNormalized);
+  }
+  let optionsHtml=`<option value="">-- Pilih --</option>`; 
+  uniqueOptions.forEach(opt=>{ 
+    const isSelected=currentNormalized===opt; 
+    optionsHtml+=`<option value="${opt}" ${isSelected?'selected':''}>${opt}</option>`; 
+  }); 
+  // V33: All selections have + Add New Option with loading skeleton
+  optionsHtml+=`<option value="__ADD_NEW__" style="font-weight:bold;color:#8B1E3F">+ Add New Option...</option>`;
+  return `<div class="relative" data-field="${fieldName}" data-category="${categoryKey}">
+    <select id="select-${recId}-${fieldName.replace(/\s+/g,'-')}" onchange="handleDropdownChange('${recId}', '${fieldName}', this, '${categoryKey}')" class="w-full p-2.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none font-semibold text-slate-800 transition-all">${optionsHtml}</select>
+  </div>`; 
+}
+
+
 let tripFilters = { hijri: 'All', search: '', month: 'All', airline: 'All', tempoh: 'All', musim: 'All' };
 
 function updateHijriFilterTabs(){
@@ -1360,3 +1380,4 @@ function getAirlineBadgeHtml(airline, isSelected){
   }
   return `<span class="bg-slate-100 text-slate-700 border-slate-200 border text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide w-fit">${airline}</span>`;
 }
+
