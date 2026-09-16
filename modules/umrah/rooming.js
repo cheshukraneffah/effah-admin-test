@@ -1482,7 +1482,7 @@ function renderNamelist(){
   const belumEl=document.getElementById('belumAssignBadge'); if(belumEl) { belumEl.textContent=belumInLoc+' Belum ditetapkan di '+activeLocation; belumEl.style.display='none'; }
   const topBelum=document.getElementById('belumAssignTop'); if(topBelum) { topBelum.textContent=belumGlobal+' Belum Ditetapkan'; topBelum.style.display='none'; }
   const topAssign=document.getElementById('assignedTop'); if(topAssign) { topAssign.textContent=(total-belumGlobal)+' Assigned'; topAssign.style.display='none'; }
-  const topBelum DitetapkanBadge=document.getElementById('topBelum DitetapkanBadge'); if(topBelum DitetapkanBadge) topBelum DitetapkanBadge.style.display='none';
+  const topBelumDitetapkanBadge=document.getElementById('topBelumDitetapkanBadge'); if(topBelumDitetapkanBadge) topBelumDitetapkanBadge.style.display='none';
   const topAssignedBadge=document.getElementById('topAssignedBadge'); if(topAssignedBadge) topAssignedBadge.style.display='none';
   if(total===0){ cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400">Tiada jemaah untuk trip ini</div>'; return; }
   cont.innerHTML=filtered.map((r,i)=>{
@@ -3123,7 +3123,7 @@ function createMissingRoomingStructure(){
           <div class="bg-white rounded-xl border">
             <div class="p-3 border-b flex justify-between items-center">
               <span class="text-[11px] font-bold">NAMELIST JEMAAH</span>
-              <span id="topBelum DitetapkanBadge" class="text-[9px] bg-amber-100 px-2 py-0.5 rounded-full">0</span>
+              <span id="topBelumDitetapkanBadge" class="text-[9px] bg-amber-100 px-2 py-0.5 rounded-full">0</span>
             </div>
             <div class="p-2"><input id="searchNamelist" placeholder="Cari jemaah..." class="w-full text-[11px] border rounded-full px-3 py-1.5 mb-2" oninput="renderNamelist()"></div>
             <div id="namelistContainer" class="max-h-[60vh] overflow-y-auto"><div class="p-6 text-center text-[11px] text-slate-400">Sedang memuatkan data jemaah...</div></div>
@@ -3715,7 +3715,7 @@ async function loadPdfLib(){
   });
 }
 
-async function fetchWithCuba Semula(url, retries=2){
+async function fetchWithRetry(url, retries=2){
   for(let i=0;i<=retries;i++){
     if(window._visaDownloadCancelled) throw new Error('Cancelled by user');
     try{
@@ -3874,7 +3874,7 @@ async function _downloadAllDocs(fieldName, label){
 
         try{
           if(btn) btn.innerHTML=`⏳ ${i+1}/${withVisa.length} ${nama.substring(0,12)}...`;
-          const buffer=await fetchWithCuba Semula(url);
+          const buffer=await fetchWithRetry(url);
           
           if(isPdf){
             try{
@@ -4147,7 +4147,7 @@ async function downloadHotelDocs(lokasi, hotelName, fieldName, label){
         const filename=att.filename||'';
         const isPdf = filename.toLowerCase().endsWith('.pdf') || (att.type && att.type.includes('pdf'));
         try{
-          const buffer=await fetchWithCuba Semula(url);
+          const buffer=await fetchWithRetry(url);
           if(isPdf){
             try{
               const srcPdf=await PDFDocument.load(buffer, {ignoreEncryption:true});
