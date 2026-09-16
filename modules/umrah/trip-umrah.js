@@ -172,9 +172,32 @@ function renderTripUmrahHTML() {
         </div>
         <div id="newTripModal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 hidden">
             <div class="bg-white rounded-3xl shadow-2xl p-6 md:p-8 max-w-md w-full border border-slate-100">
-                function handleMulaDateChange(){
-    const mulaInput=document.getElementById('modalMulaPakej');
-    const tamatInput=document.getElementById('modalTamatPakej');
+                <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
+                    <div class="flex items-center space-x-2.5">
+                        <div class="w-9 h-9 bg-rose-50 text-brand-maroon rounded-xl flex items-center justify-center font-bold text-sm">
+                            <i class="fa-solid fa-calendar-plus"></i>
+                        </div>
+                        <h3 class="font-extrabold text-slate-900 text-base">Tambah Trip Umrah Baru</h3>
+                    </div>
+                    <button onclick="closeNewTripModal()" class="text-slate-400 hover:text-slate-700 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+                <form onsubmit="submitNewTripRecord(event)" class="space-y-4 text-xs font-medium text-slate-700">
+                    <div><label class="block font-bold text-slate-800 mb-1.5">Tarikh Mula Pakej (Fly) *</label><input type="date" id="modalMulaPakej" onchange="handleMulaDateChange()" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none font-semibold text-slate-800"></div>
+                    <div><label class="block font-bold text-slate-800 mb-1.5">Tarikh Tamat Pakej (Balik) *</label><input type="date" id="modalTamatPakej" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none font-semibold text-slate-800"></div>
+                    <div class="flex items-center space-x-3 pt-3"><button type="button" onclick="closeNewTripModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition">Batal</button><button type="submit" class="flex-1 bg-slate-900 hover:bg-black text-white font-bold py-2.5 rounded-xl transition shadow-xs">Cipta Trip</button></div>
+                </form>
+            </div>
+        </div>
+    `;
+}
+
+
+
+
+
+function handleMulaDateChange(){
+    var mulaInput=document.getElementById('modalMulaPakej');
+    var tamatInput=document.getElementById('modalTamatPakej');
     if(mulaInput&&tamatInput&&mulaInput.value){
         tamatInput.min=mulaInput.value;
         if(tamatInput.value&&tamatInput.value<mulaInput.value){
@@ -185,125 +208,85 @@ function renderTripUmrahHTML() {
 }
 
 function openNewTripModal(){
-    const modal=document.getElementById('newTripModal');
+    var modal=document.getElementById('newTripModal');
     if(!modal){
-        // Create modal if not exists with full form
-        const modalDiv=document.createElement('div');
+        var modalDiv=document.createElement('div');
         modalDiv.id='newTripModal';
         modalDiv.className='fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4';
         document.body.appendChild(modalDiv);
+        modal=document.getElementById('newTripModal');
     }
-    const modalEl=document.getElementById('newTripModal');
+    var modalEl=document.getElementById('newTripModal');
 
-    const buildOptions = (arr, placeholder) => {
-        const opts = (arr||[]).filter(Boolean).sort();
-        let html = `<option value="">${placeholder}</option>`;
-        opts.forEach(o=>{
-            const safe = (o||'').toString().replace(/"/g,'&quot;');
-            html += `<option value="${safe}">${safe}</option>`;
-        });
+    var buildOptions = function(arr, placeholder) {
+        var opts = (arr||[]).filter(Boolean).sort();
+        var html = '<option value="">' + placeholder + '</option>';
+        for(var i=0;i<opts.length;i++){
+            var o=opts[i];
+            var safe = (o||'').toString().replace(/"/g,'&quot;');
+            html += '<option value="' + safe + '">' + safe + '</option>';
+        }
         return html;
     };
 
-    // Ensure selectOptions exists
     if(typeof selectOptions === 'undefined' || !selectOptions){
         window.selectOptions = {hijri:[], group:[], sektor:[], penerbangan:[], musim:[], tempoh:[]};
     }
 
-    modalEl.innerHTML = `
-        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl border border-slate-100 max-h-[90vh] overflow-hidden flex flex-col">
-            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <div class="flex items-center space-x-2.5">
-                    <div class="w-9 h-9 bg-rose-50 text-brand-maroon rounded-xl flex items-center justify-center font-bold text-sm">
-                        <i class="fa-solid fa-calendar-plus"></i>
-                    </div>
-                    <h3 class="font-extrabold text-slate-900 text-[13px] tracking-wide">TAMBAH PAKEJ / TRIP UMRAH</h3>
-                </div>
-                <button onclick="closeNewTripModal()" class="text-slate-400 hover:text-slate-700 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
-            </div>
-            <div class="overflow-y-auto px-6 py-5 flex-1">
-                <form id="newTripFormFull" onsubmit="submitNewTripRecord(event)" class="space-y-4 text-xs">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">Group (If relevant)</label>
-                            <select id="modalGroup" name="Group (if relevant)" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">
-                                ${buildOptions(selectOptions.group, '-- Pilih Group --')}
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">Sektor</label>
-                            <select id="modalSektor" name="Sektor" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">
-                                ${buildOptions(selectOptions.sektor, '-- Pilih Sektor --')}
-                            </select>
-                        </div>
-                    </div>
+    var groupOpts = buildOptions(selectOptions.group, '-- Pilih Group --');
+    var sektorOpts = buildOptions(selectOptions.sektor, '-- Pilih Sektor --');
+    var penerbanganOpts = buildOptions(selectOptions.penerbangan, '-- Pilih Penerbangan --');
+    var musimOpts = buildOptions(selectOptions.musim, '-- Pilih Musim --');
+    var hijriOpts = buildOptions(selectOptions.hijri, '-- Pilih Hijri Season --');
+    var tempohOpts = buildOptions(selectOptions.tempoh, '-- Pilih Tempoh --');
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">MULA PAKEJ *</label>
-                            <input type="date" id="modalMulaPakej" name="Mula Pakej" required onchange="handleMulaDateChange()" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">
-                        </div>
-                        <div>
-                            <label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">TAMAT PAKEJ *</label>
-                            <input type="date" id="modalTamatPakej" name="Tamat Pakej" required class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">
-                        </div>
-                    </div>
+    modalEl.innerHTML = '<div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl border border-slate-100 max-h-[90vh] overflow-hidden flex flex-col">' +
+        '<div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">' +
+            '<div class="flex items-center space-x-2.5">' +
+                '<div class="w-9 h-9 bg-rose-50 text-brand-maroon rounded-xl flex items-center justify-center font-bold text-sm"><i class="fa-solid fa-calendar-plus"></i></div>' +
+                '<h3 class="font-extrabold text-slate-900 text-[13px] tracking-wide">TAMBAH PAKEJ / TRIP UMRAH</h3>' +
+            '</div>' +
+            '<button onclick="closeNewTripModal()" class="text-slate-400 hover:text-slate-700 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>' +
+        '</div>' +
+        '<div class="overflow-y-auto px-6 py-5 flex-1">' +
+            '<form id="newTripFormFull" onsubmit="submitNewTripRecord(event)" class="space-y-4 text-xs">' +
+                '<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">' +
+                    '<div><label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">Group (If relevant)</label><select id="modalGroup" name="Group (if relevant)" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">' + groupOpts + '</select></div>' +
+                    '<div><label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">Sektor</label><select id="modalSektor" name="Sektor" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">' + sektorOpts + '</select></div>' +
+                '</div>' +
+                '<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">' +
+                    '<div><label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">MULA PAKEJ *</label><input type="date" id="modalMulaPakej" name="Mula Pakej" required onchange="handleMulaDateChange()" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]"></div>' +
+                    '<div><label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">TAMAT PAKEJ *</label><input type="date" id="modalTamatPakej" name="Tamat Pakej" required class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]"></div>' +
+                '</div>' +
+                '<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">' +
+                    '<div><label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">Penerbangan</label><select id="modalPenerbangan" name="Penerbangan" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">' + penerbanganOpts + '</select></div>' +
+                    '<div><label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">Musim</label><select id="modalMusim" name="Musim" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">' + musimOpts + '</select></div>' +
+                '</div>' +
+                '<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">' +
+                    '<div><label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">Hijri Season</label><select id="modalHijri" name="Hijri Season" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">' + hijriOpts + '</select></div>' +
+                    '<div><label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">Tempoh Pakej</label><select id="modalTempoh" name="Tempoh Pakej" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">' + tempohOpts + '</select></div>' +
+                '</div>' +
+                '<div><label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">Total Seat</label><input type="number" id="modalTotalSeat" name="Total Seat" min="0" placeholder="Contoh: 40" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]"></div>' +
+            '</form>' +
+        '</div>' +
+        '<div class="px-6 py-4 border-t border-slate-100 flex items-center justify-end space-x-3">' +
+            '<button type="button" onclick="closeNewTripModal()" class="px-5 py-2.5 rounded-xl text-[13px] font-bold text-slate-600 hover:bg-slate-100 transition">Tutup</button>' +
+            '<button type="button" onclick="document.getElementById(\'newTripFormFull\').requestSubmit()" class="bg-slate-900 hover:bg-black text-white px-6 py-2.5 rounded-xl text-[13px] font-bold shadow-xs transition">Simpan Trip</button>' +
+        '</div>' +
+    '</div>';
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">Penerbangan</label>
-                            <select id="modalPenerbangan" name="Penerbangan" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">
-                                ${buildOptions(selectOptions.penerbangan, '-- Pilih Penerbangan --')}
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">Musim</label>
-                            <select id="modalMusim" name="Musim" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">
-                                ${buildOptions(selectOptions.musim, '-- Pilih Musim --')}
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">Hijri Season</label>
-                            <select id="modalHijri" name="Hijri Season" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">
-                                ${buildOptions(selectOptions.hijri, '-- Pilih Hijri Season --')}
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">Tempoh Pakej</label>
-                            <select id="modalTempoh" name="Tempoh Pakej" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">
-                                ${buildOptions(selectOptions.tempoh, '-- Pilih Tempoh --')}
-                            </select>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="block text-[11px] font-extrabold text-slate-700 mb-1.5 tracking-wider">Total Seat</label>
-                        <input type="number" id="modalTotalSeat" name="Total Seat" min="0" placeholder="Contoh: 40" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">
-                    </div>
-                </form>
-            </div>
-            <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-end space-x-3">
-                <button type="button" onclick="closeNewTripModal()" class="px-5 py-2.5 rounded-xl text-[13px] font-bold text-slate-600 hover:bg-slate-100 transition">Tutup</button>
-                <button type="button" onclick="document.getElementById('newTripFormFull').requestSubmit()" class="bg-slate-900 hover:bg-black text-white px-6 py-2.5 rounded-xl text-[13px] font-bold shadow-xs transition">Simpan Trip</button>
-            </div>
-        </div>
-    `;
     modalEl.classList.remove('hidden');
 
-    // Set min date validation
-    setTimeout(()=>{
-        const mulaEl=document.getElementById('modalMulaPakej');
-        const tamatEl=document.getElementById('modalTamatPakej');
+    setTimeout(function(){
+        var mulaEl=document.getElementById('modalMulaPakej');
+        var tamatEl=document.getElementById('modalTamatPakej');
         if(mulaEl){ mulaEl.value=''; mulaEl.removeAttribute('min'); }
         if(tamatEl){ tamatEl.value=''; tamatEl.removeAttribute('min'); }
     }, 50);
 }
 
 function closeNewTripModal(){
-    const modal=document.getElementById('newTripModal');
+    var modal=document.getElementById('newTripModal');
     if(modal) modal.classList.add('hidden');
 }
 
@@ -311,15 +294,15 @@ async function submitNewTripRecord(e){
     if(e) e.preventDefault();
     if(!AIRTABLE_PAT||!AIRTABLE_BASE_ID) return;
 
-    const mulaDate=document.getElementById('modalMulaPakej')?.value;
-    const tamatDate=document.getElementById('modalTamatPakej')?.value;
-    const groupVal=document.getElementById('modalGroup')?.value;
-    const sektorVal=document.getElementById('modalSektor')?.value;
-    const penerbanganVal=document.getElementById('modalPenerbangan')?.value;
-    const musimVal=document.getElementById('modalMusim')?.value;
-    const hijriVal=document.getElementById('modalHijri')?.value;
-    const tempohVal=document.getElementById('modalTempoh')?.value;
-    const totalSeatVal=document.getElementById('modalTotalSeat')?.value;
+    var mulaDate=document.getElementById('modalMulaPakej')?.value;
+    var tamatDate=document.getElementById('modalTamatPakej')?.value;
+    var groupVal=document.getElementById('modalGroup')?.value;
+    var sektorVal=document.getElementById('modalSektor')?.value;
+    var penerbanganVal=document.getElementById('modalPenerbangan')?.value;
+    var musimVal=document.getElementById('modalMusim')?.value;
+    var hijriVal=document.getElementById('modalHijri')?.value;
+    var tempohVal=document.getElementById('modalTempoh')?.value;
+    var totalSeatVal=document.getElementById('modalTotalSeat')?.value;
 
     if(!mulaDate||!tamatDate){
         alert('Sila lengkapkan Tarikh Mula dan Tarikh Tamat Pakej.');
@@ -330,7 +313,7 @@ async function submitNewTripRecord(e){
         return;
     }
 
-    let payloadFields = {
+    var payloadFields = {
         "Mula Pakej": mulaDate,
         "Tamat Pakej": tamatDate
     };
@@ -342,15 +325,15 @@ async function submitNewTripRecord(e){
     if(hijriVal && hijriVal.trim()!=='') payloadFields["Hijri Season"] = hijriVal.trim();
     if(tempohVal && tempohVal.trim()!=='') payloadFields["Tempoh Pakej"] = tempohVal.trim();
     if(totalSeatVal && totalSeatVal.toString().trim()!==''){
-        const num = parseInt(totalSeatVal);
+        var num = parseInt(totalSeatVal);
         if(!isNaN(num) && num>=0) payloadFields["Total Seat"] = num;
     }
 
-    const url=`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/PAKEJ%20UMRAH`;
+    var url='https://api.airtable.com/v0/' + AIRTABLE_BASE_ID + '/PAKEJ%20UMRAH';
     try{
-        const response=await fetch(url,{
+        var response=await fetch(url,{
             method:'POST',
-            headers:{Authorization:`Bearer ${AIRTABLE_PAT}`,'Content-Type':'application/json'},
+            headers:{Authorization:'Bearer ' + AIRTABLE_PAT,'Content-Type':'application/json'},
             body:JSON.stringify({fields: payloadFields, typecast:true})
         });
         if(response.ok){
@@ -359,13 +342,13 @@ async function submitNewTripRecord(e){
             if(typeof fetchTripMapping === 'function') await fetchTripMapping();
             alert('Pakej / Trip Umrah telah berjaya ditambahkan.');
         }else{
-            const errData=await response.json();
+            var errData=await response.json();
             console.error('Create trip failed', errData);
-            alert(`Gagal menambah trip: ${errData.error?.message || 'Sila cuba semula.'}`);
+            alert('Gagal menambah trip: ' + (errData.error?.message || 'Sila cuba semula.'));
         }
     }catch(err){
         console.error('submitNewTripRecord error', err);
-        alert(`Ralat: ${err.message}`);
+        alert('Ralat: ' + err.message);
     }
 }
 
@@ -1032,26 +1015,6 @@ function renderTripDetailForm(rec) {
     `;
 }
 
-function handleMulaDateChange(){ const mulaInput=document.getElementById('modalMulaPakej'); const tamatInput=document.getElementById('modalTamatPakej'); if(mulaInput&&tamatInput&&mulaInput.value){ tamatInput.min=mulaInput.value; if(tamatInput.value&&tamatInput.value<mulaInput.value){ tamatInput.value=mulaInput.value; } } }
-catch(err){alert('Maaf, penambahan trip baharu tidak berjaya. Sila cuba semula.');} }
-function buildSelectDropdown(recId, fieldName, currentValue, optionsArray, categoryKey){ 
-  const uniqueOptions=[]; 
-  optionsArray.forEach(opt=>{ if(!opt) return; const cleanOpt=normalizeDashFormat(opt); if(cleanOpt&&!uniqueOptions.includes(cleanOpt)) uniqueOptions.push(cleanOpt); }); 
-  const currentNormalized=normalizeDashFormat(currentValue);
-  if(currentNormalized && !uniqueOptions.includes(currentNormalized) && currentNormalized!=='-- PILIH --' && currentNormalized!==''){
-    uniqueOptions.unshift(currentNormalized);
-  }
-  let optionsHtml=`<option value="">-- Pilih --</option>`; 
-  uniqueOptions.forEach(opt=>{ 
-    const isSelected=currentNormalized===opt; 
-    optionsHtml+=`<option value="${opt}" ${isSelected?'selected':''}>${opt}</option>`; 
-  }); 
-  // V33: All selections have + Add New Option with loading skeleton
-  optionsHtml+=`<option value="__ADD_NEW__" style="font-weight:bold;color:#8B1E3F">+ Add New Option...</option>`;
-  return `<div class="relative" data-field="${fieldName}" data-category="${categoryKey}">
-    <select id="select-${recId}-${fieldName.replace(/\s+/g,'-')}" onchange="handleDropdownChange('${recId}', '${fieldName}', this, '${categoryKey}')" class="w-full p-2.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none font-semibold text-slate-800 transition-all">${optionsHtml}</select>
-  </div>`; 
-}
 function handleDropdownChange(recId, fieldName, selectEl, categoryKey){ 
   const selectedVal=selectEl.value; 
   if(selectedVal==='__ADD_NEW__'){
