@@ -36,34 +36,35 @@ var staffIdCounter = window.staffIdCounter || parseInt(localStorage.getItem('eff
 var roomingSortDir = window.roomingSortDir || localStorage.getItem('effah_rooming_sort_dir') || 'asc';
 var roomingSortActive = typeof window.roomingSortActive !== 'undefined' ? window.roomingSortActive : (localStorage.getItem('effah_rooming_sort_active') === 'true' ? true : false);
 
-var roomingFieldOptions = window.roomingFieldOptions || JSON.parse(localStorage.getItem('effah_rooming_field_options_cache')||'null') || { 'BOARD BASIS': [], 'INSURAN': [], 'PAKEJ': [], 'STATUS VISA': [], 'VISA': [] };
-// Defaults are only fallback if Airtable has no data - not hardcoded primary
-var roomingFieldDefaults = (()=>{ 
-  try{
-    const stored = JSON.parse(localStorage.getItem('effah_rooming_field_defaults')||'null');
-    if(stored) return stored;
-  }catch(e){}
-  return {
-    'BOARD BASIS': ['FULLBOARD','FULLBOARD (MEKAH)','BB (MEKAH)','FULLBOARD (MADINAH)','BB (MADINAH)','FULLBOARD (TAIF)'],
-    'INSURAN': ['TAKAFUL','ETIQA','AL-KHAIRI'],
-    'PAKEJ': ['JIMAT EKONOMI','JIMAT STANDARD','JIMAT PREMIUM','EKONOMI LITE','EKONOMI','STANDARD','PREMIUM','PREMIUM PLUS'],
-    'STATUS VISA': ['TOURIST','TOURIST (VALID)','UMRAH','UMRAH (VALID)','IQAMA (VALID)','VISA','VALID']
-  };
-})();
+var roomingFieldOptions = window.roomingFieldOptions || { 'BOARD BASIS': [], 'INSURAN': [], 'PAKEJ': [], 'STATUS VISA': [], 'VISA': [] };
+var roomingFieldDefaults = {
+  'BOARD BASIS': ['FULLBOARD','FULLBOARD (MEKAH)','BB (MEKAH)','FULLBOARD (MADINAH)','BB (MADINAH)','FULLBOARD (TAIF)'],
+  'INSURAN': ['TAKAFUL','ETIQA','AL-KHAIRI'],
+  'PAKEJ': ['JIMAT EKONOMI','JIMAT STANDARD','JIMAT PREMIUM','EKONOMI LITE','EKONOMI','STANDARD','PREMIUM','PREMIUM PLUS'],
+  'STATUS VISA': ['TOURIST','TOURIST (VALID)','UMRAH','UMRAH (VALID)','IQAMA (VALID)','VISA','VALID']
+};
 window.roomingFieldOptions = roomingFieldOptions;
-window.roomingFieldDefaults = roomingFieldDefaults;
-
-function saveRoomingFieldOptionsToStorage(){
-  try{
-    localStorage.setItem('effah_rooming_field_options_cache', JSON.stringify(roomingFieldOptions));
-  }catch(e){}
-}
 
 function buildRoomingFieldOptionsFromRecords(){
   try{
     const fieldsToBuild = ['BOARD BASIS','INSURAN','PAKEJ','STATUS VISA'];
     fieldsToBuild.forEach(fieldName=>{
       const values = new Set(roomingFieldDefaults[fieldName] || []);
+      // Include existing custom options already in roomingFieldOptions
+      (roomingFieldOptions[fieldName]||[]).forEach(v=>{ if(v) values.add(String(v).trim()); });
+      // Include custom options from localStorage per field
+      try{
+        const storedCustom = JSON.parse(localStorage.getItem('effah_rooming_field_options_'+fieldName)||'null');
+        if(Array.isArray(storedCustom)) storedCustom.forEach(v=>{ if(v) values.add(String(v).trim()); });
+      }catch(e){}
+      // Include from global cache
+      try{
+        const globalCache = JSON.parse(localStorage.getItem('effah_rooming_field_options_cache')||'null');
+        if(globalCache && globalCache[fieldName] && Array.isArray(globalCache[fieldName])){
+          globalCache[fieldName].forEach(v=>{ if(v) values.add(String(v).trim()); });
+        }
+      }catch(e){}
+      // Include from Airtable records
       (allRoomingJemaah||[]).forEach(r=>{
         const f = r.fields || {};
         let v = f[fieldName] || (fieldName==='STATUS VISA' ? (f['STATUS VISA']||f['VISA']||'') : '');
@@ -82,8 +83,8 @@ function buildRoomingFieldOptionsFromRecords(){
       if(fieldName==='STATUS VISA') roomingFieldOptions['VISA'] = roomingFieldOptions[fieldName];
     });
     window.roomingFieldOptions = roomingFieldOptions;
+    try{ localStorage.setItem('effah_rooming_field_options_cache', JSON.stringify(roomingFieldOptions)); }catch(e){}
     console.log('Dynamic roomingFieldOptions built', roomingFieldOptions);
-    try{ saveRoomingFieldOptionsToStorage(); }catch(e){}
     try{ populateRoomingFilterDropdown(); }catch(e){}
   }catch(e){ console.error('buildRoomingFieldOptions error', e); }
 }
@@ -91,7 +92,7 @@ function buildRoomingFieldOptionsFromRecords(){
 function populateRoomingFilterDropdown(){
   const sel=document.getElementById('filterPakejRooming'); if(!sel) return;
   const currentVal = sel.value;
-  let html = '<option value="">All</option>';
+  let html = '<option value="">Semua Field</option>';
   // Build grouped options
   const groups = [
     {label: 'BOARD BASIS', field: 'BOARD BASIS'},
@@ -126,10 +127,14 @@ function handleAddNewRoomingOption(fieldName){
     roomingFieldOptions[fieldName].push(trimmed);
     roomingFieldOptions[fieldName].sort();
     window.roomingFieldOptions = roomingFieldOptions;
-    try{ localStorage.setItem('effah_rooming_field_options_'+fieldName, JSON.stringify(roomingFieldOptions[fieldName])); saveRoomingFieldOptionsToStorage(); }catch(e){}
-    buildRoomingFieldOptionsFromRecords();
-    renderNamelist();
-    alert(`${trimmed} ditambah untuk ${fieldName}. Pilih dari dropdown untuk guna.`);
+    try{ 
+      localStorage.setItem('effah_rooming_field_options_'+fieldName, JSON.stringify(roomingFieldOptions[fieldName]));
+      localStorage.setItem('effah_rooming_field_options_cache', JSON.stringify(roomingFieldOptions));
+    }catch(e){}
+    // Rebuild to include new option in all places (now preserves custom)
+    try{ buildRoomingFieldOptionsFromRecords(); }catch(e){}
+    try{ renderNamelist(); }catch(e){}
+    alert(`${trimmed} ditambah untuk ${fieldName}. Pilih dari dropdown untuk guna. Option akan disimpan di localStorage dan akan muncul di Airtable bila ada jemaah guna value tersebut.`);
   } else {
     alert(`${trimmed} sudah wujud.`);
   }
@@ -137,45 +142,18 @@ function handleAddNewRoomingOption(fieldName){
 
 function toggleCellDropdown(id){
   const all = document.querySelectorAll('[data-cell-dropdown]');
-  all.forEach(d=>{ if(d.id!==id){ d.classList.add('hidden'); d.style.position=''; d.style.top=''; d.style.left=''; } });
+  all.forEach(d=>{ if(d.id!==id) d.classList.add('hidden'); });
   // Close other main dropdowns too
   const sortDrop = document.getElementById('sortDropdownMenu');
   const hideDrop = document.getElementById('hideFieldsDropdown');
   if(sortDrop) sortDrop.classList.add('hidden');
   if(hideDrop) hideDrop.classList.add('hidden');
   const target = document.getElementById(id);
-  if(!target) return;
-  const isHidden = target.classList.contains('hidden');
-  if(isHidden){
-    // For namelist dropdowns, use fixed positioning to avoid overflow clipping
-    if(id.startsWith('pakejDrop-') || id.startsWith('visaDrop-') || id.startsWith('boardDrop-') || id.startsWith('insuranDrop-')){
-      const btn = document.querySelector(`button[onclick*="${id}"]`);
-      if(btn){
-        const rect = btn.getBoundingClientRect();
-        target.style.position='fixed';
-        target.style.top=(rect.bottom+4)+'px';
-        target.style.left=rect.left+'px';
-        target.style.zIndex='9999';
-        // Adjust if goes off screen right
-        setTimeout(()=>{
-          const tr = target.getBoundingClientRect();
-          if(tr.right>window.innerWidth){
-            target.style.left=(window.innerWidth - tr.width - 10)+'px';
-          }
-        },0);
-      }
-    }
-    target.classList.remove('hidden');
-  } else {
-    target.classList.add('hidden');
-    target.style.position='';
-    target.style.top='';
-    target.style.left='';
-  }
+  if(target) target.classList.toggle('hidden');
 }
 
 function closeAllCellDropdowns(){
-  document.querySelectorAll('[data-cell-dropdown]').forEach(d=>{ d.classList.add('hidden'); d.style.position=''; d.style.top=''; d.style.left=''; });
+  document.querySelectorAll('[data-cell-dropdown]').forEach(d=> d.classList.add('hidden'));
 }
 
 window.allRoomingRecords = allRoomingRecords;
