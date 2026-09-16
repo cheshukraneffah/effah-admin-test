@@ -41,6 +41,15 @@ var roomingFieldDefaults = {}; // Direct fetch only - no hardcoded
 window.roomingFieldOptions = roomingFieldOptions;
 window.roomingFieldDefaults = roomingFieldDefaults;
 
+var selectedRoomingHijriFilter = window.selectedRoomingHijriFilter || localStorage.getItem('effah_rooming_hijri_filter') || null;
+window.selectedRoomingHijriFilter = selectedRoomingHijriFilter;
+
+function getTripHijriForRooming(tripRec){
+  if(!tripRec || !tripRec.fields) return '';
+  const fields = tripRec.fields;
+  return fields['Hijri Season'] || fields['HIJRI SEASON'] || fields['HIJRI'] || fields['MUSIM HIJRI'] || '';
+}
+
 let _roomingMetaCache = null;
 let _roomingMetaFetching = false;
 let _roomingFieldTypes = {}; // Store field types: singleSelect, multipleSelects
