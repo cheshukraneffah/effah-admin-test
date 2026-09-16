@@ -1388,7 +1388,7 @@ function openAddTripModal() {
                 <input type="number" name="Total Seat" min="0" placeholder="Contoh: 40" class="w-full p-3 font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none bg-slate-50 text-[13px]">
             </div>
 
-            <p class="text-[11px] text-slate-400 italic mt-2">* Nota: Nama trip, status, kapasiti dan kiraan jemaah akan dijana secara automatik oleh Airtable berdasarkan tarikh di atas. Tarikh tamat tidak boleh sebelum tarikh mula.</p>
+            
         </form>
     `;
 
