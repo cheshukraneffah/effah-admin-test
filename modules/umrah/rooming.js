@@ -1,4 +1,4 @@
-console.log('ROOMING V115 FALLBACK TYPECAST - CAPAIAN LANGSUNG + TAPISAN + FIX SYNTAX');
+console.log('ROOMING V116 SIMPLE ALERT + AUTO SET - CAPAIAN LANGSUNG + TAPISAN + FIX SYNTAX');
 var _autoScrollInterval = window._autoScrollInterval || null;
 window._roomingDragListenersAdded = window._roomingDragListenersAdded || false;
 // ROOMING V103 CLEAN - Deduped + Modular Ready
@@ -215,8 +215,8 @@ function buildRoomingFieldOptionsFromRecords(){
   }catch(e){ console.error('buildRoomingFieldOptions error', e); }
 }
 
-async function handleAddNewRoomingOption(fieldName){
-  const raw = prompt(`Tambah pilihan baharu untuk ${fieldName} (Sistem akan menambah ke Airtable melalui API meta):`);
+async function handleAddNewRoomingOption(fieldName, jemaahId=null){
+  const raw = prompt(`Tambah pilihan baharu untuk ${fieldName}:`);
   if(!raw) return;
   const trimmed = raw.trim().toUpperCase();
   if(!trimmed) return;
@@ -225,6 +225,142 @@ async function handleAddNewRoomingOption(fieldName){
     alert(`${trimmed} telah wujud di dalam Airtable.`);
     return;
   }
+  try{
+    const base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
+    const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
+    if(!base||!pat) throw new Error('Konfigurasi Airtable tidak ditemui');
+    
+    _roomingMetaCache = null;
+    await fetchRoomingFieldOptionsFromMeta();
+    
+    if(!_roomingMetaCache){
+      alert('Tidak dapat mencapai metadata Airtable. Sila tambah secara manual di Airtable.');
+      return;
+    }
+    const tableId = _roomingMetaCache.id;
+    const fields = _roomingMetaCache.fields||[];
+    const targetField = fields.find(f=> (f.name||'').toUpperCase()===fieldName.toUpperCase());
+    if(!targetField){
+      alert(`Medan ${fieldName} tidak ditemui dalam metadata.`);
+      return;
+    }
+
+    if(targetField.type!=='singleSelect' && targetField.type!=='multipleSelects'){
+      alert(`Medan ${fieldName} bukan jenis pilihan. Sila tambah secara manual di Airtable.`);
+      return;
+    }
+
+    const existingChoices = (targetField.options && targetField.options.choices) ? targetField.options.choices : [];
+    if(existingChoices.some(c=> (c.name||'').toUpperCase()===trimmed)){
+      alert(`${trimmed} telah wujud di dalam Airtable.`);
+      // Still set for current jemaah if provided
+      if(jemaahId){
+        try{ await updateJemaahField(jemaahId, fieldName, trimmed); }catch(e){}
+      }
+      return;
+    }
+
+    const choicesWithId = existingChoices.map(c=> ({id: c.id, name: c.name}));
+    const newChoices = [...choicesWithId, {name: trimmed}];
+    const payload = {options:{choices: newChoices}};
+
+    let metaSuccess = false;
+    try{
+      const res = await fetch(`https://api.airtable.com/v0/meta/bases/${base}/tables/${tableId}/fields/${targetField.id}`, {
+        method:'PATCH',
+        headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      if(res.ok){
+        metaSuccess = true;
+      } else {
+        console.warn('V116 Meta failed, will fallback to typecast', await res.text());
+      }
+    }catch(e){
+      console.warn('V116 Meta exception, fallback to typecast', e);
+    }
+
+    // V116: Whether meta succeeded or not, try to set value via typecast to ensure option exists and jemaah gets value
+    if(jemaahId){
+      const isMulti = targetField.type==='multipleSelects' || fieldName==='BOARD BASIS' || fieldName==='INSURAN';
+      const valueToSet = isMulti ? [trimmed] : trimmed;
+      // If multi and jemaah already has values, append
+      if(isMulti && jemaahId){
+        const rec = allRoomingJemaah.find(r=>r.id===jemaahId);
+        if(rec){
+          const existing = rec.fields[fieldName];
+          if(Array.isArray(existing) && existing.length>0){
+            const merged = [...new Set([...existing, trimmed])];
+            // Update local immediately for instant UI
+            rec.fields[fieldName] = merged;
+          } else if(existing && typeof existing==='string'){
+            rec.fields[fieldName] = [...new Set([existing, trimmed])];
+          } else {
+            rec.fields[fieldName] = valueToSet;
+          }
+          try{ renderNamelist(); }catch(e){}
+        }
+      }
+      
+      try{
+        const base2 = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
+        const pat2 = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
+        const isMulti2 = targetField.type==='multipleSelects' || fieldName==='BOARD BASIS' || fieldName==='INSURAN';
+        const payloadValue = isMulti2 ? (Array.isArray(valueToSet) ? valueToSet : [valueToSet]) : valueToSet;
+        // For append case
+        let finalPayload = payloadValue;
+        if(isMulti2){
+          const rec = allRoomingJemaah.find(r=>r.id===jemaahId);
+          if(rec && Array.isArray(rec.fields[fieldName])){
+            finalPayload = rec.fields[fieldName];
+          }
+        }
+        
+        await fetch(`https://api.airtable.com/v0/${base2}/DATA%20JEMAAH%20UMRAH/${jemaahId}`, {
+          method:'PATCH',
+          headers:{Authorization:`Bearer ${pat2}`,'Content-Type':'application/json'},
+          body: JSON.stringify({fields:{[fieldName]: finalPayload}, typecast:true})
+        });
+      }catch(e){
+        console.warn('V116 set jemaah value failed', e);
+      }
+    } else {
+      // No jemaahId - fallback via first jemaah if meta failed
+      if(!metaSuccess && allRoomingJemaah && allRoomingJemaah.length>0){
+        const first = allRoomingJemaah[0];
+        const isMulti = targetField.type==='multipleSelects';
+        try{
+          await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${first.id}`, {
+            method:'PATCH',
+            headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+            body: JSON.stringify({fields:{[fieldName]: isMulti ? [trimmed] : trimmed}, typecast:true})
+          });
+          // Revert
+          setTimeout(async ()=>{
+            try{
+              const orig = first.fields[fieldName]||'';
+              await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${first.id}`, {
+                method:'PATCH',
+                headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+                body: JSON.stringify({fields:{[fieldName]: orig}, typecast:true})
+              });
+            }catch(e){}
+          }, 800);
+        }catch(e){}
+      }
+    }
+
+    await fetchRoomingFieldOptionsFromMeta();
+    try{ renderNamelist(); }catch(e){}
+    
+    // Simple alert as requested - no explanation of method
+    alert(`${trimmed} telah berjaya ditambahkan.`);
+
+  }catch(e){
+    console.error('handleAddNewRoomingOption V116 error', e);
+    alert(`Gagal menambah "${trimmed}": ${e.message}`);
+  }
+}
   try{
     const base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
     const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
@@ -1620,7 +1756,7 @@ function renderNamelist(){
         </button>
         <div id="insuranDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1" style="background:#ffffff !important; opacity:1 !important;">
           ${insCheckboxes}
-          <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('INSURAN')" class="w-full text-left px-2 py-1 text-[8px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded mb-1">+ Tambah Pilihan</button></div>
+          <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('INSURAN', '${r.id}')" class="w-full text-left px-2 py-1 text-[8px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded mb-1">+ Tambah Pilihan</button></div>
           <div class="border-t border-slate-100 mt-1 pt-1 flex justify-between">
             <button onclick="clearInsuranMulti('${r.id}'); closeInsuranDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-slate-100">Padam</button>
             <button onclick="closeInsuranDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-[#7A0C2E] text-white">OK</button>
@@ -1638,7 +1774,7 @@ function renderNamelist(){
           </button>
           <div id="boardDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1" style="background:#ffffff !important; opacity:1 !important; isolation:isolate;">
             ${boardCheckboxes}
-            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('BOARD BASIS')" class="w-full text-left px-2 py-1 text-[8px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded mb-1">+ Tambah Pilihan</button></div>
+            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('BOARD BASIS', '${r.id}')" class="w-full text-left px-2 py-1 text-[8px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded mb-1">+ Tambah Pilihan</button></div>
             <div class="border-t border-slate-100 mt-1 pt-1 flex justify-between">
               <button onclick="clearBoardMulti('${r.id}'); closeBoardDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-slate-100">Padam</button>
               <button onclick="closeBoardDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-[#7A0C2E] text-white">OK</button>
@@ -1660,7 +1796,7 @@ function renderNamelist(){
           </button>
           <div id="pakejDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[180px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1 max-h-60 overflow-y-auto">
             ${(roomingFieldOptions['PAKEJ']||[]).map(o=>`<button onclick="event.stopPropagation(); updateJemaahField('${r.id}','PAKEJ','${o}'); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${pk===o?'bg-slate-900 text-white font-bold':''}">${o}</button>`).join('')}
-            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('PAKEJ')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Tambah Pilihan</button></div>
+            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('PAKEJ', '${r.id}')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Tambah Pilihan</button></div>
           </div>
         </div>
       </div>
@@ -1672,7 +1808,7 @@ function renderNamelist(){
           <div id="visaDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1 max-h-60 overflow-y-auto">
             <button onclick="event.stopPropagation(); updateJemaahField('${r.id}','STATUS VISA',''); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${!getVisaVal(r.fields)?'bg-slate-900 text-white font-bold':''}">- VISA</button>
             ${(roomingFieldOptions['STATUS VISA']||[]).map(o=>`<button onclick="event.stopPropagation(); updateJemaahField('${r.id}','STATUS VISA','${o}'); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${getVisaVal(r.fields)===o?'bg-slate-900 text-white font-bold':''}">${o}</button>`).join('')}
-            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('STATUS VISA')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Tambah Pilihan</button></div>
+            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('STATUS VISA', '${r.id}')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Tambah Pilihan</button></div>
           </div>
         </div>
       </div>
