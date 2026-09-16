@@ -1,4 +1,4 @@
-console.log('ROOMING V110 DIRECT FETCH COMPLETE - ALL FIELDS META + FILTER FIX');
+console.log('ROOMING V111 BAHASA MELAYU PROFESIONAL - CAPAIAN LANGSUNG LENGKAP + TAPISAN');
 var _autoScrollInterval = window._autoScrollInterval || null;
 window._roomingDragListenersAdded = window._roomingDragListenersAdded || false;
 // ROOMING V103 CLEAN - Deduped + Modular Ready
@@ -77,7 +77,7 @@ function renderRoomingHijriTabs(){
     localStorage.setItem('effah_rooming_hijri_filter', selectedRoomingHijriFilter);
   }
   if(seasons.length===0){
-    container.innerHTML='<span class="text-[10px] text-slate-400">Tiada musim hijri</span>';
+    container.innerHTML='<span class="text-[10px] text-slate-400">Tiada musim hijri ditemui</span>';
     return;
   }
   container.innerHTML=seasons.map(season=>{
@@ -107,14 +107,14 @@ async function fetchRoomingFieldOptionsFromMeta(){
     const base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
     const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
     if(!base||!pat){ 
-      console.warn('V110: Missing base/pat for meta fetch');
+      console.warn('V110: Base atau token PAT tidak ditemui untuk capaian metadata');
       _roomingMetaFetching=false; 
       return null; 
     }
-    console.log('V110: Fetching meta for direct fetch...', base);
+    console.log('V110: Sedang mendapatkan metadata secara langsung...', base);
     const res = await fetch(`https://api.airtable.com/v0/meta/bases/${base}/tables`, {headers:{Authorization:`Bearer ${pat}`}});
     if(!res.ok){
-      console.warn('V110: Meta API failed', res.status, await res.text().then(t=>t.substring(0,500)));
+      console.warn('V110: Gagal mendapatkan metadata Airtable', res.status, await res.text().then(t=>t.substring(0,500)));
       _roomingMetaFetching=false;
       // Fallback to records
       try{ buildRoomingFieldOptionsFromRecords(); }catch(e){}
@@ -126,7 +126,7 @@ async function fetchRoomingFieldOptionsFromMeta(){
     if(!targetTable) targetTable = tables.find(t=> (t.name||'').toUpperCase().includes('JEMAAH UMRAH'));
     if(!targetTable) targetTable = tables.find(t=> t.name && t.name.toUpperCase().includes('JEMAAH'));
     if(!targetTable){ 
-      console.warn('V110: DATA JEMAAH UMRAH table not found in meta');
+      console.warn('V110: Jadual DATA JEMAAH UMRAH tidak ditemui dalam metadata');
       _roomingMetaFetching=false; 
       return null; 
     }
@@ -141,18 +141,18 @@ async function fetchRoomingFieldOptionsFromMeta(){
           const choices = f.options.choices.map(c=>c.name).filter(Boolean);
           roomingFieldOptions[w] = choices.sort();
           if(w==='STATUS VISA') roomingFieldOptions['VISA']=choices.sort();
-          console.log(`V110: Direct fetch ${w}:`, choices);
+          console.log(`V110: Capaian langsung ${w}:`, choices);
         }
       } else {
-        console.warn(`V110: Field ${w} not found in meta`);
+        console.warn(`V110: Medan ${w} tidak ditemui dalam metadata`);
       }
     });
     window.roomingFieldOptions=roomingFieldOptions;
     window._roomingFieldTypes=_roomingFieldTypes;
     window._roomingMetaCache=_roomingMetaCache;
-    console.log('V110: Direct fetch from Airtable meta complete', roomingFieldOptions, _roomingFieldTypes);
-    try{ populateRoomingFilterDropdown(); }catch(e){ console.warn('populate filter fail', e); }
-    try{ renderNamelist(); }catch(e){ console.warn('render namelist fail', e); }
+    console.log('V110: Capaian langsung from Airtable meta complete', roomingFieldOptions, _roomingFieldTypes);
+    try{ populateRoomingFilterDropdown(); }catch(e){ console.warn('gagal membina tapisan', e); }
+    try{ renderNamelist(); }catch(e){ console.warn('gagal memaparkan senarai nama', e); }
     _roomingMetaFetching=false;
     return roomingFieldOptions;
   }catch(e){
@@ -169,7 +169,7 @@ function buildRoomingFieldOptionsFromRecords(){
     // V110 FIX: If meta already has options, don't override, but fill missing ones from records
     const hasSomeMeta = _roomingMetaCache && Object.values(roomingFieldOptions).some(arr=>arr && arr.length>0);
     if(hasSomeMeta){
-      console.log('V110: Meta cached exists, filling only empty fields from records');
+      console.log('V110: Cache metadata wujud, hanya mengisi medan yang masih kosong daripada rekod');
     }
     fieldsToBuild.forEach(fieldName=>{
       if(roomingFieldOptions[fieldName] && roomingFieldOptions[fieldName].length>0) {
@@ -206,7 +206,7 @@ function buildRoomingFieldOptionsFromRecords(){
       if(values.size>0){
         roomingFieldOptions[fieldName] = Array.from(values).filter(Boolean).sort();
         if(fieldName==='STATUS VISA') roomingFieldOptions['VISA'] = roomingFieldOptions[fieldName];
-        console.log(`V110: Built ${fieldName} from records:`, roomingFieldOptions[fieldName]);
+        console.log(`V110: Dibina ${fieldName} daripada rekod:`, roomingFieldOptions[fieldName]);
       }
     });
     window.roomingFieldOptions = roomingFieldOptions;
@@ -216,13 +216,13 @@ function buildRoomingFieldOptionsFromRecords(){
 }
 
 async function handleAddNewRoomingOption(fieldName){
-  const newVal = prompt(`Tambah option baru untuk ${fieldName} (akan cuba tambah di Airtable via meta API):`);
+  const newVal = prompt(`Tambah pilihan baharu untuk ${fieldName} (Sistem akan cuba menambah ke Airtable melalui API meta):`);
   if(!newVal) return;
   const trimmed = newVal.trim().toUpperCase();
   if(!trimmed) return;
   if(!roomingFieldOptions[fieldName]) roomingFieldOptions[fieldName]=[];
   if(roomingFieldOptions[fieldName].includes(trimmed)){
-    alert(`${trimmed} sudah wujud di Airtable.`);
+    alert(`${trimmed} telah wujud di dalam Airtable.`);
     return;
   }
   // Direct fetch mode: cuba tambah via meta API dulu
@@ -234,14 +234,14 @@ async function handleAddNewRoomingOption(fieldName){
       await fetchRoomingFieldOptionsFromMeta();
     }
     if(!_roomingMetaCache){
-      alert('Tidak dapat fetch meta. Sila tambah manual di Airtable: DATA JEMAAH UMRAH → field '+fieldName+' → Add choice "'+trimmed+'"');
+      alert('Tidak dapat mencapai metadata Airtable. Sila tambah secara manual di Airtable: DATA JEMAAH UMRAH → medan '+fieldName+' → Add choice "'+trimmed+'"');
       return;
     }
     const tableId = _roomingMetaCache.id;
     const fields = _roomingMetaCache.fields||[];
     const targetField = fields.find(f=> (f.name||'').toUpperCase()===fieldName.toUpperCase());
     if(!targetField){
-      alert(`Field ${fieldName} tidak jumpa di meta. Sila tambah manual di Airtable.`);
+      alert(`Medan ${fieldName} tidak ditemui dalam metadata. Sila tambah secara manual di Airtable.`);
       return;
     }
     const existingChoices = (targetField.options && targetField.options.choices) ? targetField.options.choices.map(c=>({name:c.name})) : [];
@@ -256,17 +256,17 @@ async function handleAddNewRoomingOption(fieldName){
       const errText = await res.text();
       console.error('Add option meta failed', res.status, errText);
       if(res.status===422 && errText.includes('INVALID_MULTIPLE_CHOICE_OPTIONS')){
-        alert(`Gagal tambah "${trimmed}" via meta API: ${res.status}\n${errText.substring(0,300)}\n\nPastikan field ${fieldName} adalah Multiple Select (bukan Single) dan PAT ada scope schema.bases:write.\n\nCuba tambah manual di Airtable: Table DATA JEMAAH UMRAH → field ${fieldName} → Add choice "${trimmed}"`);
+        alert(`Gagal tambah "${trimmed}" via meta API: ${res.status}\n${errText.substring(0,300)}\n\nPastikan field ${fieldName} adalah Multiple Select (bukan Single) dan PAT ada scope schema.bases:write.\n\nCuba tambah manual di Airtable: Table DATA JEMAAH UMRAH → medan ${fieldName} → Tambah Pilihan "${trimmed}"`);
       } else {
-        alert(`Gagal tambah "${trimmed}" di Airtable meta: ${res.status} ${errText.substring(0,400)}\n\nSila tambah manual di Airtable.`);
+        alert(`Gagal menambah "${trimmed}" di dalam metadata Airtable: ${res.status} ${errText.substring(0,400)}\n\nSila tambah secara manual di Airtable.`);
       }
       return;
     }
     await fetchRoomingFieldOptionsFromMeta();
-    alert(`${trimmed} berjaya ditambah ke Airtable field ${fieldName} via meta API.`);
+    alert(`${trimmed} telah berjaya ditambahkan ke medan ${fieldName} di Airtable melalui API meta.`);
   }catch(e){
     console.error('handleAddNewRoomingOption error', e);
-    alert(`Gagal tambah "${trimmed}": ${e.message}\n\nSila tambah manual di Airtable: DATA JEMAAH UMRAH → field ${fieldName} → Add choice "${trimmed}"`);
+    alert(`Gagal tambah "${trimmed}": ${e.message}\n\nSila tambah manual di Airtable: DATA JEMAAH UMRAH → medan ${fieldName} → Tambah Pilihan "${trimmed}"`);
   }
 }
 
@@ -369,7 +369,7 @@ async function loadStaffList(){
 async function addNewStaff(){
   const input=document.getElementById('newStaffInput'); if(!input) return;
   let name=input.value.trim().toUpperCase();
-  if(!name){ alert('Sila masukkan nama staff.'); return; }
+  if(!name){ alert('Sila masukkan nama petugas.'); return; }
   if(!name.includes('(')) name=`${name} (EFFAH)`;
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
   const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
@@ -486,7 +486,7 @@ function removeStaff(roomId,staffName, evt){ if(evt){ evt.stopPropagation(); evt
 }
 
 async function deleteStaff(staffId){
-  if(!confirm('Padam staff ini dari Extra List?\n\nStaff akan dibuang dari semua bilik juga jika ada assigned.')) return;
+  if(!confirm('Adakah anda ingin memadam petugas ini daripada Senarai Extra?\n\nPetugas akan dikeluarkan daripada semua bilik sekiranya telah ditetapkan.')) return;
   const s=staffList.find(x=>x.id===staffId||x.airtableId===staffId);
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
   const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
@@ -528,7 +528,7 @@ async function deleteStaff(staffId){
 function openDeleteStaffModal(){
   const existing = document.getElementById('deleteStaffModal');
   if(existing) existing.remove();
-  if(staffList.length===0){ alert('Tiada staff dalam Extra List.'); return; }
+  if(staffList.length===0){ alert('Tiada petugas di dalam Senarai Extra.'); return; }
   let rows = staffList.map((s,i)=>{
     const assignedRooms = (s.roomIds||[]).length;
     const assignedLabel = assignedRooms>0 ? `<span class="ml-2 px-1.5 py-0.5 bg-amber-100 border border-amber-200 text-amber-800 rounded-full text-[9px] font-bold">${assignedRooms} bilik</span>` : `<span class="ml-2 px-1.5 py-0.5 bg-slate-100 border rounded-full text-[9px]">Tidak assigned</span>`;
@@ -577,7 +577,7 @@ function toggleAllDeleteStaff(checked){
 async function deleteSingleStaffFromModal(staffId){
   const s=staffList.find(x=>x.id===staffId||x.airtableId===staffId);
   const name = s?.name||'Staff ini';
-  if(!confirm(`Adakah anda pasti untuk memadam ${name} dari senarai Extra List?\n\nTindakan ini akan mengeluarkan staff tersebut dari semua bilik yang telah ditetapkan dan rekod akan dipadam dari sistem.`)) return;
+  if(!confirm(`Adakah anda pasti untuk memadam ${name} daripada senarai Extra List?\n\nTindakan ini akan mengeluarkan petugas tersebut daripada semua bilik yang telah ditetapkan dan rekod akan dipadam daripada sistem.`)) return;
   await performDeleteStaff(staffId);
   closeDeleteStaffModal();
   // Reopen if still have staff
@@ -586,17 +586,17 @@ async function deleteSingleStaffFromModal(staffId){
 
 async function confirmBulkDeleteStaff(){
   const checks = Array.from(document.querySelectorAll('.deleteStaffCheck:checked'));
-  if(checks.length===0){ alert('Sila pilih sekurang-kurangnya satu staff untuk dipadam.'); return; }
+  if(checks.length===0){ alert('Sila pilih sekurang-kurangnya satu petugas untuk dipadam.'); return; }
   const ids = checks.map(c=>c.value);
   const names = ids.map(id=> staffList.find(x=>x.id===id||x.airtableId===id)?.name||id).join(', ');
-  if(!confirm(`Adakah anda pasti untuk memadam ${checks.length} staff berikut dari senarai Extra List?\n\n${names}\n\nTindakan ini akan mengeluarkan kesemua staff tersebut dari semua bilik yang telah ditetapkan.`)) return;
+  if(!confirm(`Adakah anda pasti untuk memadam ${checks.length} petugas berikut daripada senarai Extra List?\n\n${names}\n\nTindakan ini akan mengeluarkan kesemua petugas tersebut daripada semua bilik yang telah ditetapkan.`)) return;
   
   // Delete one by one
   for(let id of ids){
     await performDeleteStaff(id);
   }
   closeDeleteStaffModal();
-  alert(`${ids.length} staff telah dipadam.`);
+  alert(`${ids.length} petugas telah dipadam.`);
 }
 
 async function performDeleteStaff(staffId){
@@ -658,7 +658,7 @@ async function performDeleteStaff(staffId){
 async function deleteStaff(staffId){
   const s=staffList.find(x=>x.id===staffId||x.airtableId===staffId);
   const name = s?.name||'Staff ini';
-  if(!confirm(`Adakah anda pasti untuk memadam ${name} dari senarai Extra List?\n\nStaff tersebut akan dikeluarkan dari semua bilik yang telah ditetapkan.`)) return;
+  if(!confirm(`Adakah anda pasti untuk memadam ${name} daripada senarai Extra List?\n\nPetugas tersebut akan dikeluarkan daripada semua bilik yang telah ditetapkan.`)) return;
   await performDeleteStaff(staffId);
 }
 
@@ -717,7 +717,7 @@ function renderInsuranCell(jId, insArr){
     var checked=insArr.includes(o)?'checked':'';
     html+='<label class="flex items-center gap-2 px-2.5 py-1.5 hover:bg-slate-50 cursor-pointer text-[11px]"><input type="checkbox" '+checked+' onchange="toggleInsuranMulti(\''+jId+'\',\''+o+'\')" class="w-3.5 h-3.5 accent-[#7A0C2E]"> '+o+'</label>';
   }
-  html+='<div class="flex justify-between gap-1 mt-1 pt-1 border-t bg-white"><button onclick="clearInsuranMulti(\''+jId+'\'); closeInsuranDropdown(\''+jId+'\')" class="text-[9px] px-3 py-1 rounded-full bg-slate-100">Clear</button><button onclick="closeInsuranDropdown(\''+jId+'\')" class="text-[9px] px-3 py-1 rounded-full bg-[#7A0C2E] text-white">OK</button></div></div></div>';
+  html+='<div class="flex justify-between gap-1 mt-1 pt-1 border-t bg-white"><button onclick="clearInsuranMulti(\''+jId+'\'); closeInsuranDropdown(\''+jId+'\')" class="text-[9px] px-3 py-1 rounded-full bg-slate-100">Padam</button><button onclick="closeInsuranDropdown(\''+jId+'\')" class="text-[9px] px-3 py-1 rounded-full bg-[#7A0C2E] text-white">OK</button></div></div></div>';
   return html;
 }
 function toggleInsuranMulti(jId, opt){
@@ -853,7 +853,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function showRoomingLoading(){
   const g=document.getElementById('roomingGrid'); const l=document.getElementById('namelistContainer');
-  const spinner = `<div class="flex flex-col items-center justify-center gap-3 py-10"><div class="w-8 h-8 border-[3px] border-slate-200 border-t-[#7A0C2E] rounded-full animate-spin"></div><div class="text-[11px] text-slate-600 font-medium">Memuatkan jemaah...</div></div>`;
+  const spinner = `<div class="flex flex-col items-center justify-center gap-3 py-10"><div class="w-8 h-8 border-[3px] border-slate-200 border-t-[#7A0C2E] rounded-full animate-spin"></div><div class="text-[11px] text-slate-600 font-medium">Sedang memuatkan data jemaah...</div></div>`;
   const spinnerBilik = `<div class="col-span-2 flex flex-col items-center justify-center gap-3 py-16"><div class="w-8 h-8 border-[3px] border-slate-200 border-t-[#7A0C2E] rounded-full animate-spin"></div><div class="text-[11px] text-slate-600 font-medium">Memuatkan bilik...</div></div>`;
   const skeletonRooms = Array.from({length:4}).map(()=>`<div class="bg-white rounded-2xl border border-slate-200 p-3 animate-pulse"><div class="h-4 bg-slate-100 rounded-full w-1/3 mb-3"></div><div class="h-3 bg-slate-100 rounded-full w-2/3 mb-4"></div><div class="space-y-2"><div class="h-9 bg-slate-50 rounded-xl"></div><div class="h-9 bg-slate-50 rounded-xl"></div><div class="h-9 bg-slate-100 rounded-xl border border-dashed"></div></div></div>`).join('');
   const skeletonList = Array.from({length:6}).map(()=>`<div class="px-2.5 py-3 flex gap-2 animate-pulse"><div class="w-6 h-3 bg-slate-100 rounded"></div><div class="flex-1 h-3 bg-slate-100 rounded-full"></div><div class="w-16 h-5 bg-slate-50 rounded-full"></div></div>`).join('');
@@ -876,7 +876,7 @@ function renderRoomingHTML(){
           </select>
         </div>
         <div class="flex items-center gap-1.5 text-[11px]">
-          <span id="belumAssignTop" class="px-2 py-0.5 bg-amber-100 rounded-full font-bold text-[10px]">0 Unassigned</span>
+          <span id="belumAssignTop" class="px-2 py-0.5 bg-amber-100 rounded-full font-bold text-[10px]">0 Belum Ditetapkan</span>
           <span id="assignedTop" class="px-2 py-0.5 bg-emerald-50 rounded-full font-bold text-[10px]">0 Assigned</span>
           <button onclick="fetchRoomingData(true)" title="Reload data dari Airtable" class="w-6 h-6 rounded-full border bg-white hover:bg-slate-50 text-[10px]"><i class="fa-solid fa-rotate"></i></button>
         </div>
@@ -892,8 +892,8 @@ function renderRoomingHTML(){
           <div class="flex items-center justify-between mb-2.5">
             <h3 class="font-bold text-[11px] tracking-widest text-slate-700">NAMELIST JEMAAH</h3>
             <div class="flex gap-1">
-              <span id="belumAssignBadge" class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-[10px] font-bold">0 Unassigned</span>
-              <span id="totalJemaahBadge" class="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-700 rounded-full text-[10px] font-bold">0 Total</span>
+              <span id="belumAssignBadge" class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-[10px] font-bold">0 Belum Ditetapkan</span>
+              <span id="totalJemaahBadge" class="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-700 rounded-full text-[10px] font-bold">0 Jumlah</span>
             </div>
           </div>
           <div class="flex gap-1.5">
@@ -907,14 +907,14 @@ function renderRoomingHTML(){
               </button>
               <div id="roomingFilterBox" class="hidden absolute right-0 top-full mt-2 w-[340px] bg-white rounded-2xl shadow-xl border border-slate-200 z-[70] overflow-hidden">
                 <div class="p-3 border-b border-slate-200 flex items-center justify-between">
-                  <span class="font-bold text-[11px] tracking-wider">FILTER BY FIELD</span>
-                  <button onclick="clearRoomingFilter()" class="text-[10px] px-2 py-1 bg-slate-100 rounded-full font-bold hover:bg-slate-200">Clear</button>
+                  <span class="font-bold text-[11px] tracking-wider">TAPISAN MENGIKUT MEDAN</span>
+                  <button onclick="clearRoomingFilter()" class="text-[10px] px-2 py-1 bg-slate-100 rounded-full font-bold hover:bg-slate-200">Padam</button>
                 </div>
                 <div class="p-2 max-h-[50vh] overflow-y-auto space-y-3" id="roomingFilterBoxContent">
-                  <div class="text-[11px] text-slate-400 text-center py-4">Memuat filter...</div>
+                  <div class="text-[11px] text-slate-400 text-center py-4">Sedang memuatkan tapisan...</div>
                 </div>
                 <div class="p-2 border-t bg-slate-50 flex justify-between items-center">
-                  <span id="roomingFilterCount" class="text-[10px] text-slate-500">0 selected</span>
+                  <span id="roomingFilterCount" class="text-[10px] text-slate-500">0 dipilih</span>
                   <button onclick="toggleRoomingFilterBox()" class="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-bold">Tutup</button>
                 </div>
               </div>
@@ -934,7 +934,7 @@ function renderRoomingHTML(){
         <div class="border-t-2 border-slate-200 bg-white relative">
           <div class="p-2.5 flex items-center justify-between">
             <h4 class="font-bold text-[11px] tracking-widest text-slate-700">STAFF / EXTRA LIST</h4>
-            <span id="staffTotalBadge" class="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-700 rounded-full text-[10px] font-bold">0 Staff</span>
+            <span id="staffJumlahBadge" class="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-700 rounded-full text-[10px] font-bold">0 Staff</span>
           </div>
           <div class="px-2.5 pb-2.5 flex gap-1.5">
             <input id="newStaffInput" placeholder="Taip nama staff" class="flex-1 text-[11px] px-2.5 py-2 border border-slate-200 rounded-xl bg-white focus:outline-none" onkeydown="if(event.key==='Enter'){ addNewStaff(); }">
@@ -1000,7 +1000,7 @@ function renderRoomingHTML(){
 
   <div id="copyRoomsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl p-4 max-w-md w-full shadow-2xl">
-      <h3 class="font-bold mb-2 text-[11px]">Salin Bilik Dari Lokasi Lain</h3>
+      <h3 class="font-bold mb-2 text-[11px]">Salin Bilik Daripada Lokasi Lain</h3>
       <p class="text-[10px] text-slate-500 mb-2.5">Salin bilik ke <b id="copyTargetLoc">${activeLocation}</b></p>
       <div class="mb-2.5 p-2.5 bg-slate-50 rounded-xl border">
         <div class="text-[9px] font-bold text-slate-600 mb-1.5">Pilihan Salinan:</div>
@@ -1082,7 +1082,7 @@ async function updateRoomCatatan(roomId, value){
   console.log('V87 updateRoomCatatan', roomId, value);
   try{
     const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
-    if(!base||!pat) throw new Error('Airtable config missing');
+    if(!base||!pat) throw new Error('Konfigurasi Airtable tidak ditemui. Sila semak tetapan API.');
     // Try field names in order: CATATAN BILIK, CATATAN, NOTES, REMARK
     const fieldNames = ['CATATAN BILIK','CATATAN','NOTES','REMARK','Catatan Bilik','Catatan'];
     let lastError=null;
@@ -1112,7 +1112,7 @@ async function updateRoomCatatan(roomId, value){
       }
     }
     throw lastError||new Error('All catatan field names failed');
-  }catch(e){ console.error('Catatan update failed', e); alert('Gagal save catatan bilik: '+e.message+'\n\nField CATATAN BILIK tak wujud di Airtable? Check nama field.'); }
+  }catch(e){ console.error('Catatan update failed', e); alert('Gagal menyimpan catatan bilik: '+e.message+'\n\nField CATATAN BILIK tak wujud di Airtable? Check nama field.'); }
 }
 function loadLocalCatatan(roomId){
   try{
@@ -1243,13 +1243,13 @@ async function fetchRoomingData(forceReload=false){
     // Only use cache if first load already done and not initial page load
     const canUseCache = _roomingFirstLoadDone && !forceReload && tripId && tripId===_roomingLastTripId && allRoomingJemaah.length>0 && cacheValid && !_roomingIsLoading;
     if(canUseCache){
-      console.log('ROOMING CACHE HIT V103.28 - using cached data for trip', tripId, 'staff', staffList.length);
+      console.log('CACHE ROOMING DIGUNAKAN V103.28 - using cached data for trip', tripId, 'staff', staffList.length);
       // Restore staff from cache if empty
       try{
         if((!staffList || staffList.length===0) && _staffCache[tripId] && _staffCache[tripId].length>0){
           staffList = _staffCache[tripId];
           window.staffList = staffList;
-          console.log('STAFF CACHE RESTORED', staffList.length);
+          console.log('CACHE PETUGAS DIPULIHKAN', staffList.length);
         }
       }catch(e){}
       try{ populateRoomingTripDropdown(); }catch(e){}
@@ -1262,7 +1262,7 @@ async function fetchRoomingData(forceReload=false){
       return;
     }
     if(_roomingIsLoading && !forceReload){
-      console.log('ROOMING already loading, skipping duplicate fetch');
+      console.log('Data rooming sedang dimuatkan, permintaan pendua diabaikan');
       return;
     }
     _roomingIsLoading = true;
@@ -1274,14 +1274,14 @@ async function fetchRoomingData(forceReload=false){
       if(sel && sel.value) tripId=sel.value;
     }
     if(!tripId){ 
-      document.getElementById('namelistContainer').innerHTML='<div class="p-6 text-center text-[11px] text-slate-400">Sila pilih trip di atas (16-25 OGOS 2026).<br>Jika tracking prevention block storage, pilih manual.</div>'; 
+      document.getElementById('namelistContainer').innerHTML='<div class="p-6 text-center text-[11px] text-slate-400">Sila pilih trip di atas. Sekiranya sekatan penjejakan menghalang storan, sila pilih secara manual.</div>'; 
       if(typeof hideRoomingLoading==='function') hideRoomingLoading();
       return; 
     }
     const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); 
     const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
     if(!base||!pat){ 
-      document.getElementById('namelistContainer').innerHTML='<div class="p-6 text-center text-[11px] text-red-400">Airtable config missing</div>';
+      document.getElementById('namelistContainer').innerHTML='<div class="p-6 text-center text-[11px] text-red-400">Konfigurasi Airtable tidak ditemui. Sila semak tetapan API.</div>';
       if(typeof hideRoomingLoading==='function') hideRoomingLoading();
       return;
     }
@@ -1290,7 +1290,7 @@ async function fetchRoomingData(forceReload=false){
     try{
       do{ 
         const res=await fetch(`https://api.airtable.com/v0/${base}/ROOMING%20LIST?pageSize=100${offset?`&offset=${offset}`:''}`,{headers:{Authorization:`Bearer ${pat}`}}); 
-        if(!res.ok){ console.warn('ROOMING LIST fetch failed', res.status); break; }
+        if(!res.ok){ console.warn('Gagal mendapatkan senarai ROOMING LIST', res.status); break; }
         const data=await res.json(); 
         if(data.records) allRooms=allRooms.concat(data.records); 
         offset=data.offset||''; 
@@ -1303,7 +1303,7 @@ async function fetchRoomingData(forceReload=false){
         const res=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH?pageSize=100${offset?`&offset=${offset}`:''}`,{headers:{Authorization:`Bearer ${pat}`}}); 
         if(!res.ok){ 
           const txt=await res.text();
-          console.warn('JEMAAH fetch failed', res.status, txt);
+          console.warn('Gagal mendapatkan data JEMAAH', res.status, txt);
           if(res.status===429){ await new Promise(r=>setTimeout(r, 2000)); continue; }
           break; 
         }
@@ -1311,19 +1311,19 @@ async function fetchRoomingData(forceReload=false){
         if(data.records) allJems=allJems.concat(data.records); 
         offset=data.offset||''; 
       }while(offset);
-    }catch(e){ console.error('JEMAAH error', e); }
-    console.log('fetchRoomingData done: rooms', allRooms.length, 'jemaah', allJems.length);
+    }catch(e){ console.error('Ralat data JEMAAH', e); }
+    console.log('fetchRoomingData selesai: bilik', allRooms.length, 'jemaah', allJems.length);
     allRoomingRecords=allRooms.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
     allRoomingJemaah=allJems.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
-    console.log('filtered for trip', tripId, 'rooms', allRoomingRecords.length, 'jemaah', allRoomingJemaah.length);
+    console.log('ditapis untuk trip', tripId, 'rooms', allRoomingRecords.length, 'jemaah', allRoomingJemaah.length);
     _roomingLastTripId = tripId;
     _roomingCacheTime = Date.now();
     _roomingFirstLoadDone = true;
     window._roomingLastTripId = _roomingLastTripId;
     window._roomingCacheTime = _roomingCacheTime;
     window._roomingFirstLoadDone = true;
-    try{ await loadStaffList(); }catch(e){ console.warn('staff list fail', e); }
-    try{ buildRoomingFieldOptionsFromRecords(); }catch(e){ console.warn('build options fail', e); }
+    try{ await loadStaffList(); }catch(e){ console.warn('gagal memuatkan senarai petugas', e); }
+    try{ buildRoomingFieldOptionsFromRecords(); }catch(e){ console.warn('gagal membina pilihan', e); }
     renderNamelist(); 
     renderRoomingGrid(); 
     renderLocationTabs();
@@ -1331,9 +1331,9 @@ async function fetchRoomingData(forceReload=false){
     _roomingIsLoading = false;
   }catch(e){ 
     _roomingIsLoading = false;
-    console.error('fetchRoomingData fatal', e); 
+    console.error('Ralat kritikal fetchRoomingData', e); 
     const cont=document.getElementById('namelistContainer');
-    if(cont) cont.innerHTML='<div class="p-6 text-center text-[11px] text-red-400">Ralat memuatkan jemaah: '+e.message+'<br><button onclick="fetchRoomingData(true)" class="mt-2 px-3 py-1 bg-[#7A0C2E] text-white rounded-full text-[10px]">Retry</button></div>';
+    if(cont) cont.innerHTML='<div class="p-6 text-center text-[11px] text-red-400">Ralat semasa memuatkan data jemaah: '+e.message+'<br><button onclick="fetchRoomingData(true)" class="mt-2 px-3 py-1 bg-[#7A0C2E] text-white rounded-full text-[10px]">Cuba Semula</button></div>';
     if(typeof hideRoomingLoading==='function') hideRoomingLoading();
   }
 }
@@ -1342,10 +1342,10 @@ function hideRoomingLoading(){
   if(el) el.style.display='none';
   const cont=document.getElementById('namelistContainer');
   // If still shows loading spinner, replace
-  if(cont && cont.innerHTML.includes('Memuatkan jemaah')){
+  if(cont && cont.innerHTML.includes('Sedang memuatkan data jemaah')){
     // Will be overwritten by renderNamelist, but if no data, show empty
     if(allRoomingJemaah.length===0){
-      cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400">Tiada jemaah untuk trip ini<br><button onclick="fetchRoomingData(true)" class="mt-2 px-3 py-1 bg-[#7A0C2E] text-white rounded-full text-[10px]">Retry Load</button></div>';
+      cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400">Tiada jemaah untuk trip ini<br><button onclick="fetchRoomingData(true)" class="mt-2 px-3 py-1 bg-[#7A0C2E] text-white rounded-full text-[10px]">Cuba Semula Load</button></div>';
     }
   }
 }
@@ -1361,7 +1361,7 @@ function populateRoomingTripDropdown(){
 
   const currentId=window.selectedTripRecord?.id||localStorage.getItem('effah_active_trip_id')||localStorage.getItem('effah_last_selected_trip')||localStorage.getItem('selectedTripId')||'';
   if(trips.length===0){
-    sel.innerHTML='<option value="">Memuatkan senarai trip...</option>';
+    sel.innerHTML='<option value="">Sedang memuatkan senarai trip...</option>';
     let retries=parseInt(sel.dataset.retries||'0'); if(retries<10){ sel.dataset.retries=retries+1; setTimeout(()=>{ if(typeof fetchTripUmrahData==='function') fetchTripUmrahData(); populateRoomingTripDropdown(); }, 900); }
     return;
   }
@@ -1478,11 +1478,11 @@ function renderNamelist(){
     const assignedTanpa = allRoomingRecords.some(rec=> (rec.fields['LOKASI / CITY']||'MEKAH').toUpperCase()===activeLocation.toUpperCase() && ((rec.fields['JEMAAH TANPA KATIL']||[]).includes(r.id)));
     return !assignedNormal && !assignedTanpa;
   }).length;
-  const totalEl=document.getElementById('totalJemaahBadge'); if(totalEl) { totalEl.textContent=total+' Total'; totalEl.style.display='none'; }
-  const belumEl=document.getElementById('belumAssignBadge'); if(belumEl) { belumEl.textContent=belumInLoc+' Unassigned di '+activeLocation; belumEl.style.display='none'; }
-  const topBelum=document.getElementById('belumAssignTop'); if(topBelum) { topBelum.textContent=belumGlobal+' Unassigned'; topBelum.style.display='none'; }
+  const totalEl=document.getElementById('totalJemaahBadge'); if(totalEl) { totalEl.textContent=total+' Jumlah'; totalEl.style.display='none'; }
+  const belumEl=document.getElementById('belumAssignBadge'); if(belumEl) { belumEl.textContent=belumInLoc+' Belum ditetapkan di '+activeLocation; belumEl.style.display='none'; }
+  const topBelum=document.getElementById('belumAssignTop'); if(topBelum) { topBelum.textContent=belumGlobal+' Belum Ditetapkan'; topBelum.style.display='none'; }
   const topAssign=document.getElementById('assignedTop'); if(topAssign) { topAssign.textContent=(total-belumGlobal)+' Assigned'; topAssign.style.display='none'; }
-  const topUnassignedBadge=document.getElementById('topUnassignedBadge'); if(topUnassignedBadge) topUnassignedBadge.style.display='none';
+  const topBelum DitetapkanBadge=document.getElementById('topBelum DitetapkanBadge'); if(topBelum DitetapkanBadge) topBelum DitetapkanBadge.style.display='none';
   const topAssignedBadge=document.getElementById('topAssignedBadge'); if(topAssignedBadge) topAssignedBadge.style.display='none';
   if(total===0){ cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400">Tiada jemaah untuk trip ini</div>'; return; }
   cont.innerHTML=filtered.map((r,i)=>{
@@ -1530,9 +1530,9 @@ function renderNamelist(){
         </button>
         <div id="insuranDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1" style="background:#ffffff !important; opacity:1 !important;">
           ${insCheckboxes}
-          <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('INSURAN')" class="w-full text-left px-2 py-1 text-[8px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded mb-1">+ Add option</button></div>
+          <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('INSURAN')" class="w-full text-left px-2 py-1 text-[8px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded mb-1">+ Tambah Pilihan</button></div>
           <div class="border-t border-slate-100 mt-1 pt-1 flex justify-between">
-            <button onclick="clearInsuranMulti('${r.id}'); closeInsuranDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-slate-100">Clear</button>
+            <button onclick="clearInsuranMulti('${r.id}'); closeInsuranDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-slate-100">Padam</button>
             <button onclick="closeInsuranDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-[#7A0C2E] text-white">OK</button>
           </div>
         </div>
@@ -1548,9 +1548,9 @@ function renderNamelist(){
           </button>
           <div id="boardDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1" style="background:#ffffff !important; opacity:1 !important; isolation:isolate;">
             ${boardCheckboxes}
-            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('BOARD BASIS')" class="w-full text-left px-2 py-1 text-[8px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded mb-1">+ Add option</button></div>
+            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('BOARD BASIS')" class="w-full text-left px-2 py-1 text-[8px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded mb-1">+ Tambah Pilihan</button></div>
             <div class="border-t border-slate-100 mt-1 pt-1 flex justify-between">
-              <button onclick="clearBoardMulti('${r.id}'); closeBoardDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-slate-100">Clear</button>
+              <button onclick="clearBoardMulti('${r.id}'); closeBoardDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-slate-100">Padam</button>
               <button onclick="closeBoardDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-[#7A0C2E] text-white">OK</button>
             </div>
             <div class="text-[7px] text-slate-400 px-2 mt-1">Boleh pilih 2: BB (MEKAH) + FB (MADINAH)</div>
@@ -1570,7 +1570,7 @@ function renderNamelist(){
           </button>
           <div id="pakejDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[180px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1 max-h-60 overflow-y-auto">
             ${(roomingFieldOptions['PAKEJ']||[]).map(o=>`<button onclick="event.stopPropagation(); updateJemaahField('${r.id}','PAKEJ','${o}'); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${pk===o?'bg-slate-900 text-white font-bold':''}">${o}</button>`).join('')}
-            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('PAKEJ')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Add option</button></div>
+            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('PAKEJ')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Tambah Pilihan</button></div>
           </div>
         </div>
       </div>
@@ -1582,7 +1582,7 @@ function renderNamelist(){
           <div id="visaDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1 max-h-60 overflow-y-auto">
             <button onclick="event.stopPropagation(); updateJemaahField('${r.id}','STATUS VISA',''); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${!getVisaVal(r.fields)?'bg-slate-900 text-white font-bold':''}">- VISA</button>
             ${(roomingFieldOptions['STATUS VISA']||[]).map(o=>`<button onclick="event.stopPropagation(); updateJemaahField('${r.id}','STATUS VISA','${o}'); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${getVisaVal(r.fields)===o?'bg-slate-900 text-white font-bold':''}">${o}</button>`).join('')}
-            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('STATUS VISA')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Add option</button></div>
+            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('STATUS VISA')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Tambah Pilihan</button></div>
           </div>
         </div>
       </div>
@@ -1670,7 +1670,7 @@ function toggleRoomingFilterBox(){
   if(!box) return;
   box.classList.toggle('hidden');
   if(!box.classList.contains('hidden')){
-    try{ populateRoomingFilterDropdown(); }catch(e){ console.warn('populate filter fail', e); }
+    try{ populateRoomingFilterDropdown(); }catch(e){ console.warn('gagal membina tapisan', e); }
   }
 }
 function clearRoomingFilter(){
@@ -1707,14 +1707,14 @@ function populateRoomingFilterDropdown(){
       if(field==='TRAIN'){
         html+=`<div class="space-y-1"><div class="font-bold text-[10px] uppercase tracking-wider text-slate-600">${field}</div>
           <div class="flex flex-col gap-1">
-            <button onclick="document.getElementById('filterPakejRooming').value='TRAIN:true'; filterRoomingNamelist(); toggleRoomingFilterBox();" class="text-left px-2 py-1 text-[11px] hover:bg-slate-100 rounded">TRAIN ✓</button>
-            <button onclick="document.getElementById('filterPakejRooming').value='TRAIN:false'; filterRoomingNamelist(); toggleRoomingFilterBox();" class="text-left px-2 py-1 text-[11px] hover:bg-slate-100 rounded">TRAIN ✗</button>
+            <button onclick="document.getElementById('filterPakejRooming').value='TRAIN:true'; filterRoomingNamelist(); toggleRoomingFilterBox();" class="text-left px-2 py-1 text-[11px] hover:bg-slate-100 rounded">KERETAPI ✓</button>
+            <button onclick="document.getElementById('filterPakejRooming').value='TRAIN:false'; filterRoomingNamelist(); toggleRoomingFilterBox();" class="text-left px-2 py-1 text-[11px] hover:bg-slate-100 rounded">KERETAPI ✗</button>
           </div></div>`;
       } else {
         html+=`<div class="space-y-1"><div class="font-bold text-[10px] uppercase tracking-wider text-slate-600">${field}</div>
           <div class="flex flex-col gap-1 max-h-[120px] overflow-y-auto">`;
         if(opts.length===0){
-          html+=`<span class="text-[10px] text-slate-400">Tiada option (meta fetch gagal)</span>`;
+          html+=`<span class="text-[10px] text-slate-400">Tiada pilihan (gagal mendapatkan metadata)</span>`;
         } else {
           opts.forEach(o=>{
             const safe=o.replace(/'/g,"\\'");
@@ -1725,7 +1725,7 @@ function populateRoomingFilterDropdown(){
       }
     });
     container.innerHTML=html;
-    if(countEl) countEl.textContent = `${Object.values(roomingFieldOptions).flat().length} total options`;
+    if(countEl) countEl.textContent = `${Object.values(roomingFieldOptions).flat().length} jumlah pilihan`;
   }catch(e){ console.error('populateRoomingFilterDropdown error', e); }
 }
 
@@ -1827,7 +1827,7 @@ const emptyCount=Math.max(0,cap-count); const emptySlots=Array.from({length:empt
 
 
 function renderStaffList(){
-  const cont=document.getElementById('staffListContainer'); const badge=document.getElementById('staffTotalBadge'); if(!cont) return; if(badge) badge.textContent=staffList.length+' Staff';
+  const cont=document.getElementById('staffListContainer'); const badge=document.getElementById('staffJumlahBadge'); if(!cont) return; if(badge) badge.textContent=staffList.length+' Staff';
   if(staffList.length===0){ cont.innerHTML='<div class="p-2.5 text-center text-[11px] text-slate-400">Tiada staff / extra</div>'; return; }
   cont.innerHTML=staffList.map((s,idx)=>{
     const assignedInLoc = isStaffAssignedInLocation(s.id, activeLocation);
@@ -1852,7 +1852,7 @@ function renderStaffList(){
           <button onclick="toggleStaffDropdown('${staffId}')" class="w-full text-[8px] border rounded-full px-2.5 py-1.5 font-bold ${boardCls} text-left flex items-center justify-between opacity-100"><span class="truncate">${boardDisplay}</span><span class="ml-1">▼</span></button>
           <div id="staffBoardDrop-${staffId}" class="hidden absolute z-[9999] mt-1 w-56 bg-white border border-slate-300 rounded-xl shadow-2xl p-1 max-h-52 overflow-auto" style="background:#ffffff !important; opacity:1 !important; isolation:isolate;">
             ${boardDropHtml}
-            <div class="flex justify-between gap-1 mt-1 pt-1 border-t bg-white"><button onclick="clearStaffBoardMulti('${staffId}'); closeStaffDropdown('${staffId}')" class="text-[9px] px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200">Clear</button><button onclick="closeStaffDropdown('${staffId}')" class="text-[9px] px-3 py-1 rounded-full bg-[#7A0C2E] text-white hover:bg-[#9d174d]">OK</button></div>
+            <div class="flex justify-between gap-1 mt-1 pt-1 border-t bg-white"><button onclick="clearStaffBoardMulti('${staffId}'); closeStaffDropdown('${staffId}')" class="text-[9px] px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200">Padam</button><button onclick="closeStaffDropdown('${staffId}')" class="text-[9px] px-3 py-1 rounded-full bg-[#7A0C2E] text-white hover:bg-[#9d174d]">OK</button></div>
           </div>
         </div>
         <label class="flex items-center gap-1 text-[8px] border rounded-full px-2.5 py-1.5 cursor-pointer font-bold ${trainCls} shrink-0 opacity-100"><input type="checkbox" ${trainChecked?'checked':''} onchange="updateStaffTrain('${staffId}',this.checked)" class="w-3.5 h-3.5 accent-amber-600"> TRAIN</label>
@@ -2105,7 +2105,7 @@ function dropJemaah(e,roomId){
     const cap=rec.fields['KAPASITI']||4;
     const curCount=(rec.fields['JEMAAH']||[]).length + getStaffForRoom(rec.id).length;
     if(curCount>=cap && !staffId){
-      alert('Bilik Penuh\n\nBilik '+(rec.fields['Room ID / Nama Bilik']||roomId)+' telah mencapai kapasiti maksimum ('+curCount+'/'+cap+').\nSila pilih bilik lain.');
+      alert('Kapasiti Bilik Penuh\n\nBilik '+(rec.fields['Room ID / Nama Bilik']||roomId)+' telah mencapai kapasiti maksimum ('+curCount+'/'+cap+').\nSila pilih bilik lain.');
       const el=document.querySelector(`[data-room-id="${roomId}"]`);
       if(el){ el.classList.add('ring-2','ring-red-400'); setTimeout(()=>el.classList.remove('ring-2','ring-red-400'),800); }
       return;
@@ -2142,7 +2142,7 @@ async function updateCap(roomId,delta){
     await fetch(`https://api.airtable.com/v0/${base}/ROOMING%20LIST/${roomId}`,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields:{'KAPASITI':newCap}})});
     rec.fields['KAPASITI']=newCap;
     renderRoomingGrid(); renderLocationTabs(); renderNamelist(); renderStaffList();
-  }catch(e){ console.error(e); alert('Gagal mengemaskini kapasiti bilik: '+e.message); }
+  }catch(e){ console.error(e); alert('Gagal mengemas kini kapasiti bilik: '+e.message); }
 }
 async function updateRoomField(roomId,field,value,doRender=true){
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
@@ -2150,7 +2150,7 @@ async function updateRoomField(roomId,field,value,doRender=true){
     await fetch(`https://api.airtable.com/v0/${base}/ROOMING%20LIST/${roomId}`,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields:{[field]:value}})});
     const rec=allRoomingRecords.find(r=>r.id===roomId); if(rec) rec.fields[field]=value;
     if(doRender){ renderRoomingGrid(); renderNamelist(); renderStaffList(); renderLocationTabs(); }
-  }catch(e){ console.error(e); alert('Gagal mengemaskini data bilik: '+e.message); }
+  }catch(e){ console.error(e); alert('Gagal mengemas kini data bilik: '+e.message); }
 }
 
 async function updateJemaahField(jemaahId, field, value){
@@ -2159,7 +2159,7 @@ async function updateJemaahField(jemaahId, field, value){
     value = null;
   }
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
-  if(!base||!pat) return alert('Airtable config missing');
+  if(!base||!pat) return alert('Konfigurasi Airtable tidak ditemui. Sila semak tetapan API.');
   const rec=allRoomingJemaah.find(r=>r.id===jemaahId);
   if(rec){ rec.fields[field]=value; }
   try{
@@ -2241,7 +2241,7 @@ async function updateJemaahField(jemaahId, field, value){
               }
             }
           }catch(e){ console.warn('Auto-create via meta failed', e); }
-          alert(`Gagal update jemaah ${field}: Insufficient permissions to create new select option "${opt}"
+          alert(`Gagal mengemas kini data jemaah bagi medan ${field}: Insufficient permissions to create new select option "${opt}"
 Fix: Tambah manual di Airtable atau regenerate PAT dengan schema.bases:write`);
           if(rec) rec.fields[field]=null;
           try{ renderNamelist(); }catch(e){}
@@ -2257,7 +2257,7 @@ Fix: Tambah manual di Airtable atau regenerate PAT dengan schema.bases:write`);
   }catch(e){
     console.error('updateJemaahField error', e);
     if(!(e.message && e.message.includes('INVALID_MULTIPLE_CHOICE_OPTIONS'))){
-      alert(`Gagal update jemaah ${field}: `+e.message.substring(0,400));
+      alert(`Gagal mengemas kini data jemaah bagi medan ${field}: `+e.message.substring(0,400));
     }
   }
 }
@@ -2265,7 +2265,7 @@ function updateJemaahFieldSync(jemaahId, field, value){ return updateJemaahField
 
 async function updateJemaahBoardMulti(jemaahId, selectedArr){
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
-  if(!base||!pat) return alert('Airtable config missing');
+  if(!base||!pat) return alert('Konfigurasi Airtable tidak ditemui. Sila semak tetapan API.');
   const rec=allRoomingJemaah.find(r=>r.id===jemaahId); if(!rec) return;
   rec.fields['BOARD BASIS']=selectedArr;
   rec.fields['BOARD']=selectedArr.join(', ');
@@ -2286,7 +2286,7 @@ async function updateJemaahBoardMulti(jemaahId, selectedArr){
       }
       if(data.error) throw new Error(data.error.message);
     }
-  }catch(e){ console.error(e); alert('Gagal update BOARD: '+e.message+'\n\nPastikan field BOARD BASIS di Airtable sudah tukar ke Multiple Select, bukan Single Select.'); fetchRoomingData(); }
+  }catch(e){ console.error(e); alert('Gagal mengemas kini BOARD BASIS: '+e.message+'\n\nSila pastikan medan BOARD BASIS di Airtable telah ditukar kepada Multiple Select, bukan Single Select.'); fetchRoomingData(); }
 }
 function toggleBoardMulti(jemaahId, option){
   const rec=allRoomingJemaah.find(r=>r.id===jemaahId); if(!rec) return;
@@ -2322,18 +2322,18 @@ window.clearBoardMulti = clearBoardMulti;
 
 async function updateJemaahCheckbox(jemaahId, field, checked){
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
-  if(!base||!pat) return alert('Airtable config missing');
+  if(!base||!pat) return alert('Konfigurasi Airtable tidak ditemui. Sila semak tetapan API.');
   const rec=allRoomingJemaah.find(r=>r.id===jemaahId); if(rec) rec.fields[field]=checked;
   renderNamelist();
   try{
     const res=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jemaahId}`,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields: {[field]: checked}, typecast: true})});
     const data=await res.json();
     if(!data.id && data.error) throw new Error(data.error.message);
-  }catch(e){ console.error(e); alert('Gagal update checkbox '+field+': '+e.message); fetchRoomingData(); }
+  }catch(e){ console.error(e); alert('Gagal mengemas kini kotak pilihan '+field+': '+e.message); fetchRoomingData(); }
 }
 async function updateJemaahInsuran(jemaahId, value){
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
-  if(!base||!pat) return alert('Airtable config missing');
+  if(!base||!pat) return alert('Konfigurasi Airtable tidak ditemui. Sila semak tetapan API.');
   const rec=allRoomingJemaah.find(r=>r.id===jemaahId); 
   if(rec){
     rec.fields['INSURAN'] = value ? [value] : [];
@@ -2344,11 +2344,11 @@ async function updateJemaahInsuran(jemaahId, value){
     const res=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jemaahId}`,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields: payload})});
     const data=await res.json();
     if(!data.id && data.error) throw new Error(data.error.message);
-  }catch(e){ console.error(e); alert('Gagal update INSURAN: '+e.message); fetchRoomingData(); }
+  }catch(e){ console.error(e); alert('Gagal mengemas kini INSURAN: '+e.message); fetchRoomingData(); }
 }
 async function toggleInsuran(jemaahId, opt){
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
-  if(!base||!pat) return alert('Airtable config missing');
+  if(!base||!pat) return alert('Konfigurasi Airtable tidak ditemui. Sila semak tetapan API.');
   const rec=allRoomingJemaah.find(r=>r.id===jemaahId);
   if(!rec) return;
   let curr = getInsuranArray(rec.fields);
@@ -2363,7 +2363,7 @@ async function toggleInsuran(jemaahId, opt){
     const res=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jemaahId}`,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields: {'INSURAN': curr}})});
     const data=await res.json();
     if(!data.id && data.error) throw new Error(data.error.message);
-  }catch(e){ console.error(e); alert('Gagal update INSURAN multi: '+e.message); fetchRoomingData(); }
+  }catch(e){ console.error(e); alert('Gagal mengemas kini INSURAN (pelbagai pilihan): '+e.message); fetchRoomingData(); }
 }
 function updateHotelInline(roomId, newName){
   const name = (newName||'').trim().toUpperCase();
@@ -2544,7 +2544,7 @@ async function executeCopyRooms(){
     }catch(e){ failed++; console.error(e); }
   }
   closeCopyRoomsModal(); renderRoomingGrid(); renderLocationTabs(); renderNamelist(); renderStaffList();
-  if(created>0) alert(`Berjaya menyalin ${created} bilik dari ${src} ke ${activeLocation} (${modeText}).` + (failed>0?` ${failed} bilik gagal disalin.`:''));
+  if(created>0) alert(`Berjaya menyalin ${created} bilik daripada ${src} ke ${activeLocation} (${modeText}).` + (failed>0?` ${failed} bilik gagal disalin.`:''));
   else alert('Gagal menyalin bilik. Sila cuba semula.');
 }
 
@@ -2838,7 +2838,7 @@ function generateRoomingPrint(orientation){ orientation = orientation || 'landsc
       const totalJemaahLoc = rooms.reduce((sum,r)=> sum + (r.fields['JEMAAH']||[]).length, 0);
       const totalBabyLoc = rooms.reduce((sum,r)=> sum + (r.fields['JEMAAH TANPA KATIL']||[]).length, 0);
       const totalStaffLoc = rooms.reduce((sum,r)=> sum + getStaffForRoom(r.id).length, 0);
-      const fbTotalLoc = fbListForLoc.length;
+      const fbJumlahLoc = fbListForLoc.length;
 
       // Room blocks - smaller for portrait
       const isPortrait = orientation==='portrait';
@@ -2985,7 +2985,7 @@ function generateRoomingPrint(orientation){ orientation = orientation || 'landsc
           <div style="background:#7A0C2E;color:#fff;padding:4px 8px;font-weight:bold;font-size:10px">${loc} OVERVIEW - ${rooms.length} Bilik</div>
           ${overviewProfessionalHTML}
           <div style="background:#f5f5f5;padding:5px 8px;font-size:9px;border-top:1px solid #000;display:flex;justify-content:space-between">
-            <span><b>Total:</b> ${rooms.length} bilik</span>
+            <span><b>Jumlah:</b> ${rooms.length} bilik</span>
             <span>${totalJemaahLoc+totalBabyLoc} jemaah + ${totalStaffLoc} staff</span>
           </div>
         </div>
@@ -3022,10 +3022,10 @@ function generateRoomingPrint(orientation){ orientation = orientation || 'landsc
     const _insJ = allRoomingJemaah.filter(j=>{ try{return getInsuranArray(j.fields).length>0;}catch(e){return false;}}).length;
     const _insS = _staffList.filter(s=>{ try{const f=s.fields||{}; return (f['INSURAN'] && f['INSURAN'].length>0) || (typeof getInsuranArray==='function' && getInsuranArray(f).length>0) || !!s.insuran; }catch(e){return false;}}).length;
     const _totalInsuranUnique = _insJ + _insS;
-    const namelistOverviewHTML = '<div style="margin-top:12px;border:1px solid #000;padding:8px 10px;background:#f9fafb"><div style="font-weight:bold;font-size:10px;margin-bottom:6px">TRIP OVERVIEW</div><div style="display:flex;flex-wrap:wrap;gap:20px;font-size:9px"><div><b>Bilangan Speedtrain:</b> ' + _totalTrainWithStaff + ' orang (Jemaah: ' + _trainJemaahCount + ' + Staff: ' + _trainStaffCount + ')</div><div><b>Bilangan Insuran:</b> ' + _totalInsuranUnique + ' orang</div><div><b>Visa:</b> ' + visaHtml + '</div><div><b>Total Jemaah:</b> ' + totalJemaahOnly + '</div><div><b>Total Staff:</b> ' + totalStaffCount + '</div></div></div>';
+    const namelistOverviewHTML = '<div style="margin-top:12px;border:1px solid #000;padding:8px 10px;background:#f9fafb"><div style="font-weight:bold;font-size:10px;margin-bottom:6px">TRIP OVERVIEW</div><div style="display:flex;flex-wrap:wrap;gap:20px;font-size:9px"><div><b>Bilangan Speedtrain:</b> ' + _totalTrainWithStaff + ' orang (Jemaah: ' + _trainJemaahCount + ' + Staff: ' + _trainStaffCount + ')</div><div><b>Bilangan Insuran:</b> ' + _totalInsuranUnique + ' orang</div><div><b>Visa:</b> ' + visaHtml + '</div><div><b>Jumlah Jemaah:</b> ' + totalJemaahOnly + '</div><div><b>Jumlah Staff:</b> ' + totalStaffCount + '</div></div></div>';
 
     const html=`<html><head><title>Rooming ${tripName} - ${orientation}</title><style>body{font-family:Arial,Helvetica,sans-serif;font-size:10px;margin:12px;color:#000}table{border-collapse:collapse;width:100%}th,td{border:1px solid #000;padding:4px 6px;font-size:9px}th{background:#7A0C2E;color:#fff;font-weight:bold;text-transform:uppercase}.header{display:flex;justify-content:space-between;font-weight:bold;font-size:12px;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:8px}.page-break{page-break-before:always}.namelist-page{max-width:900px;margin:0 auto}.location-page{max-width:100%}@media print{@page{size:A4 ${orientation};margin:${orientation==='portrait' ? '8mm' : '10mm'}}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.page-break{page-break-before:always}}</style></head><body>
-      <div class="namelist-page"><div class="header"><span>NAMELIST ${tripName}</span><span>Total: ${allRoomingJemaah.length} Jemaah + ${combinedStaff.length} Staff</span></div><div style="font-size:9px;margin-bottom:8px"><b>Trip:</b> ${tripName} | <b>Tarikh Cetak:</b> ${new Date().toLocaleDateString('ms-MY')} | <b>Orientasi:</b> ${orientation.toUpperCase()}</div><table style="table-layout:fixed"><colgroup><col style="width:28px"><col style="width:34%"><col style="width:85px"><col style="width:40px"><col style="width:55px"><col style="width:60px"><col style="width:65px"></colgroup><tr><th>NO</th><th style="text-align:left">NAMA JEMAAH</th><th>BOARD</th><th>TRAIN</th><th>PAKEJ</th><th>INSURAN</th><th>VISA</th></tr>${namelistRows}</table>${namelistOverviewHTML}</div>
+      <div class="namelist-page"><div class="header"><span>NAMELIST ${tripName}</span><span>Jumlah: ${allRoomingJemaah.length} Jemaah + ${combinedStaff.length} Staff</span></div><div style="font-size:9px;margin-bottom:8px"><b>Trip:</b> ${tripName} | <b>Tarikh Cetak:</b> ${new Date().toLocaleDateString('ms-MY')} | <b>Orientasi:</b> ${orientation.toUpperCase()}</div><table style="table-layout:fixed"><colgroup><col style="width:28px"><col style="width:34%"><col style="width:85px"><col style="width:40px"><col style="width:55px"><col style="width:60px"><col style="width:65px"></colgroup><tr><th>NO</th><th style="text-align:left">NAMA JEMAAH</th><th>BOARD</th><th>TRAIN</th><th>PAKEJ</th><th>INSURAN</th><th>VISA</th></tr>${namelistRows}</table>${namelistOverviewHTML}</div>
       ${locationPages||'<div style="page-break-before:always"><div style="border:1px dashed #000;padding:20px;text-align:center">Tiada bilik untuk trip ini</div></div>'}
       <script>window.onload=function(){setTimeout(()=>window.print(),600)}; window.onafterprint=function(){window.close();}; setTimeout(()=>{try{window.close();}catch(e){}},3500);<\/script>
     </body></html>`;
@@ -3073,7 +3073,7 @@ function renderStaffList_V80(){
         <button onclick="event.stopPropagation(); toggleStaffDropdown('${staffId}')" class="text-[7px] border rounded-full px-2 py-0.5 font-bold ${fbCls} w-full text-left flex justify-between items-center bg-white" style="opacity:1;"><span class="truncate">${fbDisplay}</span><span>▼</span></button>
         <div id="staffBoardDrop-${staffId}" class="hidden absolute right-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1">
           ${boardCheckboxes}
-          <div class="border-t border-slate-100 mt-1 pt-1 flex justify-between"><button onclick="clearStaffBoardMulti('${staffId}'); closeStaffDropdown('${staffId}')" class="text-[8px] px-2 py-0.5 rounded-full bg-slate-100">Clear</button><button onclick="closeStaffDropdown('${staffId}')" class="text-[8px] px-2 py-0.5 rounded-full bg-[#7A0C2E] text-white">OK</button></div>
+          <div class="border-t border-slate-100 mt-1 pt-1 flex justify-between"><button onclick="clearStaffBoardMulti('${staffId}'); closeStaffDropdown('${staffId}')" class="text-[8px] px-2 py-0.5 rounded-full bg-slate-100">Padam</button><button onclick="closeStaffDropdown('${staffId}')" class="text-[8px] px-2 py-0.5 rounded-full bg-[#7A0C2E] text-white">OK</button></div>
           <div class="text-[7px] text-slate-400 px-2 mt-1">Boleh pilih 2: BB (MEKAH) + FB (MADINAH)</div>
         </div>
       </div>
@@ -3123,13 +3123,13 @@ function createMissingRoomingStructure(){
           <div class="bg-white rounded-xl border">
             <div class="p-3 border-b flex justify-between items-center">
               <span class="text-[11px] font-bold">NAMELIST JEMAAH</span>
-              <span id="topUnassignedBadge" class="text-[9px] bg-amber-100 px-2 py-0.5 rounded-full">0</span>
+              <span id="topBelum DitetapkanBadge" class="text-[9px] bg-amber-100 px-2 py-0.5 rounded-full">0</span>
             </div>
             <div class="p-2"><input id="searchNamelist" placeholder="Cari jemaah..." class="w-full text-[11px] border rounded-full px-3 py-1.5 mb-2" oninput="renderNamelist()"></div>
-            <div id="namelistContainer" class="max-h-[60vh] overflow-y-auto"><div class="p-6 text-center text-[11px] text-slate-400">Memuatkan jemaah...</div></div>
+            <div id="namelistContainer" class="max-h-[60vh] overflow-y-auto"><div class="p-6 text-center text-[11px] text-slate-400">Sedang memuatkan data jemaah...</div></div>
           </div>
           <div class="bg-white rounded-xl border mt-4">
-            <div class="p-3 border-b flex justify-between"><span class="text-[11px] font-bold">STAFF / EXTRA</span><span id="staffTotalBadge" class="text-[9px] bg-slate-100 px-2 py-0.5 rounded-full">0</span></div>
+            <div class="p-3 border-b flex justify-between"><span class="text-[11px] font-bold">STAFF / EXTRA</span><span id="staffJumlahBadge" class="text-[9px] bg-slate-100 px-2 py-0.5 rounded-full">0</span></div>
             <div class="p-2"><input id="searchStaff" placeholder="Cari staff..." class="w-full text-[11px] border rounded-full px-3 py-1.5 mb-2" oninput="renderStaffList()"></div>
             <div id="staffListContainer" class="max-h-[30vh] overflow-y-auto"></div>
           </div>
@@ -3547,7 +3547,7 @@ console.log('Drag room handlers injected');
         // Direct Airtable clear for Single Select - bypass original
         const base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
         const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
-        if(!base||!pat) return alert('Airtable config missing');
+        if(!base||!pat) return alert('Konfigurasi Airtable tidak ditemui. Sila semak tetapan API.');
         const rec = allRoomingJemaah.find(r=>r.id===jemaahId);
         if(rec) rec.fields[field]=null;
         if(typeof renderNamelist==='function') renderNamelist();
@@ -3715,7 +3715,7 @@ async function loadPdfLib(){
   });
 }
 
-async function fetchWithRetry(url, retries=2){
+async function fetchWithCuba Semula(url, retries=2){
   for(let i=0;i<=retries;i++){
     if(window._visaDownloadCancelled) throw new Error('Cancelled by user');
     try{
@@ -3874,7 +3874,7 @@ async function _downloadAllDocs(fieldName, label){
 
         try{
           if(btn) btn.innerHTML=`⏳ ${i+1}/${withVisa.length} ${nama.substring(0,12)}...`;
-          const buffer=await fetchWithRetry(url);
+          const buffer=await fetchWithCuba Semula(url);
           
           if(isPdf){
             try{
@@ -4010,7 +4010,7 @@ async function _downloadAllDocs(fieldName, label){
     if(failList.length>0){
       document.getElementById('visaProgressLog').innerHTML+=`<div class="text-red-500">${failList.join('<br>')}</div>`;
     }
-    updateProgress(withVisa.length, withVisa.length, `Saved: ${fileName}`, `Total size: ${(blob.size/1024/1024).toFixed(2)} MB`);
+    updateProgress(withVisa.length, withVisa.length, `Saved: ${fileName}`, `Jumlah size: ${(blob.size/1024/1024).toFixed(2)} MB`);
 
     setTimeout(()=>{
       const m=document.getElementById('visaDownloadModal');
@@ -4147,7 +4147,7 @@ async function downloadHotelDocs(lokasi, hotelName, fieldName, label){
         const filename=att.filename||'';
         const isPdf = filename.toLowerCase().endsWith('.pdf') || (att.type && att.type.includes('pdf'));
         try{
-          const buffer=await fetchWithRetry(url);
+          const buffer=await fetchWithCuba Semula(url);
           if(isPdf){
             try{
               const srcPdf=await PDFDocument.load(buffer, {ignoreEncryption:true});
