@@ -1,9 +1,9 @@
-console.log('ROOMING V109 DIRECT FETCH FIX - PAKEJ BLANK + 422 TYPECAST');
+console.log('ROOMING V110 DIRECT FETCH COMPLETE - ALL FIELDS META + FILTER FIX');
 var _autoScrollInterval = window._autoScrollInterval || null;
 window._roomingDragListenersAdded = window._roomingDragListenersAdded || false;
 // ROOMING V103 CLEAN - Deduped + Modular Ready
 // Generated from V102 - Duplicate functions removed, JEDDAH bug fixed
-console.log('ROOMING V109 CLEAN loaded - direct fetch no hardcoded');
+console.log('ROOMING V103 CLEAN loaded');
 var _autoScrollInterval = window._autoScrollInterval || null;
 window._autoScrollInterval = _autoScrollInterval;
 
@@ -61,19 +61,16 @@ function renderRoomingHijriTabs(){
   if(!container) return;
   const trips=window.allTripUmrahRecords||window.allTripRecords||window.allTrips||(typeof allTripUmrahRecords!=='undefined'?allTripUmrahRecords:[]);
   const rawSeasons=trips.map(getTripHijriForRooming).filter(Boolean);
-  // Extract year and sort 1447H -> 1448H -> 1449H
   const seasons=[...new Set(rawSeasons)].sort((a,b)=>{
     const ya=parseInt((a.match(/(\d{4})/)||[0,0])[1])||0;
     const yb=parseInt((b.match(/(\d{4})/)||[0,0])[1])||0;
     return ya-yb;
   });
-  // Auto select earliest if none selected - wajib select season paling awal
   if(!selectedRoomingHijriFilter && seasons.length>0){
     selectedRoomingHijriFilter=seasons[0];
     window.selectedRoomingHijriFilter=selectedRoomingHijriFilter;
     localStorage.setItem('effah_rooming_hijri_filter', selectedRoomingHijriFilter);
   }
-  // If current filter not in list (e.g. trip deleted), reset to earliest
   if(selectedRoomingHijriFilter && !seasons.includes(selectedRoomingHijriFilter) && seasons.length>0){
     selectedRoomingHijriFilter=seasons[0];
     window.selectedRoomingHijriFilter=selectedRoomingHijriFilter;
@@ -109,11 +106,18 @@ async function fetchRoomingFieldOptionsFromMeta(){
   try{
     const base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
     const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
-    if(!base||!pat){ _roomingMetaFetching=false; return null; }
+    if(!base||!pat){ 
+      console.warn('V110: Missing base/pat for meta fetch');
+      _roomingMetaFetching=false; 
+      return null; 
+    }
+    console.log('V110: Fetching meta for direct fetch...', base);
     const res = await fetch(`https://api.airtable.com/v0/meta/bases/${base}/tables`, {headers:{Authorization:`Bearer ${pat}`}});
     if(!res.ok){
-      console.warn('Meta API failed', res.status, await res.text().then(t=>t.substring(0,200)));
+      console.warn('V110: Meta API failed', res.status, await res.text().then(t=>t.substring(0,500)));
       _roomingMetaFetching=false;
+      // Fallback to records
+      try{ buildRoomingFieldOptionsFromRecords(); }catch(e){}
       return null;
     }
     const data = await res.json();
@@ -121,31 +125,40 @@ async function fetchRoomingFieldOptionsFromMeta(){
     let targetTable = tables.find(t=> (t.name||'').toUpperCase()==='DATA JEMAAH UMRAH');
     if(!targetTable) targetTable = tables.find(t=> (t.name||'').toUpperCase().includes('JEMAAH UMRAH'));
     if(!targetTable) targetTable = tables.find(t=> t.name && t.name.toUpperCase().includes('JEMAAH'));
-    if(!targetTable){ _roomingMetaFetching=false; return null; }
+    if(!targetTable){ 
+      console.warn('V110: DATA JEMAAH UMRAH table not found in meta');
+      _roomingMetaFetching=false; 
+      return null; 
+    }
     _roomingMetaCache = targetTable;
     const fields = targetTable.fields||[];
     const wanted = ['BOARD BASIS','INSURAN','PAKEJ','STATUS VISA','VISA'];
     wanted.forEach(w=>{
       const f = fields.find(fl=> (fl.name||'').toUpperCase()===w.toUpperCase());
       if(f){
-        _roomingFieldTypes[w] = f.type; // singleSelect or multipleSelects
+        _roomingFieldTypes[w] = f.type;
         if(f.options && Array.isArray(f.options.choices)){
           const choices = f.options.choices.map(c=>c.name).filter(Boolean);
           roomingFieldOptions[w] = choices.sort();
           if(w==='STATUS VISA') roomingFieldOptions['VISA']=choices.sort();
+          console.log(`V110: Direct fetch ${w}:`, choices);
         }
+      } else {
+        console.warn(`V110: Field ${w} not found in meta`);
       }
     });
     window.roomingFieldOptions=roomingFieldOptions;
     window._roomingFieldTypes=_roomingFieldTypes;
-    console.log('Direct fetch from Airtable meta', roomingFieldOptions, _roomingFieldTypes);
-    try{ populateRoomingFilterDropdown(); }catch(e){}
-    try{ renderNamelist(); }catch(e){}
+    window._roomingMetaCache=_roomingMetaCache;
+    console.log('V110: Direct fetch from Airtable meta complete', roomingFieldOptions, _roomingFieldTypes);
+    try{ populateRoomingFilterDropdown(); }catch(e){ console.warn('populate filter fail', e); }
+    try{ renderNamelist(); }catch(e){ console.warn('render namelist fail', e); }
     _roomingMetaFetching=false;
     return roomingFieldOptions;
   }catch(e){
-    console.warn('fetchRoomingFieldOptionsFromMeta error', e);
+    console.warn('V110: fetchRoomingFieldOptionsFromMeta error', e);
     _roomingMetaFetching=false;
+    try{ buildRoomingFieldOptionsFromRecords(); }catch(e2){}
     return null;
   }
 }
@@ -153,17 +166,18 @@ async function fetchRoomingFieldOptionsFromMeta(){
 function buildRoomingFieldOptionsFromRecords(){
   try{
     const fieldsToBuild = ['BOARD BASIS','INSURAN','PAKEJ','STATUS VISA'];
-    // V109 FIX: Don't skip entirely if only some fields have meta - build missing fields from records
+    // V110 FIX: If meta already has options, don't override, but fill missing ones from records
     const hasSomeMeta = _roomingMetaCache && Object.values(roomingFieldOptions).some(arr=>arr && arr.length>0);
     if(hasSomeMeta){
-      console.log('Using meta cached options, but will fill missing fields from records for PAKEJ blank fix');
-      // Don't return, continue to fill empty ones
+      console.log('V110: Meta cached exists, filling only empty fields from records');
     }
-    // Direct fetch from records only - no hardcoded, no localStorage - V109: only fill empty fields to fix PAKEJ blank
     fieldsToBuild.forEach(fieldName=>{
-      // If already have meta options, skip this field
-      if(roomingFieldOptions[fieldName] && roomingFieldOptions[fieldName].length>0) return;
+      if(roomingFieldOptions[fieldName] && roomingFieldOptions[fieldName].length>0) {
+        // Already has meta options, keep it - this is the full list from Airtable
+        return;
+      }
       const values = new Set();
+      // Scan from allRoomingJemaah (filtered by trip) as fallback - will be limited
       (allRoomingJemaah||[]).forEach(r=>{
         const f = r.fields || {};
         let v = f[fieldName] || (fieldName==='STATUS VISA' ? (f['STATUS VISA']||f['VISA']||'') : '');
@@ -178,12 +192,26 @@ function buildRoomingFieldOptionsFromRecords(){
           }
         }
       });
-      roomingFieldOptions[fieldName] = Array.from(values).filter(Boolean).sort();
-      if(fieldName==='STATUS VISA') roomingFieldOptions['VISA'] = roomingFieldOptions[fieldName];
+      // Also scan _allJemaahDirect if available for broader list
+      if(values.size===0 && window._allJemaahDirect && window._allJemaahDirect.length>0){
+        window._allJemaahDirect.forEach(r=>{
+          const f=r.fields||{};
+          let v=f[fieldName]||'';
+          if(v){
+            if(Array.isArray(v)) v.forEach(x=>{ if(x) values.add(String(x).trim()); });
+            else if(typeof v==='string' && v.trim() && v!=='-') values.add(v.trim());
+          }
+        });
+      }
+      if(values.size>0){
+        roomingFieldOptions[fieldName] = Array.from(values).filter(Boolean).sort();
+        if(fieldName==='STATUS VISA') roomingFieldOptions['VISA'] = roomingFieldOptions[fieldName];
+        console.log(`V110: Built ${fieldName} from records:`, roomingFieldOptions[fieldName]);
+      }
     });
     window.roomingFieldOptions = roomingFieldOptions;
-    console.log('Direct fetch from records built', roomingFieldOptions);
     try{ populateRoomingFilterDropdown(); }catch(e){}
+    try{ renderNamelist(); }catch(e){}
   }catch(e){ console.error('buildRoomingFieldOptions error', e); }
 }
 
@@ -820,6 +848,7 @@ function formatCheckbox(v){ return v ? '✓' : '-'; }
 document.addEventListener('DOMContentLoaded', () => {
   if(document.getElementById('modul-rooming')) renderRoomingHTML();
   setTimeout(()=>populateRoomingTripDropdown(), 600);
+  setTimeout(()=>{ try{ fetchRoomingFieldOptionsFromMeta(); }catch(e){} }, 800);
 });
 
 function showRoomingLoading(){
@@ -1636,6 +1665,71 @@ function makeNamelistSticky(){
 
 function filterRoomingNamelist(){ renderNamelist(); }
 
+function toggleRoomingFilterBox(){
+  const box=document.getElementById('roomingFilterBox');
+  if(!box) return;
+  box.classList.toggle('hidden');
+  if(!box.classList.contains('hidden')){
+    try{ populateRoomingFilterDropdown(); }catch(e){ console.warn('populate filter fail', e); }
+  }
+}
+function clearRoomingFilter(){
+  const sel=document.getElementById('filterPakejRooming');
+  if(sel) sel.value='';
+  const label=document.getElementById('filterPakejRoomingLabel');
+  if(label) label.textContent='All';
+  try{ filterRoomingNamelist(); }catch(e){ renderNamelist(); }
+  const box=document.getElementById('roomingFilterBox');
+  if(box) box.classList.add('hidden');
+}
+function populateRoomingFilterDropdown(){
+  try{
+    const container=document.getElementById('roomingFilterBoxContent');
+    const countEl=document.getElementById('roomingFilterCount');
+    if(!container) return;
+    const fields = ['BOARD BASIS','PAKEJ','STATUS VISA','INSURAN','TRAIN'];
+    let html='';
+    fields.forEach(field=>{
+      let opts = roomingFieldOptions[field]||[];
+      if(field==='VISA') opts = roomingFieldOptions['STATUS VISA']||roomingFieldOptions['VISA']||[];
+      // Fallback if empty, try from records for filter box only
+      if((!opts || opts.length===0) && field!=='TRAIN'){
+        const set=new Set();
+        (allRoomingJemaah||[]).forEach(r=>{
+          const f=r.fields||{};
+          let v=f[field]|| (field==='STATUS VISA'? (f['STATUS VISA']||f['VISA']||''): '');
+          if(!v) return;
+          if(Array.isArray(v)) v.forEach(x=>{ if(x) set.add(String(x).trim()); });
+          else if(typeof v==='string' && v.trim() && v!=='-') set.add(v.trim());
+        });
+        opts = Array.from(set).sort();
+      }
+      if(field==='TRAIN'){
+        html+=`<div class="space-y-1"><div class="font-bold text-[10px] uppercase tracking-wider text-slate-600">${field}</div>
+          <div class="flex flex-col gap-1">
+            <button onclick="document.getElementById('filterPakejRooming').value='TRAIN:true'; filterRoomingNamelist(); toggleRoomingFilterBox();" class="text-left px-2 py-1 text-[11px] hover:bg-slate-100 rounded">TRAIN ✓</button>
+            <button onclick="document.getElementById('filterPakejRooming').value='TRAIN:false'; filterRoomingNamelist(); toggleRoomingFilterBox();" class="text-left px-2 py-1 text-[11px] hover:bg-slate-100 rounded">TRAIN ✗</button>
+          </div></div>`;
+      } else {
+        html+=`<div class="space-y-1"><div class="font-bold text-[10px] uppercase tracking-wider text-slate-600">${field}</div>
+          <div class="flex flex-col gap-1 max-h-[120px] overflow-y-auto">`;
+        if(opts.length===0){
+          html+=`<span class="text-[10px] text-slate-400">Tiada option (meta fetch gagal)</span>`;
+        } else {
+          opts.forEach(o=>{
+            const safe=o.replace(/'/g,"\\'");
+            html+=`<button onclick="document.getElementById('filterPakejRooming').value='${field}:${safe}'; document.getElementById('filterPakejRoomingLabel').textContent='${safe}'; filterRoomingNamelist(); toggleRoomingFilterBox();" class="text-left px-2 py-1 text-[11px] hover:bg-slate-100 rounded truncate">${o}</button>`;
+          });
+        }
+        html+=`</div></div>`;
+      }
+    });
+    container.innerHTML=html;
+    if(countEl) countEl.textContent = `${Object.values(roomingFieldOptions).flat().length} total options`;
+  }catch(e){ console.error('populateRoomingFilterDropdown error', e); }
+}
+
+
 function renderRoomingGrid(){
   const grid=document.getElementById('roomingGrid'); if(!grid) return;
   let rooms=[...allRoomingRecords].filter(r=>(r.fields['LOKASI / CITY']||'MEKAH').toUpperCase()===activeLocation.toUpperCase());
@@ -2064,7 +2158,6 @@ async function updateJemaahField(jemaahId, field, value){
   if(field==='PAKEJ' && (value==='-' || value==='')){
     value = null;
   }
-
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
   if(!base||!pat) return alert('Airtable config missing');
   const rec=allRoomingJemaah.find(r=>r.id===jemaahId);
@@ -2072,7 +2165,6 @@ async function updateJemaahField(jemaahId, field, value){
   try{
     let payloadValue = value;
     const fieldType = (_roomingFieldTypes && _roomingFieldTypes[field]) || (_roomingFieldTypes && _roomingFieldTypes[field.toUpperCase()]) || null;
-    // V109 FIX: handle singleSelect vs multipleSelects from meta
     if(field==='INSURAN' || fieldType==='multipleSelects'){
       if(Array.isArray(value)) payloadValue = value.length?value:[];
       else if(typeof value==='string' && value.trim()!==''){
@@ -2083,6 +2175,9 @@ async function updateJemaahField(jemaahId, field, value){
         }
         if(payloadValue.length===0) payloadValue=[];
       } else payloadValue=[];
+      if(fieldType==='singleSelect' && Array.isArray(payloadValue)){
+        payloadValue = payloadValue[0]||null;
+      }
     } else if(field==='BOARD BASIS' || field==='BOARD'){
       if(Array.isArray(value)) payloadValue = value.length?value:[];
       else if(typeof value==='string' && value.includes(',')){
@@ -2090,12 +2185,10 @@ async function updateJemaahField(jemaahId, field, value){
       } else if(typeof value==='string' && value.trim()!==''){
         payloadValue = [value.trim()];
       } else payloadValue=[];
-      // If meta says this is singleSelect, send string not array
       if(fieldType==='singleSelect' && Array.isArray(payloadValue)){
-        payloadValue = payloadValue[0] || null;
+        payloadValue = payloadValue[0]||null;
       }
     } else {
-      // For PAKEJ, STATUS VISA which are usually singleSelect
       if(Array.isArray(value)){
         payloadValue = fieldType==='multipleSelects' ? value : (value[0]||null);
       }
@@ -2106,7 +2199,7 @@ async function updateJemaahField(jemaahId, field, value){
     } else {
       fieldsToSend[field] = payloadValue;
     }
-    console.log('V109 direct fetch updateJemaahField', jemaahId, field, 'type:', fieldType, '->', fieldsToSend[field]);
+    console.log('V110 direct fetch updateJemaahField', jemaahId, field, 'type:', fieldType, '->', fieldsToSend[field]);
     const res=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jemaahId}`,{
       method:'PATCH',
       headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
@@ -2119,9 +2212,8 @@ async function updateJemaahField(jemaahId, field, value){
         let msg = errText;
         try{ const j=JSON.parse(errText); if(j.error && j.error.message) msg=j.error.message; }catch(e){}
         if(msg.includes('Insufficient permissions to create new select option')){
-          const match = msg.match(/\"([^\"]+)\"/);
+          const match = msg.match(/"([^"]+)"/);
           const opt = match?match[1]:value;
-          // V109: Try auto-create via meta API first, then retry with typecast
           try{
             if(_roomingMetaCache && pat){
               const tableId = _roomingMetaCache.id;
@@ -2135,14 +2227,12 @@ async function updateJemaahField(jemaahId, field, value){
                     headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
                     body: JSON.stringify({options:{choices: existingChoices}})
                   });
-                  // Retry
                   const retryRes=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jemaahId}`,{
                     method:'PATCH',
                     headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
                     body: JSON.stringify({fields: fieldsToSend, typecast: true})
                   });
                   if(retryRes.ok){
-                    console.log('Retry after meta create success');
                     await fetchRoomingFieldOptionsFromMeta();
                     try{ renderNamelist(); }catch(e){}
                     return;
@@ -2151,12 +2241,8 @@ async function updateJemaahField(jemaahId, field, value){
               }
             }
           }catch(e){ console.warn('Auto-create via meta failed', e); }
-          alert(`Gagal update jemaah ${field}: Insufficient permissions to create new select option "${opt}" (field: ${field}, type: INVALID_MULTIPLE_CHOICE_OPTIONS)
-
-Penyebab: Option "${opt}" belum wujud di Airtable field ${field}. V109 cuba auto-create via meta API tapi PAT perlu scope schema.bases:write.
-
-Fix: Tambah manual di Airtable: DATA JEMAAH UMRAH → field ${field} → Add choice "${opt}"
-Atau regenerate PAT di airtable.com/create/tokens dengan scope data.records:write + schema.bases:write`);
+          alert(`Gagal update jemaah ${field}: Insufficient permissions to create new select option "${opt}"
+Fix: Tambah manual di Airtable atau regenerate PAT dengan schema.bases:write`);
           if(rec) rec.fields[field]=null;
           try{ renderNamelist(); }catch(e){}
           return;
@@ -2170,8 +2256,7 @@ Atau regenerate PAT di airtable.com/create/tokens dengan scope data.records:writ
     try{ buildRoomingFieldOptionsFromRecords(); }catch(e){}
   }catch(e){
     console.error('updateJemaahField error', e);
-    if(e.message && e.message.includes('INVALID_MULTIPLE_CHOICE_OPTIONS')){
-    } else {
+    if(!(e.message && e.message.includes('INVALID_MULTIPLE_CHOICE_OPTIONS'))){
       alert(`Gagal update jemaah ${field}: `+e.message.substring(0,400));
     }
   }
