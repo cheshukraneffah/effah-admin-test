@@ -1,9 +1,9 @@
-console.log('ROOMING V103.15 FINAL - VISA CLEAR FIX'); console.log('V103.15 CLEAN VISA');
+console.log('ROOMING V109 DIRECT FETCH FIX - PAKEJ BLANK + 422 TYPECAST');
 var _autoScrollInterval = window._autoScrollInterval || null;
 window._roomingDragListenersAdded = window._roomingDragListenersAdded || false;
 // ROOMING V103 CLEAN - Deduped + Modular Ready
 // Generated from V102 - Duplicate functions removed, JEDDAH bug fixed
-console.log('ROOMING V103 CLEAN loaded');
+console.log('ROOMING V109 CLEAN loaded - direct fetch no hardcoded');
 var _autoScrollInterval = window._autoScrollInterval || null;
 window._autoScrollInterval = _autoScrollInterval;
 
@@ -44,18 +44,37 @@ window.roomingFieldDefaults = roomingFieldDefaults;
 var selectedRoomingHijriFilter = window.selectedRoomingHijriFilter || localStorage.getItem('effah_rooming_hijri_filter') || null;
 window.selectedRoomingHijriFilter = selectedRoomingHijriFilter;
 
+function getHijriSeasonFromField(val){
+  if(!val) return '';
+  const m = String(val).match(/(\d{4}H)/i);
+  return m ? m[1].toUpperCase() : String(val).trim().toUpperCase();
+}
 function getTripHijriForRooming(tripRec){
   if(!tripRec || !tripRec.fields) return '';
   const fields = tripRec.fields;
-  return fields['Hijri Season'] || fields['HIJRI SEASON'] || fields['HIJRI'] || fields['MUSIM HIJRI'] || '';
+  const raw = fields['Hijri Season'] || fields['HIJRI SEASON'] || fields['Hijri season'] || fields['HIJRI'] || fields['MUSIM HIJRI'] || '';
+  return getHijriSeasonFromField(raw);
 }
 
 function renderRoomingHijriTabs(){
   const container=document.getElementById('roomingHijriTabs');
   if(!container) return;
-  const trips=window.allTripUmrahRecords||window.allTripRecords||(typeof allTripUmrahRecords!=='undefined'?allTripUmrahRecords:[]);
-  const seasons=[...new Set(trips.map(getTripHijriForRooming).filter(Boolean))].sort();
+  const trips=window.allTripUmrahRecords||window.allTripRecords||window.allTrips||(typeof allTripUmrahRecords!=='undefined'?allTripUmrahRecords:[]);
+  const rawSeasons=trips.map(getTripHijriForRooming).filter(Boolean);
+  // Extract year and sort 1447H -> 1448H -> 1449H
+  const seasons=[...new Set(rawSeasons)].sort((a,b)=>{
+    const ya=parseInt((a.match(/(\d{4})/)||[0,0])[1])||0;
+    const yb=parseInt((b.match(/(\d{4})/)||[0,0])[1])||0;
+    return ya-yb;
+  });
+  // Auto select earliest if none selected - wajib select season paling awal
   if(!selectedRoomingHijriFilter && seasons.length>0){
+    selectedRoomingHijriFilter=seasons[0];
+    window.selectedRoomingHijriFilter=selectedRoomingHijriFilter;
+    localStorage.setItem('effah_rooming_hijri_filter', selectedRoomingHijriFilter);
+  }
+  // If current filter not in list (e.g. trip deleted), reset to earliest
+  if(selectedRoomingHijriFilter && !seasons.includes(selectedRoomingHijriFilter) && seasons.length>0){
     selectedRoomingHijriFilter=seasons[0];
     window.selectedRoomingHijriFilter=selectedRoomingHijriFilter;
     localStorage.setItem('effah_rooming_hijri_filter', selectedRoomingHijriFilter);
@@ -134,14 +153,16 @@ async function fetchRoomingFieldOptionsFromMeta(){
 function buildRoomingFieldOptionsFromRecords(){
   try{
     const fieldsToBuild = ['BOARD BASIS','INSURAN','PAKEJ','STATUS VISA'];
-    const hasMeta = _roomingMetaCache && Object.values(roomingFieldOptions).some(arr=>arr && arr.length>0);
-    if(hasMeta){
-      console.log('Using meta cached options, skipping record scan');
-      try{ populateRoomingFilterDropdown(); }catch(e){}
-      return;
+    // V109 FIX: Don't skip entirely if only some fields have meta - build missing fields from records
+    const hasSomeMeta = _roomingMetaCache && Object.values(roomingFieldOptions).some(arr=>arr && arr.length>0);
+    if(hasSomeMeta){
+      console.log('Using meta cached options, but will fill missing fields from records for PAKEJ blank fix');
+      // Don't return, continue to fill empty ones
     }
-    // Direct fetch from records only - no hardcoded, no localStorage
+    // Direct fetch from records only - no hardcoded, no localStorage - V109: only fill empty fields to fix PAKEJ blank
     fieldsToBuild.forEach(fieldName=>{
+      // If already have meta options, skip this field
+      if(roomingFieldOptions[fieldName] && roomingFieldOptions[fieldName].length>0) return;
       const values = new Set();
       (allRoomingJemaah||[]).forEach(r=>{
         const f = r.fields || {};
@@ -259,10 +280,6 @@ function closeAllCellDropdowns(){
   document.querySelectorAll('[data-cell-dropdown]').forEach(d=>{ d.classList.add('hidden'); d.style.position=''; d.style.top=''; d.style.left=''; });
 }
 
-
-function closeAllCellDropdowns(){
-  document.querySelectorAll('[data-cell-dropdown]').forEach(d=> d.classList.add('hidden'));
-}
 
 window.allRoomingRecords = allRoomingRecords;
 window.allRoomingJemaah = allRoomingJemaah;
@@ -663,7 +680,7 @@ function getStaffBoardArray(s){
   return [];
 }
 function renderInsuranCell(jId, insArr){
-  var opts=(roomingFieldOptions['INSURAN'] && roomingFieldOptions['INSURAN'].length>0) ? roomingFieldOptions['INSURAN'] : (roomingFieldDefaults['INSURAN']||['TAKAFUL','ETIQA','AL-KHAIRI']);
+  var opts=(roomingFieldOptions['INSURAN'] && roomingFieldOptions['INSURAN'].length>0) ? roomingFieldOptions['INSURAN'] : ([]);
   var display=insArr.length? insArr.join(', ') : '-';
   var cls=insArr.length? 'bg-emerald-100 border-emerald-200 text-emerald-800' : 'bg-white border-slate-200';
   var html='<div class="relative"><button onclick="toggleInsuranDropdown(\''+jId+'\')" class="w-full text-[8px] border rounded-full px-2.5 py-1.5 font-bold '+cls+' text-left flex items-center justify-between opacity-100"><span class="truncate">'+display+'</span><span>▼</span></button><div id="insuranDrop-'+jId+'" data-cell-dropdown class="hidden absolute z-[9999] mt-1 w-48 bg-white border border-slate-300 rounded-xl shadow-2xl p-1 opacity-100" style="background:white; opacity:1;">';
@@ -1462,7 +1479,7 @@ function renderNamelist(){
     else if(fbArr.some(x=>x.includes('MADINAH'))) fbCls='bg-blue-100 border-blue-200 text-blue-800';
     else if(fbArr.includes('FULLBOARD')) fbCls='bg-emerald-100 border-emerald-200 text-emerald-800';
     else if(fbArr.length===0) fbCls='bg-white border-dashed border-slate-300 text-slate-400';
-    const boardOptions = (roomingFieldOptions['BOARD BASIS'] && roomingFieldOptions['BOARD BASIS'].length>0) ? roomingFieldOptions['BOARD BASIS'] : (roomingFieldDefaults['BOARD BASIS']||['FULLBOARD','FULLBOARD (MEKAH)','BB (MEKAH)','FULLBOARD (MADINAH)','BB (MADINAH)']);
+    const boardOptions = (roomingFieldOptions['BOARD BASIS'] && roomingFieldOptions['BOARD BASIS'].length>0) ? roomingFieldOptions['BOARD BASIS'] : ([]);
     const boardOptionsWithAdd = boardOptions; // dynamic
     const boardCheckboxes = boardOptionsWithAdd.map(opt=>{
       const checked = fbArr.includes(opt);
@@ -1473,7 +1490,7 @@ function renderNamelist(){
     const insArr2 = getInsuranArrayV2 ? getInsuranArrayV2(r.fields) : getInsuranArray(r.fields);
       const insDisplay = insArr2.length ? insArr2.join(', ') : '- INSURAN';
       const insCls = insArr2.length ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-slate-200 text-slate-400';
-      const insuranOptions = (roomingFieldOptions['INSURAN'] && roomingFieldOptions['INSURAN'].length>0) ? roomingFieldOptions['INSURAN'] : (roomingFieldDefaults['INSURAN']||['TAKAFUL','ETIQA','AL-KHAIRI']);
+      const insuranOptions = (roomingFieldOptions['INSURAN'] && roomingFieldOptions['INSURAN'].length>0) ? roomingFieldOptions['INSURAN'] : ([]);
       const insCheckboxes = insuranOptions.map(opt=>{
         const checked = insArr2.includes(opt);
         return `<label class="flex items-center gap-1.5 px-2 py-1.5 hover:bg-slate-50 rounded text-[10px] cursor-pointer"><input type="checkbox" ${checked?'checked':''} onchange="toggleInsuranMulti('${r.id}','${opt}')" class="w-3.5 h-3.5 accent-[#7A0C2E]"> <span class="px-1.5 py-0.5 rounded-full text-[8px] ${opt==='TAKAFUL'?'bg-emerald-100':opt==='ETIQA'?'bg-amber-100':'bg-blue-100'}">${opt}</span></label>`;
@@ -1523,7 +1540,7 @@ function renderNamelist(){
             <span class="truncate">${pk||'-'}</span><span class="ml-1">▼</span>
           </button>
           <div id="pakejDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[180px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1 max-h-60 overflow-y-auto">
-            ${(roomingFieldOptions['PAKEJ']||roomingFieldDefaults['PAKEJ']||[]).map(o=>`<button onclick="event.stopPropagation(); updateJemaahField('${r.id}','PAKEJ','${o}'); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${pk===o?'bg-slate-900 text-white font-bold':''}">${o}</button>`).join('')}
+            ${(roomingFieldOptions['PAKEJ']||[]).map(o=>`<button onclick="event.stopPropagation(); updateJemaahField('${r.id}','PAKEJ','${o}'); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${pk===o?'bg-slate-900 text-white font-bold':''}">${o}</button>`).join('')}
             <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('PAKEJ')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Add option</button></div>
           </div>
         </div>
@@ -1535,7 +1552,7 @@ function renderNamelist(){
           </button>
           <div id="visaDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1 max-h-60 overflow-y-auto">
             <button onclick="event.stopPropagation(); updateJemaahField('${r.id}','STATUS VISA',''); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${!getVisaVal(r.fields)?'bg-slate-900 text-white font-bold':''}">- VISA</button>
-            ${(roomingFieldOptions['STATUS VISA']||roomingFieldDefaults['STATUS VISA']||['TOURIST','TOURIST (VALID)','UMRAH','UMRAH (VALID)','IQAMA (VALID)']).map(o=>`<button onclick="event.stopPropagation(); updateJemaahField('${r.id}','STATUS VISA','${o}'); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${getVisaVal(r.fields)===o?'bg-slate-900 text-white font-bold':''}">${o}</button>`).join('')}
+            ${(roomingFieldOptions['STATUS VISA']||[]).map(o=>`<button onclick="event.stopPropagation(); updateJemaahField('${r.id}','STATUS VISA','${o}'); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${getVisaVal(r.fields)===o?'bg-slate-900 text-white font-bold':''}">${o}</button>`).join('')}
             <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('STATUS VISA')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Add option</button></div>
           </div>
         </div>
@@ -2054,13 +2071,11 @@ async function updateJemaahField(jemaahId, field, value){
   if(rec){ rec.fields[field]=value; }
   try{
     let payloadValue = value;
-    // Direct fetch: check field type from meta cache
     const fieldType = (_roomingFieldTypes && _roomingFieldTypes[field]) || (_roomingFieldTypes && _roomingFieldTypes[field.toUpperCase()]) || null;
-    // FIX for Airtable Multiple Select fields: INSURAN, BOARD BASIS
+    // V109 FIX: handle singleSelect vs multipleSelects from meta
     if(field==='INSURAN' || fieldType==='multipleSelects'){
       if(Array.isArray(value)) payloadValue = value.length?value:[];
       else if(typeof value==='string' && value.trim()!==''){
-        // If field is multipleSelects, split by comma
         if(field==='INSURAN'){
           payloadValue = value.split(',').map(s=>s.trim()).filter(Boolean);
         } else {
@@ -2068,45 +2083,80 @@ async function updateJemaahField(jemaahId, field, value){
         }
         if(payloadValue.length===0) payloadValue=[];
       } else payloadValue=[];
-    }
-    if(field==='BOARD BASIS' || field==='BOARD'){
+    } else if(field==='BOARD BASIS' || field==='BOARD'){
       if(Array.isArray(value)) payloadValue = value.length?value:[];
       else if(typeof value==='string' && value.includes(',')){
         payloadValue = value.split(',').map(s=>s.trim()).filter(Boolean);
       } else if(typeof value==='string' && value.trim()!==''){
         payloadValue = [value.trim()];
       } else payloadValue=[];
+      // If meta says this is singleSelect, send string not array
+      if(fieldType==='singleSelect' && Array.isArray(payloadValue)){
+        payloadValue = payloadValue[0] || null;
+      }
+    } else {
+      // For PAKEJ, STATUS VISA which are usually singleSelect
+      if(Array.isArray(value)){
+        payloadValue = fieldType==='multipleSelects' ? value : (value[0]||null);
+      }
     }
     const fieldsToSend = {};
     if(payloadValue===null){
-      fieldsToSend[field] = field==='INSURAN' || field==='BOARD BASIS' ? [] : '';
+      fieldsToSend[field] = (field==='INSURAN' || field==='BOARD BASIS' || fieldType==='multipleSelects') ? [] : '';
     } else {
       fieldsToSend[field] = payloadValue;
     }
-    console.log('Direct fetch updateJemaahField', jemaahId, field, 'type:', fieldType, '->', fieldsToSend[field]);
+    console.log('V109 direct fetch updateJemaahField', jemaahId, field, 'type:', fieldType, '->', fieldsToSend[field]);
     const res=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jemaahId}`,{
       method:'PATCH',
       headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
-      body: JSON.stringify({fields: fieldsToSend})
+      body: JSON.stringify({fields: fieldsToSend, typecast: true})
     });
     if(!res.ok){
       const errText = await res.text();
       console.error('Airtable update error', res.status, errText);
       if(res.status===422 && errText.includes('INVALID_MULTIPLE_CHOICE_OPTIONS')){
-        // Parse field name from error
         let msg = errText;
         try{ const j=JSON.parse(errText); if(j.error && j.error.message) msg=j.error.message; }catch(e){}
-        // Check if trying to create new option
         if(msg.includes('Insufficient permissions to create new select option')){
-          const match = msg.match(/"([^"]+)"/);
+          const match = msg.match(/\"([^\"]+)\"/);
           const opt = match?match[1]:value;
-          alert(`Gagal update jemaah ${field}: Insufficient permissions to create new select option "${opt}" (field: ${field}, type: INVALID_MULTIPLE_CHOICE_OPTIONS)\n\n`+
-                `Penyebab: PAT tiada scope schema.bases:write ATAU field ${field} adalah Single Select tapi cuba send array ATAU option baru belum wujud di Airtable.\n\n`+
-                `Fix: 1) Pastikan field ${field} di Airtable adalah Multiple Select (bukan Single) jika nak multiple values\n`+
-                `2) PAT mesti ada scope data.records:write + schema.bases:write\n`+
-                `3) Tambah option "${opt}" manual di Airtable: DATA JEMAAH UMRAH → field ${field} → Add choice\n\n`+
-                `Direct fetch mode akan cuba fetch dari meta, bukan hardcoded.`);
-          // Revert optimistic update
+          // V109: Try auto-create via meta API first, then retry with typecast
+          try{
+            if(_roomingMetaCache && pat){
+              const tableId = _roomingMetaCache.id;
+              const targetField = (_roomingMetaCache.fields||[]).find(f=> (f.name||'').toUpperCase()===field.toUpperCase());
+              if(targetField){
+                const existingChoices = (targetField.options && targetField.options.choices) ? targetField.options.choices.map(c=>({name:c.name})) : [];
+                if(!existingChoices.find(c=>c.name===opt)){
+                  existingChoices.push({name:opt});
+                  await fetch(`https://api.airtable.com/v0/meta/bases/${base}/tables/${tableId}/fields/${targetField.id}`, {
+                    method:'PATCH',
+                    headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+                    body: JSON.stringify({options:{choices: existingChoices}})
+                  });
+                  // Retry
+                  const retryRes=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jemaahId}`,{
+                    method:'PATCH',
+                    headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+                    body: JSON.stringify({fields: fieldsToSend, typecast: true})
+                  });
+                  if(retryRes.ok){
+                    console.log('Retry after meta create success');
+                    await fetchRoomingFieldOptionsFromMeta();
+                    try{ renderNamelist(); }catch(e){}
+                    return;
+                  }
+                }
+              }
+            }
+          }catch(e){ console.warn('Auto-create via meta failed', e); }
+          alert(`Gagal update jemaah ${field}: Insufficient permissions to create new select option "${opt}" (field: ${field}, type: INVALID_MULTIPLE_CHOICE_OPTIONS)
+
+Penyebab: Option "${opt}" belum wujud di Airtable field ${field}. V109 cuba auto-create via meta API tapi PAT perlu scope schema.bases:write.
+
+Fix: Tambah manual di Airtable: DATA JEMAAH UMRAH → field ${field} → Add choice "${opt}"
+Atau regenerate PAT di airtable.com/create/tokens dengan scope data.records:write + schema.bases:write`);
           if(rec) rec.fields[field]=null;
           try{ renderNamelist(); }catch(e){}
           return;
@@ -2121,15 +2171,12 @@ async function updateJemaahField(jemaahId, field, value){
   }catch(e){
     console.error('updateJemaahField error', e);
     if(e.message && e.message.includes('INVALID_MULTIPLE_CHOICE_OPTIONS')){
-      // Already handled above
     } else {
       alert(`Gagal update jemaah ${field}: `+e.message.substring(0,400));
     }
   }
 }
-
-
-
+function updateJemaahFieldSync(jemaahId, field, value){ return updateJemaahField(jemaahId, field, value); }
 
 async function updateJemaahBoardMulti(jemaahId, selectedArr){
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
@@ -2140,7 +2187,7 @@ async function updateJemaahBoardMulti(jemaahId, selectedArr){
   renderNamelist();
   try{
     // For Multiple Select, empty must be [] not null (null = 422)
-    let res=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jemaahId}`,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields: {'BOARD BASIS': selectedArr.length?selectedArr:[]}})});
+    let res=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jemaahId}`,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields: {'BOARD BASIS': selectedArr.length?selectedArr:[]}, typecast: true})});
     let data=await res.json();
     if(data.error){
       console.error('BOARD BASIS save failed', data.error);
@@ -2148,7 +2195,7 @@ async function updateJemaahBoardMulti(jemaahId, selectedArr){
       if(data.error.type!=='INVALID_VALUE_FOR_COLUMN'){
         // Try BOARD as fallback only if BOARD BASIS field error is about type
         try{
-          res=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jemaahId}`,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields: {'BOARD BASIS': selectedArr}})});
+          res=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jemaahId}`,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields: {'BOARD BASIS': selectedArr}, typecast: true})});
           data=await res.json();
         }catch(e){}
       }
@@ -2194,7 +2241,7 @@ async function updateJemaahCheckbox(jemaahId, field, checked){
   const rec=allRoomingJemaah.find(r=>r.id===jemaahId); if(rec) rec.fields[field]=checked;
   renderNamelist();
   try{
-    const res=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jemaahId}`,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields: {[field]: checked}})});
+    const res=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jemaahId}`,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields: {[field]: checked}, typecast: true})});
     const data=await res.json();
     if(!data.id && data.error) throw new Error(data.error.message);
   }catch(e){ console.error(e); alert('Gagal update checkbox '+field+': '+e.message); fetchRoomingData(); }
