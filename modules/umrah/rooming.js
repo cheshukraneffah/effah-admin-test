@@ -1,4 +1,4 @@
-console.log('ROOMING V114 AIRTABLE AI COMPLIANT - CAPAIAN LANGSUNG + TAPISAN + FIX SYNTAX');
+console.log('ROOMING V115 FALLBACK TYPECAST - CAPAIAN LANGSUNG + TAPISAN + FIX SYNTAX');
 var _autoScrollInterval = window._autoScrollInterval || null;
 window._roomingDragListenersAdded = window._roomingDragListenersAdded || false;
 // ROOMING V103 CLEAN - Deduped + Modular Ready
@@ -229,9 +229,12 @@ async function handleAddNewRoomingOption(fieldName){
     const base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
     const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
     if(!base||!pat) throw new Error('Konfigurasi Airtable tidak ditemui');
-    if(!_roomingMetaCache){
-      await fetchRoomingFieldOptionsFromMeta();
-    }
+    
+    // V115: Force fresh fetch to avoid stale IDs - critical for avoiding type precision error
+    console.log('V115: Force fetching fresh metadata...');
+    _roomingMetaCache = null;
+    await fetchRoomingFieldOptionsFromMeta();
+    
     if(!_roomingMetaCache){
       alert('Tidak dapat mencapai metadata Airtable. Sila tambah secara manual di Airtable: DATA JEMAAH UMRAH → medan '+fieldName+' → Tambah Pilihan "'+trimmed+'"');
       return;
@@ -243,54 +246,105 @@ async function handleAddNewRoomingOption(fieldName){
       alert(`Medan ${fieldName} tidak ditemui dalam metadata. Sila tambah secara manual di Airtable.`);
       return;
     }
-    // V114 FIX - Ikut Airtable AI: must include all existing choices WITH id+name, new choice with name only, no type, no field name, no color
+
+    console.log('V115 Target field', {id: targetField.id, name: targetField.name, type: targetField.type, options: targetField.options});
+
+    // Check field type - must be select
+    if(targetField.type!=='singleSelect' && targetField.type!=='multipleSelects'){
+      alert(`Medan ${fieldName} bukan jenis pilihan (type: ${targetField.type}). Tidak dapat menambah pilihan melalui API. Medan ini mungkin jenis Formula atau Lookup.
+Sila tambah secara manual di Airtable atau tukar jenis medan kepada Single/Multiple Select.`);
+      return;
+    }
+
     const existingChoices = (targetField.options && targetField.options.choices) ? targetField.options.choices : [];
-    console.log(`V114 Existing ${fieldName} (${existingChoices.length})`, existingChoices);
-    
-    // Check if already exists
+    console.log(`V115 Existing ${fieldName} (${existingChoices.length})`, existingChoices);
+
     if(existingChoices.some(c=> (c.name||'').toUpperCase()===trimmed)){
       alert(`${trimmed} telah wujud di dalam Airtable.`);
       return;
     }
 
-    // Build payload: existing with id+name, new with name only (per Airtable docs image_2dedd5.png)
-    const choicesWithId = existingChoices.map(c=> ({id: c.id, name: c.name}));
+    // Build payload per Airtable AI: id+name for existing, name only for new, NO type, NO field name, NO color
+    const choicesWithId = existingChoices.map(c=> {
+      // Only id and name, strip color to avoid issues
+      return {id: c.id, name: c.name};
+    });
     const newChoices = [...choicesWithId, {name: trimmed}];
 
-    console.log('V114 PATCH payload (Airtable AI compliant)', JSON.stringify({options:{choices:newChoices}}));
+    const payload = {options:{choices: newChoices}};
+    console.log('V115 PATCH payload (strict)', JSON.stringify(payload));
 
     const res = await fetch(`https://api.airtable.com/v0/meta/bases/${base}/tables/${tableId}/fields/${targetField.id}`, {
       method:'PATCH',
       headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
-      body: JSON.stringify({
-        options:{choices: newChoices}
-        // DO NOT include type, DO NOT include field name, DO NOT include color (Airtable will assign)
-      })
+      body: JSON.stringify(payload)
     });
 
     if(!res.ok){
       const errText = await res.text();
-      console.error('V114 Add option meta failed', res.status, errText);
+      console.error('V115 Add option meta failed', res.status, errText);
       let msg = errText;
       try{ const j=JSON.parse(errText); if(j.error && j.error.message) msg=j.error.message; }catch(e){}
       
-      if(msg.includes('INVALID_REQUEST_UNKNOWN') || msg.includes('type and number precision')){
-        alert(`Gagal menambah "${trimmed}": ${msg}
+      // If type precision error persists, try fallback via Records API with typecast:true
+      if(msg.includes('INVALID_REQUEST_UNKNOWN') || msg.includes('type and number precision') || msg.includes('type or number precision')){
+        console.warn('V115: Meta API failed with type precision error, trying fallback via Records API with typecast:true');
+        
+        // Fallback: Use first jemaah record to create option via typecast
+        if(allRoomingJemaah && allRoomingJemaah.length>0){
+          const firstJemaah = allRoomingJemaah[0];
+          console.log('V115: Trying fallback - updating first jemaah', firstJemaah.id, 'with new option', trimmed, 'and typecast:true');
+          
+          // For multipleSelects, we need to send array, for singleSelect string
+          const isMulti = targetField.type==='multipleSelects';
+          const fallbackValue = isMulti ? [trimmed] : trimmed;
+          
+          const fallbackRes = await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${firstJemaah.id}`, {
+            method:'PATCH',
+            headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+            body: JSON.stringify({fields:{[fieldName]: fallbackValue}, typecast:true})
+          });
+          
+          const fallbackText = await fallbackRes.text();
+          console.log('V115: Fallback response', fallbackRes.status, fallbackText);
+          
+          if(fallbackRes.ok){
+            console.log('V115: Fallback succeeded - option created via typecast');
+            // Revert the first jemaah back to original value
+            const originalVal = firstJemaah.fields[fieldName]||'';
+            setTimeout(async ()=>{
+              try{
+                await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${firstJemaah.id}`, {
+                  method:'PATCH',
+                  headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+                  body: JSON.stringify({fields:{[fieldName]: originalVal}, typecast:true})
+                });
+                console.log('V115: Reverted first jemaah to original');
+              }catch(e){ console.warn('V115: Failed to revert', e); }
+            }, 1000);
+            
+            await fetchRoomingFieldOptionsFromMeta();
+            alert(`${trimmed} telah berjaya ditambahkan ke medan ${fieldName} melalui kaedah alternatif (typecast).`);
+            return;
+          } else {
+            console.error('V115: Fallback also failed', fallbackText);
+          }
+        }
+        
+        alert(`Gagal menambah "${trimmed}" melalui API meta: ${msg}
 
-Punca: Format PATCH tidak mengikut spesifikasi Airtable.
-Penyelesaian (mengikut Airtable AI):
-1) Pastikan semua pilihan sedia ada dihantar bersama id dan name
-2) Pilihan baharu hantar name sahaja
-3) Jangan sertakan type atau nama medan
-4) Pastikan PAT mempunyai kebenaran schema.bases:write
+Punca: Airtable mengesan cubaan menukar jenis medan.
+Ini berlaku jika:
+1) Medan ${fieldName} bukan jenis Single/Multiple Select (mungkin Formula/Lookup)
+2) Cache metadata lama - sila refresh page dan cuba lagi
+3) Token PAT tidak mempunyai kebenaran schema.bases:write
 
-Jika masih gagal, tambah secara manual di Airtable.`);
-      } else if(res.status===422 && msg.includes('Insufficient permissions')){
-        alert(`Gagal menambah "${trimmed}": Kebenaran tidak mencukupi.
-
-Token PAT memerlukan skop schema.bases:write untuk menambah pilihan baharu melalui API. Sila jana semula PAT di airtable.com/create/tokens.`);
+Penyelesaian:
+- Sila semak jenis medan ${fieldName} di Airtable (mesti Single atau Multiple Select)
+- Tambah secara manual di Airtable: DATA JEMAAH UMRAH → medan ${fieldName} → Tambah Pilihan "${trimmed}"
+- Atau gunakan kaedah typecast (sistem telah cuba dan gagal - mungkin PAT tiada kebenaran)`);
       } else {
-        alert(`Gagal menambah "${trimmed}" di Airtable: ${res.status} ${errText.substring(0,400)}
+        alert(`Gagal menambah "${trimmed}" di Airtable: ${res.status} ${errText.substring(0,500)}
 
 Sila tambah secara manual di Airtable.`);
       }
@@ -298,11 +352,11 @@ Sila tambah secara manual di Airtable.`);
     }
 
     const data = await res.json();
-    console.log('V114 Successfully added', trimmed, data);
+    console.log('V115 Successfully added', trimmed, data);
     await fetchRoomingFieldOptionsFromMeta();
     alert(`${trimmed} telah berjaya ditambahkan ke medan ${fieldName} di Airtable melalui API meta.`);
   }catch(e){
-    console.error('handleAddNewRoomingOption V114 error', e);
+    console.error('handleAddNewRoomingOption V115 error', e);
     alert(`Gagal menambah "${trimmed}": ${e.message}
 
 Sila tambah secara manual di Airtable: DATA JEMAAH UMRAH → medan ${fieldName} → Tambah Pilihan "${trimmed}"`);
