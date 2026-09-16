@@ -1360,4 +1360,3 @@ function getAirlineBadgeHtml(airline, isSelected){
   }
   return `<span class="bg-slate-100 text-slate-700 border-slate-200 border text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide w-fit">${airline}</span>`;
 }
-sas
