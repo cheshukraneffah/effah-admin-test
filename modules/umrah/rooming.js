@@ -37,30 +37,73 @@ var roomingSortDir = window.roomingSortDir || localStorage.getItem('effah_roomin
 var roomingSortActive = typeof window.roomingSortActive !== 'undefined' ? window.roomingSortActive : (localStorage.getItem('effah_rooming_sort_active') === 'true' ? true : false);
 
 var roomingFieldOptions = window.roomingFieldOptions || { 'BOARD BASIS': [], 'INSURAN': [], 'PAKEJ': [], 'STATUS VISA': [], 'VISA': [] };
-var roomingFieldDefaults = {
-  'BOARD BASIS': ['FULLBOARD','FULLBOARD (MEKAH)','BB (MEKAH)','FULLBOARD (MADINAH)','BB (MADINAH)','FULLBOARD (TAIF)'],
-  'INSURAN': ['TAKAFUL','ETIQA','AL-KHAIRI'],
-  'PAKEJ': ['JIMAT EKONOMI','JIMAT STANDARD','JIMAT PREMIUM','EKONOMI LITE','EKONOMI','STANDARD','PREMIUM','PREMIUM PLUS'],
-  'STATUS VISA': ['TOURIST','TOURIST (VALID)','UMRAH','UMRAH (VALID)','IQAMA (VALID)','VISA','VALID']
-};
+var roomingFieldDefaults = {}; // Direct fetch only - no hardcoded
 window.roomingFieldOptions = roomingFieldOptions;
+window.roomingFieldDefaults = roomingFieldDefaults;
+
+let _roomingMetaCache = null;
+let _roomingMetaFetching = false;
+let _roomingFieldTypes = {}; // Store field types: singleSelect, multipleSelects
+
+async function fetchRoomingFieldOptionsFromMeta(){
+  if(_roomingMetaFetching) return null;
+  _roomingMetaFetching = true;
+  try{
+    const base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
+    const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
+    if(!base||!pat){ _roomingMetaFetching=false; return null; }
+    const res = await fetch(`https://api.airtable.com/v0/meta/bases/${base}/tables`, {headers:{Authorization:`Bearer ${pat}`}});
+    if(!res.ok){
+      console.warn('Meta API failed', res.status, await res.text().then(t=>t.substring(0,200)));
+      _roomingMetaFetching=false;
+      return null;
+    }
+    const data = await res.json();
+    const tables = data.tables||[];
+    let targetTable = tables.find(t=> (t.name||'').toUpperCase()==='DATA JEMAAH UMRAH');
+    if(!targetTable) targetTable = tables.find(t=> (t.name||'').toUpperCase().includes('JEMAAH UMRAH'));
+    if(!targetTable) targetTable = tables.find(t=> t.name && t.name.toUpperCase().includes('JEMAAH'));
+    if(!targetTable){ _roomingMetaFetching=false; return null; }
+    _roomingMetaCache = targetTable;
+    const fields = targetTable.fields||[];
+    const wanted = ['BOARD BASIS','INSURAN','PAKEJ','STATUS VISA','VISA'];
+    wanted.forEach(w=>{
+      const f = fields.find(fl=> (fl.name||'').toUpperCase()===w.toUpperCase());
+      if(f){
+        _roomingFieldTypes[w] = f.type; // singleSelect or multipleSelects
+        if(f.options && Array.isArray(f.options.choices)){
+          const choices = f.options.choices.map(c=>c.name).filter(Boolean);
+          roomingFieldOptions[w] = choices.sort();
+          if(w==='STATUS VISA') roomingFieldOptions['VISA']=choices.sort();
+        }
+      }
+    });
+    window.roomingFieldOptions=roomingFieldOptions;
+    window._roomingFieldTypes=_roomingFieldTypes;
+    console.log('Direct fetch from Airtable meta', roomingFieldOptions, _roomingFieldTypes);
+    try{ populateRoomingFilterDropdown(); }catch(e){}
+    try{ renderNamelist(); }catch(e){}
+    _roomingMetaFetching=false;
+    return roomingFieldOptions;
+  }catch(e){
+    console.warn('fetchRoomingFieldOptionsFromMeta error', e);
+    _roomingMetaFetching=false;
+    return null;
+  }
+}
 
 function buildRoomingFieldOptionsFromRecords(){
   try{
     const fieldsToBuild = ['BOARD BASIS','INSURAN','PAKEJ','STATUS VISA'];
+    const hasMeta = _roomingMetaCache && Object.values(roomingFieldOptions).some(arr=>arr && arr.length>0);
+    if(hasMeta){
+      console.log('Using meta cached options, skipping record scan');
+      try{ populateRoomingFilterDropdown(); }catch(e){}
+      return;
+    }
+    // Direct fetch from records only - no hardcoded, no localStorage
     fieldsToBuild.forEach(fieldName=>{
-      const values = new Set(roomingFieldDefaults[fieldName] || []);
-      (roomingFieldOptions[fieldName]||[]).forEach(v=>{ if(v) values.add(String(v).trim()); });
-      try{
-        const storedCustom = JSON.parse(localStorage.getItem('effah_rooming_field_options_'+fieldName)||'null');
-        if(Array.isArray(storedCustom)) storedCustom.forEach(v=>{ if(v) values.add(String(v).trim()); });
-      }catch(e){}
-      try{
-        const globalCache = JSON.parse(localStorage.getItem('effah_rooming_field_options_cache')||'null');
-        if(globalCache && globalCache[fieldName] && Array.isArray(globalCache[fieldName])){
-          globalCache[fieldName].forEach(v=>{ if(v) values.add(String(v).trim()); });
-        }
-      }catch(e){}
+      const values = new Set();
       (allRoomingJemaah||[]).forEach(r=>{
         const f = r.fields || {};
         let v = f[fieldName] || (fieldName==='STATUS VISA' ? (f['STATUS VISA']||f['VISA']||'') : '');
@@ -79,187 +122,67 @@ function buildRoomingFieldOptionsFromRecords(){
       if(fieldName==='STATUS VISA') roomingFieldOptions['VISA'] = roomingFieldOptions[fieldName];
     });
     window.roomingFieldOptions = roomingFieldOptions;
-    try{ localStorage.setItem('effah_rooming_field_options_cache', JSON.stringify(roomingFieldOptions)); }catch(e){}
-    console.log('Dynamic roomingFieldOptions built', roomingFieldOptions);
+    console.log('Direct fetch from records built', roomingFieldOptions);
     try{ populateRoomingFilterDropdown(); }catch(e){}
   }catch(e){ console.error('buildRoomingFieldOptions error', e); }
 }
 
-
-var selectedRoomingHijriFilter = window.selectedRoomingHijriFilter || localStorage.getItem('effah_rooming_hijri_filter') || null;
-window.selectedRoomingHijriFilter = selectedRoomingHijriFilter;
-
-function getTripHijriForRooming(tripRec){
-  if(!tripRec || !tripRec.fields) return '';
-  const f=tripRec.fields;
-  return f['Hijri Season'] || f['HIJRI SEASON'] || f['HIJRI'] || f['MUSIM HIJRI'] || f['Hijri Season'] || '';
-}
-
-function getHijriSeasonFromField(val){
-  if(!val) return '';
-  const m = val.toString().toUpperCase().match(/(\d{4}H)/);
-  return m ? m[0] : val.toString().trim().toUpperCase();
-}
-
-
-function renderRoomingHijriTabs(){
-  const container=document.getElementById('roomingHijriTabs'); if(!container) return;
-  const trips=window.allTripUmrahRecords||window.allTripRecords||[];
-  const hijriCounts={};
-  trips.forEach(t=>{
-    const hij=getTripHijriForRooming(t);
-    if(!hij) return;
-    hijriCounts[hij]=(hijriCounts[hij]||0)+1;
-  });
-  let hijriList=Object.keys(hijriCounts).filter(h=>hijriCounts[h]>0);
-  // Sort by year
-  const extractYear=(s)=>{ const m=s.match(/(\d{4})H/); return m?parseInt(m[1]):9999; };
-  hijriList.sort((a,b)=>extractYear(a)-extractYear(b));
-  if(!selectedRoomingHijriFilter && hijriList.length>0){
-    selectedRoomingHijriFilter=hijriList[0];
-    window.selectedRoomingHijriFilter=selectedRoomingHijriFilter;
-    localStorage.setItem('effah_rooming_hijri_filter', selectedRoomingHijriFilter);
-  }
-  let html='';
-  hijriList.forEach(h=>{
-    const active=selectedRoomingHijriFilter===h;
-    html+=`<button onclick="setRoomingHijriFilter('${h.replace(/'/g, "\'")}')" class="px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${active?'bg-slate-900 text-white border-slate-900':'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}">${h} <span class="ml-1 text-[9px] opacity-70">(${hijriCounts[h]||0})</span></button>`;
-  });
-  if(hijriList.length===0){
-    html='<span class="text-[10px] text-slate-400">Tiada musim hijri</span>';
-  }
-  container.innerHTML=html;
-}
-
-function setRoomingHijriFilter(hijri){
-  if(selectedRoomingHijriFilter===hijri) return;
-  selectedRoomingHijriFilter=hijri;
-  window.selectedRoomingHijriFilter=hijri;
-  localStorage.setItem('effah_rooming_hijri_filter', hijri);
-  renderRoomingHijriTabs();
-  populateRoomingTripDropdown();
-  // If current selected trip not in this hijri, clear
-  const sel=document.getElementById('roomingTripSelect');
-  const trips=window.allTripUmrahRecords||window.allTripRecords||[];
-  const filteredTrips=trips.filter(t=> getTripHijriForRooming(t)===hijri);
-  if(filteredTrips.length>0){
-    const first=filteredTrips[0];
-    if(sel) sel.value=first.id;
-    onRoomingTripChange(first.id);
-  }
-}
-
-
-function populateRoomingFilterDropdown(){
-  const sel=document.getElementById('filterPakejRooming'); 
-  const boxContent=document.getElementById('roomingFilterBoxContent');
-  const currentVal = sel ? sel.value : '';
-  // Build for hidden select (legacy) and for box
-  let htmlSelect = '<option value="">All</option>';
-  const groups = [
-    {label: 'BOARD BASIS', field: 'BOARD BASIS', icon: 'fa-utensils'},
-    {label: 'TRAIN', field: 'TRAIN', icon: 'fa-train'},
-    {label: 'INSURAN', field: 'INSURAN', icon: 'fa-shield-halved'},
-    {label: 'PAKEJ', field: 'PAKEJ', icon: 'fa-box'},
-    {label: 'STATUS VISA', field: 'STATUS VISA', icon: 'fa-passport'}
-  ];
-  let boxHtml = '';
-  groups.forEach(g=>{
-    if(g.field==='TRAIN'){
-      htmlSelect += `<optgroup label="TRAIN"><option value="TRAIN:true">TRAIN - Checked</option><option value="TRAIN:false">TRAIN - Unchecked</option></optgroup>`;
-      boxHtml += `<div class="space-y-1.5"><div class="flex items-center gap-1.5 font-bold text-[10px] text-slate-700 uppercase tracking-wider"><i class="fa-solid ${g.icon} text-[10px] text-slate-400"></i> ${g.label}</div><div class="grid grid-cols-2 gap-1">`;
-      boxHtml += `<label class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border text-[11px] cursor-pointer hover:bg-slate-50 ${currentVal==='TRAIN:true'?'bg-slate-900 text-white border-slate-900':''}"><input type="radio" name="roomingFilter" value="TRAIN:true" ${currentVal==='TRAIN:true'?'checked':''} onchange="applyRoomingFilter('TRAIN:true')" class="w-3 h-3"> Checked</label>`;
-      boxHtml += `<label class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border text-[11px] cursor-pointer hover:bg-slate-50 ${currentVal==='TRAIN:false'?'bg-slate-900 text-white border-slate-900':''}"><input type="radio" name="roomingFilter" value="TRAIN:false" ${currentVal==='TRAIN:false'?'checked':''} onchange="applyRoomingFilter('TRAIN:false')" class="w-3 h-3"> Unchecked</label>`;
-      boxHtml += `</div></div>`;
-    } else {
-      const opts = (roomingFieldOptions[g.field] && roomingFieldOptions[g.field].length>0) ? roomingFieldOptions[g.field] : (roomingFieldDefaults[g.field]||[]);
-      if(opts.length>0){
-        htmlSelect += `<optgroup label="${g.label}">`;
-        boxHtml += `<div class="space-y-1.5"><div class="flex items-center gap-1.5 font-bold text-[10px] text-slate-700 uppercase tracking-wider"><i class="fa-solid ${g.icon} text-[10px] text-slate-400"></i> ${g.label} <span class="ml-auto text-[9px] bg-slate-100 px-1.5 py-0.5 rounded-full">${opts.length}</span></div><div class="flex flex-wrap gap-1">`;
-        opts.forEach(o=>{ 
-          htmlSelect += `<option value="${g.field}:${o}">${o}</option>`; 
-          const active = currentVal===`${g.field}:${o}`;
-          boxHtml += `<button onclick="applyRoomingFilter('${g.field}:${o.replace(/'/g, "\'")}')" class="px-2.5 py-1 rounded-full text-[10px] font-bold border transition ${active?'bg-slate-900 text-white border-slate-900':'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}">${o}</button>`;
-        });
-        boxHtml += `</div></div>`;
-        htmlSelect += `</optgroup>`;
-      }
-    }
-  });
-  if(sel) sel.innerHTML = htmlSelect;
-  if(currentVal && sel) sel.value = currentVal;
-  if(boxContent) boxContent.innerHTML = boxHtml || '<div class="text-[11px] text-slate-400 text-center py-4">Tiada filter</div>';
-  updateRoomingFilterLabel();
-}
-
-function toggleRoomingFilterBox(){
-  const box=document.getElementById('roomingFilterBox');
-  if(!box) return;
-  const isHidden=box.classList.contains('hidden');
-  if(isHidden){
-    // Close other dropdowns
-    if(typeof closeAllCellDropdowns==='function') closeAllCellDropdowns();
-    document.querySelectorAll('[data-cell-dropdown]').forEach(d=>d.classList.add('hidden'));
-    box.classList.remove('hidden');
-    try{ populateRoomingFilterDropdown(); }catch(e){}
-  } else {
-    box.classList.add('hidden');
-  }
-}
-
-function applyRoomingFilter(val){
-  const sel=document.getElementById('filterPakejRooming');
-  if(sel) sel.value=val;
-  updateRoomingFilterLabel();
-  const box=document.getElementById('roomingFilterBox');
-  if(box) box.classList.add('hidden');
-  if(typeof filterRoomingNamelist==='function') filterRoomingNamelist();
-}
-
-function clearRoomingFilter(){
-  const sel=document.getElementById('filterPakejRooming');
-  if(sel) sel.value='';
-  updateRoomingFilterLabel();
-  const box=document.getElementById('roomingFilterBox');
-  if(box) box.classList.add('hidden');
-  if(typeof filterRoomingNamelist==='function') filterRoomingNamelist();
-}
-
-function updateRoomingFilterLabel(){
-  const sel=document.getElementById('filterPakejRooming');
-  const label=document.getElementById('filterPakejRoomingLabel');
-  const countEl=document.getElementById('roomingFilterCount');
-  if(!sel || !label) return;
-  const val=sel.value;
-  if(!val){
-    label.textContent='All';
-    if(countEl) countEl.textContent='0 selected';
-  } else {
-    const shortVal = val.includes(':') ? val.split(':')[1] : val;
-    label.textContent=shortVal;
-    if(countEl) countEl.textContent='1 filter active';
-  }
-}
-
-
-function handleAddNewRoomingOption(fieldName){
-  const newVal = prompt(`Tambah option baru untuk ${fieldName}:`);
+async function handleAddNewRoomingOption(fieldName){
+  const newVal = prompt(`Tambah option baru untuk ${fieldName} (akan cuba tambah di Airtable via meta API):`);
   if(!newVal) return;
   const trimmed = newVal.trim().toUpperCase();
   if(!trimmed) return;
   if(!roomingFieldOptions[fieldName]) roomingFieldOptions[fieldName]=[];
-  if(!roomingFieldOptions[fieldName].includes(trimmed)){
-    roomingFieldOptions[fieldName].push(trimmed);
-    roomingFieldOptions[fieldName].sort();
-    window.roomingFieldOptions = roomingFieldOptions;
-    try{ localStorage.setItem('effah_rooming_field_options_'+fieldName, JSON.stringify(roomingFieldOptions[fieldName])); }catch(e){}
-    buildRoomingFieldOptionsFromRecords();
-    renderNamelist();
-    alert(`${trimmed} ditambah untuk ${fieldName}. Pilih dari dropdown untuk guna.`);
-  } else {
-    alert(`${trimmed} sudah wujud.`);
+  if(roomingFieldOptions[fieldName].includes(trimmed)){
+    alert(`${trimmed} sudah wujud di Airtable.`);
+    return;
+  }
+  // Direct fetch mode: cuba tambah via meta API dulu
+  try{
+    const base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
+    const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
+    if(!base||!pat) throw new Error('Missing base/pat');
+    if(!_roomingMetaCache){
+      await fetchRoomingFieldOptionsFromMeta();
+    }
+    if(!_roomingMetaCache){
+      alert('Tidak dapat fetch meta. Sila tambah manual di Airtable: DATA JEMAAH UMRAH → field '+fieldName+' → Add choice "'+trimmed+'"');
+      return;
+    }
+    const tableId = _roomingMetaCache.id;
+    const fields = _roomingMetaCache.fields||[];
+    const targetField = fields.find(f=> (f.name||'').toUpperCase()===fieldName.toUpperCase());
+    if(!targetField){
+      alert(`Field ${fieldName} tidak jumpa di meta. Sila tambah manual di Airtable.`);
+      return;
+    }
+    const existingChoices = (targetField.options && targetField.options.choices) ? targetField.options.choices.map(c=>({name:c.name})) : [];
+    existingChoices.push({name:trimmed});
+    console.log('Trying to add choice via meta API', fieldName, trimmed, existingChoices);
+    const res = await fetch(`https://api.airtable.com/v0/meta/bases/${base}/tables/${tableId}/fields/${targetField.id}`, {
+      method:'PATCH',
+      headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+      body: JSON.stringify({options:{choices: existingChoices}})
+    });
+    if(!res.ok){
+      const errText = await res.text();
+      console.error('Add option meta failed', res.status, errText);
+      if(res.status===422 && errText.includes('INVALID_MULTIPLE_CHOICE_OPTIONS')){
+        alert(`Gagal tambah "${trimmed}" via meta API: ${res.status}\n${errText.substring(0,300)}\n\nPastikan field ${fieldName} adalah Multiple Select (bukan Single) dan PAT ada scope schema.bases:write.\n\nCuba tambah manual di Airtable: Table DATA JEMAAH UMRAH → field ${fieldName} → Add choice "${trimmed}"`);
+      } else {
+        alert(`Gagal tambah "${trimmed}" di Airtable meta: ${res.status} ${errText.substring(0,400)}\n\nSila tambah manual di Airtable.`);
+      }
+      return;
+    }
+    await fetchRoomingFieldOptionsFromMeta();
+    alert(`${trimmed} berjaya ditambah ke Airtable field ${fieldName} via meta API.`);
+  }catch(e){
+    console.error('handleAddNewRoomingOption error', e);
+    alert(`Gagal tambah "${trimmed}": ${e.message}\n\nSila tambah manual di Airtable: DATA JEMAAH UMRAH → field ${fieldName} → Add choice "${trimmed}"`);
   }
 }
+
+
 
 function toggleCellDropdown(id){
   const all = document.querySelectorAll('[data-cell-dropdown]');
@@ -293,9 +216,14 @@ function toggleCellDropdown(id){
     target.style.position=''; target.style.top=''; target.style.left='';
   }
 }
+function closeAllCellDropdowns(){
+  document.querySelectorAll('[data-cell-dropdown]').forEach(d=>{ d.classList.add('hidden'); d.style.position=''; d.style.top=''; d.style.left=''; });
+}
 
 
-
+function closeAllCellDropdowns(){
+  document.querySelectorAll('[data-cell-dropdown]').forEach(d=> d.classList.add('hidden'));
+}
 
 window.allRoomingRecords = allRoomingRecords;
 window.allRoomingJemaah = allRoomingJemaah;
@@ -2085,40 +2013,83 @@ async function updateJemaahField(jemaahId, field, value){
   if(!base||!pat) return alert('Airtable config missing');
   const rec=allRoomingJemaah.find(r=>r.id===jemaahId);
   if(rec){ rec.fields[field]=value; }
-  // Optimistic UI already updated
   try{
     let payloadValue = value;
-    // FIX for Airtable Multiple Select fields: INSURAN, BOARD BASIS, BOARD
-    if(field==='INSURAN'){
-      if(Array.isArray(value)) payloadValue = value.length?value:null;
+    // Direct fetch: check field type from meta cache
+    const fieldType = (_roomingFieldTypes && _roomingFieldTypes[field]) || (_roomingFieldTypes && _roomingFieldTypes[field.toUpperCase()]) || null;
+    // FIX for Airtable Multiple Select fields: INSURAN, BOARD BASIS
+    if(field==='INSURAN' || fieldType==='multipleSelects'){
+      if(Array.isArray(value)) payloadValue = value.length?value:[];
       else if(typeof value==='string' && value.trim()!==''){
-        payloadValue = value.split(',').map(s=>s.trim()).filter(Boolean);
-        if(payloadValue.length===0) payloadValue=null;
-      } else payloadValue=null;
+        // If field is multipleSelects, split by comma
+        if(field==='INSURAN'){
+          payloadValue = value.split(',').map(s=>s.trim()).filter(Boolean);
+        } else {
+          payloadValue = [value.trim()];
+        }
+        if(payloadValue.length===0) payloadValue=[];
+      } else payloadValue=[];
     }
     if(field==='BOARD BASIS' || field==='BOARD'){
       if(Array.isArray(value)) payloadValue = value.length?value:[];
       else if(typeof value==='string' && value.includes(',')){
         payloadValue = value.split(',').map(s=>s.trim()).filter(Boolean);
-      }
+      } else if(typeof value==='string' && value.trim()!==''){
+        payloadValue = [value.trim()];
+      } else payloadValue=[];
     }
-    // If null, send empty array for  select to clear? Airtable needs null to clear  select
     const fieldsToSend = {};
-    if(payloadValue===null || (Array.isArray(payloadValue) && payloadValue.length===0)){
-      // For  select, sending [] or null clears, but Airtable docs: use [] to clear? Use null
+    if(payloadValue===null){
       fieldsToSend[field] = field==='INSURAN' || field==='BOARD BASIS' ? [] : '';
     } else {
       fieldsToSend[field] = payloadValue;
     }
-    console.log('V83 updateJemaahField', jemaahId, field, '->', fieldsToSend[field]);
-    const res=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jemaahId}`,{method:'PATCH',headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({fields: fieldsToSend})});
-    const data=await res.json();
-    if(data.error){
-      console.error('Airtable update error', data.error);
-      throw new Error(data.error.message + ' (field: '+field+', type: '+data.error.type+')');
+    console.log('Direct fetch updateJemaahField', jemaahId, field, 'type:', fieldType, '->', fieldsToSend[field]);
+    const res=await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${jemaahId}`,{
+      method:'PATCH',
+      headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+      body: JSON.stringify({fields: fieldsToSend})
+    });
+    if(!res.ok){
+      const errText = await res.text();
+      console.error('Airtable update error', res.status, errText);
+      if(res.status===422 && errText.includes('INVALID_MULTIPLE_CHOICE_OPTIONS')){
+        // Parse field name from error
+        let msg = errText;
+        try{ const j=JSON.parse(errText); if(j.error && j.error.message) msg=j.error.message; }catch(e){}
+        // Check if trying to create new option
+        if(msg.includes('Insufficient permissions to create new select option')){
+          const match = msg.match(/"([^"]+)"/);
+          const opt = match?match[1]:value;
+          alert(`Gagal update jemaah ${field}: Insufficient permissions to create new select option "${opt}" (field: ${field}, type: INVALID_MULTIPLE_CHOICE_OPTIONS)\n\n`+
+                `Penyebab: PAT tiada scope schema.bases:write ATAU field ${field} adalah Single Select tapi cuba send array ATAU option baru belum wujud di Airtable.\n\n`+
+                `Fix: 1) Pastikan field ${field} di Airtable adalah Multiple Select (bukan Single) jika nak multiple values\n`+
+                `2) PAT mesti ada scope data.records:write + schema.bases:write\n`+
+                `3) Tambah option "${opt}" manual di Airtable: DATA JEMAAH UMRAH → field ${field} → Add choice\n\n`+
+                `Direct fetch mode akan cuba fetch dari meta, bukan hardcoded.`);
+          // Revert optimistic update
+          if(rec) rec.fields[field]=null;
+          try{ renderNamelist(); }catch(e){}
+          return;
+        }
+        throw new Error(errText);
+      }
+      throw new Error(errText);
     }
-  }catch(e){ console.error(e); alert('Gagal update jemaah '+field+': '+e.message+'\n\nPastikan field '+field+' di Airtable adalah Multiple Select (bukan Single Select). Jika Single Select, tukar ke Multiple Select dulu.'); if(typeof fetchRoomingData==='function') fetchRoomingData(); }
+    const data=await res.json();
+    console.log('Update success', data.id);
+    try{ buildRoomingFieldOptionsFromRecords(); }catch(e){}
+  }catch(e){
+    console.error('updateJemaahField error', e);
+    if(e.message && e.message.includes('INVALID_MULTIPLE_CHOICE_OPTIONS')){
+      // Already handled above
+    } else {
+      alert(`Gagal update jemaah ${field}: `+e.message.substring(0,400));
+    }
+  }
 }
+
+
 
 
 async function updateJemaahBoardMulti(jemaahId, selectedArr){
@@ -4178,7 +4149,3 @@ window.updateVisaCountBadge=updateVisaCountBadge;
 setTimeout(updateVisaCountBadge, 2000);
 
 window.openDeleteStaffModal=openDeleteStaffModal; window.closeDeleteStaffModal=closeDeleteStaffModal; window.deleteSingleStaffFromModal=deleteSingleStaffFromModal; window.confirmBulkDeleteStaff=confirmBulkDeleteStaff; window.performDeleteStaff=performDeleteStaff; window.toggleAllDeleteStaff=toggleAllDeleteStaff; window.deleteStaff=deleteStaff;
-
-function closeAllCellDropdowns(){
-  document.querySelectorAll('[data-cell-dropdown]').forEach(d=>{ d.classList.add('hidden'); d.style.position=''; d.style.top=''; d.style.left=''; });
-}
