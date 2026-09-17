@@ -1842,7 +1842,16 @@ function renderRoomingGrid(){
         return `<div class="flex items-center justify-between px-2.5 py-2 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl text-[11px] mt-1"><span class="truncate font-medium">👶 ${jName}</span><button onclick="removeTanpaKatilFromRoom('${rec.id}','${tId}')" class="ml-2 w-4 h-4 rounded-full bg-white hover:bg-slate-200 text-[10px]">✕</button></div>`;
       }
     }).join('');
-const emptyCount=Math.max(0,cap-count); const emptySlots=Array.from({length:emptyCount}).map((_,i)=>`<div ondragover="allowDrop(event)" ondrop="dropJemaah(event,'${rec.id}')" class="px-2.5 py-2 border border-dashed border-slate-300 rounded-xl text-[10px] text-slate-400 text-center">Slot Kosong ${count+i+1}</div>`).join('');
+const emptyCount=Math.max(0,cap-count); 
+    const isSelectedActive = !!(window._selectedJemaahId || window._selectedStaffId);
+    const emptySlots=Array.from({length:emptyCount}).map((_,i)=>{
+      const baseCls = isSelectedActive 
+        ? "px-2.5 py-2 border-2 border-dashed border-emerald-400 bg-emerald-50 hover:bg-emerald-100 rounded-xl text-[10px] font-bold text-emerald-700 text-center cursor-pointer animate-pulse shadow-sm" 
+        : "px-2.5 py-2 border border-dashed border-slate-300 bg-white hover:bg-slate-50 rounded-xl text-[10px] text-slate-400 text-center cursor-pointer hover:border-slate-400 transition";
+      const label = isSelectedActive ? `+ Klik assign ke ${roomId.substring(0,8)}` : `Slot Kosong ${count+i+1} - Klik untuk assign`;
+      const clickLabel = isSelectedActive ? `+ Assign ke ${f['Room ID / Nama Bilik']||roomId.substring(0,6)}` : `Slot Kosong ${count+i+1}`;
+      return `<div onclick="handleRoomSlotClick('${rec.id}')" data-empty-slot="${rec.id}" data-room-name="${(f['Room ID / Nama Bilik']||'').replace(/'/g,'')}" class="${baseCls}" title="Klik untuk assign jemaah terpilih ke bilik ${f['Room ID / Nama Bilik']||rec.id}">${clickLabel}</div>`;
+    }).join('');
     const localCatatan = (typeof loadLocalCatatan==='function'? loadLocalCatatan(rec.id) : '') || '';
     const catatanVal = f['CATATAN BILIK'] || f['CATATAN'] || f['NOTES'] || f['REMARK'] || localCatatan || '';
     const catatanField = `<div class="mt-2"><div class="text-[8px] font-bold text-slate-500 mb-1">CATATAN BILIK</div><textarea id="catatan-${rec.id}" placeholder="Catatan bilik..." onblur="updateRoomCatatan('${rec.id}', this.value)" oninput="clearTimeout(window._catatanTimer); window._catatanTimer=setTimeout(()=>updateRoomCatatan('${rec.id}', this.value), 1000)" class="w-full text-[10px] px-2.5 py-1.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:border-[#7A0C2E]/30 resize-none" rows="2">${catatanVal}</textarea></div>`;
@@ -4416,41 +4425,49 @@ setTimeout(updateVisaCountBadge, 2000);
 window.openDeleteStaffModal=openDeleteStaffModal; window.closeDeleteStaffModal=closeDeleteStaffModal; window.deleteSingleStaffFromModal=deleteSingleStaffFromModal; window.confirmBulkDeleteStaff=confirmBulkDeleteStaff; window.performDeleteStaff=performDeleteStaff; window.toggleAllDeleteStaff=toggleAllDeleteStaff; window.deleteStaff=deleteStaff;
 
 
-// ===== FIX V119 - CLICK TO ASSIGN, DISABLE DRAG FREEZE COMPLETELY =====
-console.log('ROOMING V119 CLICK-TO-ASSIGN loaded - drag disabled to fix freeze');
+// ===== FIX V120 - RESTORE ROOM CARDS + CLICK ASSIGN WITH ROOM PREVIEW =====
+console.log('ROOMING V120 ROOM CARDS RESTORED + CLICK ASSIGN');
 
 window._selectedJemaahId = window._selectedJemaahId || null;
 window._selectedStaffId = window._selectedStaffId || null;
 
-// Function to select jemaah
+// Enhanced select with room preview
 window.selectJemaahForAssign = function(jId){
-  // If already selected, deselect
   if(window._selectedJemaahId === jId){
     window._selectedJemaahId = null;
     window._selectedStaffId = null;
-    console.log('Deselect jemaah', jId);
-    try{ renderNamelist(); }catch(e){}
-    try{ renderRoomingGrid(); }catch(e){}
-    // Remove highlight banner
     const banner = document.getElementById('selectedJemaahBanner');
     if(banner) banner.remove();
+    try{ renderNamelist(); renderRoomingGrid(); }catch(e){}
     return;
   }
   window._selectedJemaahId = jId;
   window._selectedStaffId = null;
   const jRec = (typeof allRoomingJemaah !== 'undefined' ? allRoomingJemaah.find(j=>j.id===jId) : null);
   const name = jRec ? (typeof getJemaahName === 'function' ? getJemaahName(jRec.fields) : jId) : jId;
-  console.log('Selected jemaah for assign', jId, name);
   
-  // Show banner
+  // Find compatible rooms (not full, same location)
+  let compatibleCount = 0;
+  try{
+    if(typeof allRoomingRecords !== 'undefined'){
+      compatibleCount = allRoomingRecords.filter(r=>{
+        const loc = (r.fields['LOKASI / CITY']||'MEKAH').toUpperCase();
+        if(loc !== activeLocation.toUpperCase()) return false;
+        const cap = r.fields['KAPASITI']||4;
+        const cur = (r.fields['JEMAAH']||[]).length + (typeof getStaffForRoom==='function'? getStaffForRoom(r.id).length : 0);
+        return cur < cap;
+      }).length;
+    }
+  }catch(e){}
+
   let banner = document.getElementById('selectedJemaahBanner');
   if(!banner){
     banner = document.createElement('div');
     banner.id = 'selectedJemaahBanner';
-    banner.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 18px;border-radius:9999px;font-size:12px;font-weight:700;z-index:99999;box-shadow:0 10px 30px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;';
+    banner.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:12px 20px;border-radius:9999px;font-size:12px;font-weight:700;z-index:99999;box-shadow:0 10px 30px rgba(0,0,0,0.3);display:flex;align-items:center;gap:12px;max-width:90vw;';
     document.body.appendChild(banner);
   }
-  banner.innerHTML = `<span>✓ ${name} dipilih</span><span style="background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:9999px;font-size:10px;">Klik slot kosong untuk assign • Klik lagi untuk batal</span><button onclick="window._selectedJemaahId=null;window._selectedStaffId=null;document.getElementById('selectedJemaahBanner')?.remove();try{renderNamelist();renderRoomingGrid();}catch(e){}" style="background:#fff;color:#0f172a;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;">✕</button>`;
+  banner.innerHTML = `<span style="background:#10b981;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;">✓</span><span>${name} dipilih • ${compatibleCount} bilik kosong di ${activeLocation}</span><span style="background:rgba(255,255,255,0.15);padding:4px 10px;border-radius:9999px;font-size:10px;">Klik slot kosong dalam bilik untuk assign</span><button onclick="window._selectedJemaahId=null;window._selectedStaffId=null;document.getElementById('selectedJemaahBanner')?.remove();try{renderNamelist();renderRoomingGrid();}catch(e){}" style="background:#fff;color:#0f172a;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;margin-left:4px;">✕</button>`;
   
   try{ renderNamelist(); }catch(e){}
   try{ renderRoomingGrid(); }catch(e){}
@@ -4469,15 +4486,14 @@ window.selectStaffForAssign = function(sId){
   window._selectedJemaahId = null;
   const sRec = (typeof staffList !== 'undefined' ? staffList.find(s=>s.id===sId||s.airtableId===sId) : null);
   const name = sRec ? sRec.name : sId;
-  console.log('Selected staff for assign', sId, name);
   let banner = document.getElementById('selectedJemaahBanner');
   if(!banner){
     banner = document.createElement('div');
     banner.id = 'selectedJemaahBanner';
-    banner.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#7A0C2E;color:#fff;padding:10px 18px;border-radius:9999px;font-size:12px;font-weight:700;z-index:99999;box-shadow:0 10px 30px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;';
+    banner.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#7A0C2E;color:#fff;padding:12px 20px;border-radius:9999px;font-size:12px;font-weight:700;z-index:99999;box-shadow:0 10px 30px rgba(0,0,0,0.3);display:flex;align-items:center;gap:12px;';
     document.body.appendChild(banner);
   }
-  banner.innerHTML = `<span>✓ ${name} (STAFF) dipilih</span><span style="background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:9999px;font-size:10px;">Klik slot kosong untuk assign</span><button onclick="window._selectedJemaahId=null;window._selectedStaffId=null;document.getElementById('selectedJemaahBanner')?.remove();try{renderNamelist();renderStaffList();renderRoomingGrid();}catch(e){}" style="background:#fff;color:#7A0C2E;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;">✕</button>`;
+  banner.innerHTML = `<span>✓ ${name} (STAFF) dipilih</span><span style="background:rgba(255,255,255,0.15);padding:4px 10px;border-radius:9999px;font-size:10px;">Klik slot kosong untuk assign</span><button onclick="window._selectedJemaahId=null;window._selectedStaffId=null;document.getElementById('selectedJemaahBanner')?.remove();try{renderNamelist();renderStaffList();renderRoomingGrid();}catch(e){}" style="background:#fff;color:#7A0C2E;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;">✕</button>`;
   try{ renderNamelist(); renderStaffList(); renderRoomingGrid(); }catch(e){}
 };
 
@@ -4485,9 +4501,17 @@ window.handleRoomSlotClick = function(roomId){
   const jId = window._selectedJemaahId;
   const sId = window._selectedStaffId;
   if(!jId && !sId){
-    // No selection, maybe show hint
-    console.log('No jemaah/staff selected, click jemaah first');
-    // Flash all empty slots
+    // Highlight instruction
+    const banner = document.getElementById('selectedJemaahBanner');
+    if(!banner){
+      const temp = document.createElement('div');
+      temp.id = 'selectedJemaahBanner';
+      temp.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#f59e0b;color:#fff;padding:10px 18px;border-radius:9999px;font-size:12px;font-weight:700;z-index:99999;';
+      temp.innerHTML = '⚠️ Sila pilih jemaah di Namelist dulu, baru klik slot kosong';
+      document.body.appendChild(temp);
+      setTimeout(()=>temp.remove(), 2500);
+    }
+    // Flash empty slots
     document.querySelectorAll('[data-empty-slot]').forEach(el=>{
       el.classList.add('ring-2','ring-amber-400');
       setTimeout(()=>el.classList.remove('ring-2','ring-amber-400'), 800);
@@ -4496,11 +4520,10 @@ window.handleRoomSlotClick = function(roomId){
   }
   const id = sId || jId;
   const isStaff = !!sId;
-  console.log('Assign via click', {roomId, id, isStaff});
+  console.log('Assign via click to room', roomId, id);
   try{
     if(isStaff){
       if(typeof assignStaffToRoom === 'function') assignStaffToRoom(id, roomId);
-      else if(typeof quickAssignStaffToRoom === 'function') quickAssignStaffToRoom(id, roomId);
     }else{
       if(typeof isJemaahAssignedInLocation === 'function' && isJemaahAssignedInLocation(id, activeLocation)){
         alert('Jemaah sudah ada bilik di '+activeLocation);
@@ -4510,7 +4533,7 @@ window.handleRoomSlotClick = function(roomId){
     }
   }catch(e){
     console.error('Assign error', e);
-    alert('Gagal assign: '+e.message);
+    alert('Gagal: '+e.message);
   }finally{
     window._selectedJemaahId = null;
     window._selectedStaffId = null;
@@ -4520,148 +4543,84 @@ window.handleRoomSlotClick = function(roomId){
       try{ renderNamelist(); }catch(e){}
       try{ renderRoomingGrid(); }catch(e){}
       try{ renderStaffList(); }catch(e){}
-    }, 200);
+    }, 300);
   }
 };
 
-// Patch renderNamelist to use click instead of drag
-const _origRenderNamelist = window.renderNamelist;
-window.renderNamelist = function(){
-  if(typeof _origRenderNamelist === 'function'){
-    // Call original but we will post-process to remove draggable
-    _origRenderNamelist();
+// Re-override renderNamelist cleanly
+(function(){
+  const orig = window.renderNamelist;
+  // Save original if not saved
+  if(!window._origRenderNamelistV120 && typeof orig === 'function' && !orig.toString().includes('V120')){
+    window._origRenderNamelistV120 = orig;
   }
-  // Post-process: replace draggable with click
-  try{
-    const cont = document.getElementById('namelistContainer');
-    if(!cont) return;
-    // Find all elements that had draggable and replace behavior
-    const items = cont.querySelectorAll('[draggable="true"]');
-    items.forEach(el=>{
-      const ondrag = el.getAttribute('ondragstart');
-      if(!ondrag) return;
-      const match = ondrag.match(/dragJemaah.*'([^']+)'/);
-      const matchStaff = ondrag.match(/dragStaff.*'([^']+)'/);
-      const jId = match ? match[1] : (matchStaff ? matchStaff[1] : null);
-      const isStaff = !!matchStaff;
-      if(jId){
-        el.removeAttribute('draggable');
-        el.removeAttribute('ondragstart');
-        el.removeAttribute('ondragend');
-        el.style.cursor = 'pointer';
-        // Preserve original classes but add selected ring if selected
-        if((window._selectedJemaahId === jId) || (window._selectedStaffId === jId)){
-          el.classList.add('ring-2','ring-emerald-500','bg-emerald-50');
-        }
-        el.onclick = function(e){
-          e.preventDefault();
-          e.stopPropagation();
-          if(isStaff) selectStaffForAssign(jId);
-          else selectJemaahForAssign(jId);
-        };
-      }
-    });
-  }catch(e){ console.error('renderNamelist patch error', e); }
-};
-
-// Patch renderRoomingGrid empty slots
-const _origRenderRoomingGrid = window.renderRoomingGrid;
-window.renderRoomingGrid = function(){
-  if(typeof _origRenderRoomingGrid === 'function'){
-    _origRenderRoomingGrid();
-  }
-  try{
-    const grid = document.getElementById('roomingGrid');
-    if(!grid) return;
-    // Find all empty slot divs that had ondragover/ondrop and replace with click
-    const slots = grid.querySelectorAll('[ondragover][ondrop]');
-    slots.forEach(el=>{
-      const ondrop = el.getAttribute('ondrop');
-      if(!ondrop) return;
-      const match = ondrop.match(/dropJemaah.*'([^']+)'/);
-      if(!match) return;
-      const roomId = match[1];
-      el.removeAttribute('ondragover');
-      el.removeAttribute('ondrop');
-      el.setAttribute('data-empty-slot', roomId);
-      el.style.cursor = 'pointer';
-      el.classList.add('hover:bg-emerald-50','hover:border-emerald-300','transition');
-      el.onclick = function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        handleRoomSlotClick(roomId);
-      };
-      // Add visual hint if something selected
-      if(window._selectedJemaahId || window._selectedStaffId){
-        el.classList.add('bg-amber-50','border-amber-300','animate-pulse');
-        el.innerHTML = '<span style="font-size:10px;font-weight:bold;color:#92400e;">+ Klik untuk assign</span>';
-      }
-    });
-    // Also patch data-room-id cards to remove drag-over handlers that cause freeze
-    const roomCards = grid.querySelectorAll('[data-room-id]');
-    roomCards.forEach(card=>{
-      card.removeAttribute('ondragover');
-      card.removeAttribute('ondragleave');
-      card.removeAttribute('ondrop');
-      // Keep room reorder via button only, not whole card
-    });
-  }catch(e){ console.error('renderRoomingGrid patch error', e); }
-};
-
-// Also patch staff list
-const _origRenderStaffList = window.renderStaffList;
-if(typeof _origRenderStaffList === 'function'){
-  window.renderStaffList = function(){
-    _origRenderStaffList();
+  window.renderNamelist = function(){
     try{
-      const cont = document.getElementById('staffListContainer') || document.getElementById('staffContainer');
+      if(window._origRenderNamelistV120) window._origRenderNamelistV120();
+      else if(typeof orig === 'function') orig();
+    }catch(e){ console.error('orig renderNamelist error', e); }
+    try{
+      const cont = document.getElementById('namelistContainer');
       if(!cont) return;
-      const items = cont.querySelectorAll('[draggable="true"]');
-      items.forEach(el=>{
-        const ondrag = el.getAttribute('ondragstart');
-        if(!ondrag) return;
-        const match = ondrag.match(/dragStaff.*'([^']+)'/);
-        if(!match) return;
-        const sId = match[1];
+      cont.querySelectorAll('[draggable="true"]').forEach(el=>{
+        const dragAttr = el.getAttribute('ondragstart')||'';
+        if(!dragAttr) return;
+        const isStaff = dragAttr.includes('dragStaff');
+        const m = dragAttr.match(/'([^']+)'/);
+        if(!m) return;
+        const id = m[1];
         el.removeAttribute('draggable');
         el.removeAttribute('ondragstart');
         el.removeAttribute('ondragend');
         el.style.cursor='pointer';
-        if(window._selectedStaffId === sId){
-          el.classList.add('ring-2','ring-[#7A0C2E]');
+        // Highlight if selected
+        if(window._selectedJemaahId === id || window._selectedStaffId === id){
+          el.classList.add('ring-2','ring-emerald-500','bg-emerald-50');
+          el.style.background='#ecfdf5';
         }
         el.onclick = function(e){
-          e.preventDefault();
-          e.stopPropagation();
-          selectStaffForAssign(sId);
+          e.preventDefault(); e.stopPropagation();
+          if(isStaff) selectStaffForAssign(id);
+          else selectJemaahForAssign(id);
         };
       });
-    }catch(e){ console.error('renderStaffList patch error', e); }
+    }catch(e){ console.error('V120 namelist patch error', e); }
   };
-}
+})();
 
-// Disable native drag globally to prevent freeze
-document.addEventListener('dragstart', function(e){
-  // Only allow room reorder drag (grip button), block jemaah/staff drag
-  const target = e.target;
-  const isRoomGrip = target.closest && target.closest('[data-room-id]') && target.getAttribute('draggable') === 'true' && target.innerHTML && target.innerHTML.includes('fa-grip');
-  const isRoomCardGrip = e.target.getAttribute && e.target.getAttribute('ondragstart') && e.target.getAttribute('ondragstart').includes('handleRoomDragStart');
-  if(!isRoomGrip && !isRoomCardGrip){
-    // Check if it's jemaah/staff drag - block it, we use click now
-    const dragAttr = target.getAttribute && target.getAttribute('ondragstart');
-    if(dragAttr && (dragAttr.includes('dragJemaah') || dragAttr.includes('dragStaff'))){
-      e.preventDefault();
-      e.stopPropagation();
-      // Instead trigger click selection
-      const match = dragAttr.match(/'([^']+)'/);
-      if(match){
-        const id = match[1];
-        if(dragAttr.includes('dragStaff')) selectStaffForAssign(id);
-        else selectJemaahForAssign(id);
-      }
-      return false;
-    }
+// Re-override renderRoomingGrid to preserve room cards and only enhance empty slots
+(function(){
+  const orig = window._origRenderRoomingGrid || window.renderRoomingGrid;
+  if(!window._origRenderRoomingGridV120 && typeof orig === 'function' && !orig.toString().includes('V120')){
+    window._origRenderRoomingGridV120 = orig;
   }
-}, true);
+  window.renderRoomingGrid = function(){
+    try{
+      if(window._origRenderRoomingGridV120) window._origRenderRoomingGridV120();
+      else if(typeof orig === 'function') orig();
+    }catch(e){ console.error('orig renderRoomingGrid error', e); }
+    // Now enhance empty slots that already have click handler from template replacement
+    // Add room name preview
+    try{
+      const grid = document.getElementById('roomingGrid');
+      if(!grid) return;
+      // Highlight compatible rooms when jemaah selected
+      if(window._selectedJemaahId || window._selectedStaffId){
+        grid.querySelectorAll('[data-room-id]').forEach(card=>{
+          const roomId = card.getAttribute('data-room-id');
+          const rec = (typeof allRoomingRecords !== 'undefined' ? allRoomingRecords.find(r=>r.id===roomId) : null);
+          if(!rec) return;
+          const cap = rec.fields['KAPASITI']||4;
+          const cur = (rec.fields['JEMAAH']||[]).length + (typeof getStaffForRoom==='function'? getStaffForRoom(rec.id).length : 0);
+          if(cur < cap){
+            card.classList.add('ring-2','ring-emerald-300','ring-offset-1');
+          }else{
+            card.classList.add('opacity-60');
+          }
+        });
+      }
+    }catch(e){ console.error('V120 room grid enhance error', e); }
+  };
+})();
 
-console.log('V119 click-to-assign fully active - drag disabled for jemaah/staff');
+console.log('V120 room cards restored - click assign with room preview active');
