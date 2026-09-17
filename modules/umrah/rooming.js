@@ -1666,6 +1666,7 @@ function makeNamelistSticky(){
     const modul = document.getElementById('modul-rooming');
     if(!modul) return;
 
+    // Find filter bar (ROOMING LIST header)
     const tripSelect = document.getElementById('roomingTripSelect');
     let filterBar = null;
     if(tripSelect){
@@ -1680,18 +1681,6 @@ function makeNamelistSticky(){
       }
       if(!filterBar) filterBar = tripSelect.closest('div.border-b');
     }
-    if(!filterBar){
-      const outer = modul.firstElementChild;
-      if(outer){
-        for(const child of outer.children){
-          if(child.querySelector && (child.querySelector('#roomingTripSelect') || child.querySelector('#roomingHijriTabs'))){
-            filterBar = child;
-            break;
-          }
-        }
-        if(!filterBar && outer.firstElementChild) filterBar = outer.firstElementChild;
-      }
-    }
 
     if(filterBar){
       filterBar.style.position='sticky';
@@ -1699,7 +1688,6 @@ function makeNamelistSticky(){
       filterBar.style.zIndex='35';
       filterBar.style.backgroundColor='#ffffff';
       filterBar.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)';
-      filterBar.style.borderBottom='1px solid #e2e8f0';
     }
 
     if(leftCard){
@@ -1716,8 +1704,6 @@ function makeNamelistSticky(){
       leftCard.style.height=`calc(100dvh - ${topOffset+8}px)`;
       leftCard.style.overflow='hidden';
       leftCard.style.borderRadius='16px';
-      leftCard.style.willChange='auto';
-      leftCard.style.pointerEvents='auto';
     }
 
     nl.style.flex='1 1 auto';
@@ -1726,25 +1712,23 @@ function makeNamelistSticky(){
     nl.style.overflowY='auto';
     nl.style.overflowX='hidden';
     nl.style.backgroundColor='#ffffff';
-    nl.style.pointerEvents='auto';
-    nl.style.userSelect='auto';
 
     const staffSec = document.getElementById('staffListContainer')?.parentElement;
     if(staffSec){
       staffSec.style.flex='0 0 auto';
-      staffSec.style.display='flex';
-      staffSec.style.flexDirection='column';
-      staffSec.style.maxHeight='36vh';
-      staffSec.style.overflow='hidden';
       staffSec.style.backgroundColor='#ffffff';
       staffSec.style.borderTop='2px solid #e2e8f0';
+      staffSec.style.display='flex';
+      staffSec.style.flexDirection='column';
+      staffSec.style.maxHeight='38vh';
+      staffSec.style.overflow='hidden';
     }
     const staffCont = document.getElementById('staffListContainer');
     if(staffCont){
       staffCont.style.flex='1';
       staffCont.style.overflowY='auto';
       staffCont.style.overflowX='hidden';
-      staffCont.style.pointerEvents='auto';
+      staffCont.style.backgroundColor='#ffffff';
     }
     const rg=document.getElementById('roomingGrid');
     if(rg){
@@ -1759,12 +1743,10 @@ function makeNamelistSticky(){
     }
     if(modul){
       modul.style.overflow='visible';
+      const outer = modul.firstElementChild;
+      if(outer) outer.style.overflow='visible';
     }
-    const outer = modul.firstElementChild;
-    if(outer){
-      outer.style.overflow='visible';
-    }
-    console.log('V131 sticky applied - filterBar 64px, leftCard '+(64 + (filterBar?filterBar.offsetHeight:72) + 12)+'px');
+    console.log('FINAL sticky - filterBar 64px, leftCard '+(64 + (filterBar?filterBar.offsetHeight:72) + 12)+'px');
   }catch(e){ console.error('sticky fail', e); }
 }
 
@@ -2000,21 +1982,8 @@ function _startAutoScroll(){
   }, 30);
 }
 document.addEventListener('drop', ()=>{ _stopAutoScroll(); });
-function dragJemaah(e,jId){ 
-  if(isJemaahAssignedInLocation(jId, activeLocation)) { e.preventDefault(); return; }
-  window._draggedJemaahId = jId;
-  try{ e.dataTransfer.setData('text/plain',jId); e.dataTransfer.effectAllowed='move'; }catch(err){}
-  const r=e.currentTarget; 
-  if(r) setTimeout(()=>{ r.style.opacity='0.3'; r.classList.add('dragging'); },0);
-  console.log('dragJemaah', jId);
-}
-function dragEnd(e){ 
-  try{ e.currentTarget.style.opacity='1'; e.currentTarget.classList.remove('dragging'); }catch(err){}
-  document.querySelectorAll('[draggable="true"]').forEach(el=>{ el.style.opacity='1'; el.classList.remove('dragging'); });
-  window._draggedJemaahId = null;
-  try{ _stopAutoScroll(); }catch(err){}
-  console.log('dragEnd');
-}
+function dragJemaah(e,jId){ if(isJemaahAssignedInLocation(jId, activeLocation)) return; e.dataTransfer.setData('text/plain',jId); const r=e.currentTarget; if(r) setTimeout(()=>r.style.opacity='0.3',0); }
+function dragEnd(e){ e.currentTarget.style.opacity='1'; }
 
 function dragRoom(e,roomId){
   e.dataTransfer.setData('text/room-id', roomId);
@@ -2195,63 +2164,52 @@ function allowDropRoom(e){
 }
 
 function dropJemaah(e,roomId){
-  try{ e.preventDefault(); e.stopPropagation(); }catch(err){}
-  try{ e.currentTarget.classList.remove('ring-2','ring-[#7A0C2E]/20','ring-[#7A0C2E]/40','drag-over'); }catch(err){}
+  e.preventDefault(); 
+  try{ e.currentTarget.classList.remove('ring-2','ring-[#7A0C2E]/20'); }catch(err){}
+  document.querySelectorAll('[draggable="true"]').forEach(el=>el.style.opacity='1');
+  // If this is a room reorder drag (text/room-id), ignore here - let dropRoomReorder handle it
   try{
-    document.querySelectorAll('[draggable="true"]').forEach(el=>{ el.style.opacity='1'; el.classList.remove('dragging'); el.style.border=''; });
+    const roomDragId = e.dataTransfer.getData('text/room-id');
+    if(roomDragId && roomDragId.startsWith('rec')){
+      const isRoom = allRoomingRecords.some(r=>r.id===roomDragId);
+      if(isRoom){
+        console.log('dropJemaah ignored - this is room reorder drag', roomDragId);
+        return;
+      }
+    }
+    // Also check if plain text is actually a room id
+    const plain = e.dataTransfer.getData('text/plain');
+    if(plain && plain.startsWith('rec') && allRoomingRecords.some(r=>r.id===plain)){
+      // If draggedRoomId is set, this is definitely a room reorder
+      if(draggedRoomId || window.draggedRoomId){
+        console.log('dropJemaah ignored - plain is room id and room drag active', plain);
+        return;
+      }
+    }
   }catch(err){}
-  let jId = window._draggedJemaahId || '';
-  try{
-    const dtPlain = e.dataTransfer.getData('text/plain');
-    const dtJemaah = e.dataTransfer.getData('text/jemaah-id');
-    if(!jId) jId = dtJemaah || dtPlain || '';
-  }catch(err){}
-  if(!jId){
-    console.warn('dropJemaah: no jId');
-    window._draggedJemaahId = null;
-    try{ _stopAutoScroll(); }catch(err){}
-    return;
+  const staffId=e.dataTransfer.getData('text/staff-id'); const jId=e.dataTransfer.getData('text/plain');
+  const id=staffId||jId; if(!id) return;
+  const rec=allRoomingRecords.find(r=>r.id===roomId);
+  if(rec){
+    const cap=rec.fields['KAPASITI']||4;
+    const curCount=(rec.fields['JEMAAH']||[]).length + getStaffForRoom(rec.id).length;
+    if(curCount>=cap && !staffId){
+      alert('Kapasiti Bilik Penuh\n\nBilik '+(rec.fields['Room ID / Nama Bilik']||roomId)+' telah mencapai kapasiti maksimum ('+curCount+'/'+cap+').\nSila pilih bilik lain.');
+      const el=document.querySelector(`[data-room-id="${roomId}"]`);
+      if(el){ el.classList.add('ring-2','ring-red-400'); setTimeout(()=>el.classList.remove('ring-2','ring-red-400'),800); }
+      return;
+    }
   }
-  if(allRoomingRecords.some(r=>r.id===jId) && (draggedRoomId || window.draggedRoomId)){
-    console.log('dropJemaah ignored - is room', jId);
-    window._draggedJemaahId = null;
-    return;
-  }
-  const rec = allRoomingRecords.find(r=>r.id===roomId);
-  if(!rec){
-    window._draggedJemaahId = null;
-    return;
-  }
-  if(isJemaahAssignedInLocation(jId, activeLocation)){
-    window._draggedJemaahId = null;
-    return;
-  }
-  const cap = rec.fields['KAPASITI']||4;
-  const curCount = (rec.fields['JEMAAH']||[]).length + (function(){ try{ return getStaffForRoom(rec.id).length; }catch(e){ return 0; } })();
-  if(curCount >= cap){
-    alert('Bilik '+(rec.fields['Room ID / Nama Bilik']||roomId)+' sudah penuh ('+curCount+'/'+cap+'). Tidak boleh tambah jemaah lagi.\n\nSila pilih bilik lain.');
-    const el=document.querySelector(`[data-room-id="${roomId}"]`);
-    if(el){ el.classList.add('ring-2','ring-red-400'); setTimeout(()=>el.classList.remove('ring-2','ring-red-400'),800); }
-    window._draggedJemaahId = null;
-    try{ _stopAutoScroll(); }catch(err){}
-    return;
-  }
-  console.log('dropJemaah ASSIGN', jId, 'to', roomId);
-  if(typeof assignJemaahToRoom==='function'){
-    assignJemaahToRoom(jId, roomId);
-  }
-  window._draggedJemaahId = null;
-  try{ _stopAutoScroll(); }catch(err){}
+  if(staffList.some(s=>s.id===id) || id.startsWith('staff_')){ assignStaffToRoom(id,roomId); }
+  else { if(!isJemaahAssignedInLocation(id, activeLocation)) assignJemaahToRoom(id,roomId); }
 }
-
 function quickAssign(jId){ if(isJemaahAssignedInLocation(jId, activeLocation)) return; const rooms=allRoomingRecords.filter(r=>(r.fields['LOKASI / CITY']||'MEKAH').toUpperCase()===activeLocation); const target=rooms.find(r=>{ const j=r.fields['JEMAAH']?.length||0; const s=(r.fields['STAFF / EXTRA']||'').split(',').filter(Boolean).length; return (j+s)<(r.fields['KAPASITI']||4); }); if(target) assignJemaahToRoom(jId,target.id); }
 function removeJemaahFromCurrentLoc(jId){
   const rec = allRoomingRecords.find(r=>(r.fields['LOKASI / CITY']||'MEKAH').toUpperCase()===activeLocation && (r.fields['JEMAAH']||[]).includes(jId));
   if(rec) removeJemaahFromRoom(rec.id, jId);
 }
 async function assignJemaahToRoom(jId,roomId){ 
-  try{
-  if(isJemaahAssignedInLocation(jId, activeLocation)) { console.log('already assigned in loc', jId); return; }
+  if(isJemaahAssignedInLocation(jId, activeLocation)) return; 
   const rec=allRoomingRecords.find(r=>r.id===roomId); if(!rec) return;
   const cap=rec.fields['KAPASITI']||4;
   const curCount=(rec.fields['JEMAAH']||[]).length + getStaffForRoom(rec.id).length;
@@ -2263,7 +2221,6 @@ async function assignJemaahToRoom(jId,roomId){
     return; 
   }
   await updateRoomField(roomId,'JEMAAH',[...(rec.fields['JEMAAH']||[]),jId],true); 
-  }catch(e){ console.error('assignJemaahToRoom fail', e); alert('Gagal assign: '+e.message); }
 }
 async function removeJemaahFromRoom(roomId,jId){ const rec=allRoomingRecords.find(r=>r.id===roomId); await updateRoomField(roomId,'JEMAAH',(rec.fields['JEMAAH']||[]).filter(id=>id!==jId),true); }
 async function updateCap(roomId,delta){
@@ -3542,7 +3499,7 @@ function _startAutoScroll(){
   } catch(e){}
 }
 function allowDrop(e){ 
-  try { e.preventDefault(); e.dataTransfer.dropEffect='move'; } catch(e){}
+  try { e.preventDefault(); } catch(e){}
   window._lastDragY=e.clientY; 
   _startAutoScroll(); 
 }
@@ -3556,44 +3513,6 @@ if(!window._roomingDragListenersAdded){
   document.addEventListener('drop', ()=>{ _stopAutoScroll(); });
   window._roomingDragListenersAdded = true;
   console.log('Drag listeners added ONCE');
-
-// V136 failsafe: ensure freeze never happens - reset on mouseup, dragend, drop anywhere
-(function(){
-  if(window._dragFailsafeAdded) return;
-  window._dragFailsafeAdded = true;
-  document.addEventListener('mouseup', ()=>{
-    setTimeout(()=>{
-      document.querySelectorAll('[draggable="true"]').forEach(el=>{
-        el.style.opacity='1';
-        el.classList.remove('dragging');
-        el.style.border='';
-      });
-      document.querySelectorAll('[data-room-id]').forEach(el=>{
-        el.classList.remove('drag-over','ring-2','ring-[#7A0C2E]/40','ring-[#7A0C2E]/20');
-      });
-      window._dragInProgress = false;
-    }, 100);
-  });
-  document.addEventListener('dragend', ()=>{
-    setTimeout(()=>{
-      document.querySelectorAll('[draggable="true"]').forEach(el=>{
-        el.style.opacity='1';
-        el.classList.remove('dragging');
-        el.style.border='';
-      });
-      window._dragInProgress = false;
-      try{ _stopAutoScroll(); }catch(e){}
-    }, 50);
-  });
-  document.addEventListener('drop', ()=>{
-    setTimeout(()=>{
-      window._dragInProgress = false;
-      try{ _stopAutoScroll(); }catch(e){}
-    }, 100);
-  });
-  console.log('V136 drag failsafe listeners added');
-})();
-
 }
 
 function renderLocationTabs(){
