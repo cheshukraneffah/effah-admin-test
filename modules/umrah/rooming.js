@@ -2193,46 +2193,55 @@ function allowDropRoom(e){
 }
 
 function dropJemaah(e,roomId){
-  e.preventDefault(); 
-  try{ e.currentTarget.classList.remove('ring-2','ring-[#7A0C2E]/20'); }catch(err){}
-  document.querySelectorAll('[draggable="true"]').forEach(el=>{ el.style.opacity='1'; el.classList.remove('dragging'); });
-  window._draggedJemaahId = null;
-  // If this is a room reorder drag (text/room-id), ignore here - let dropRoomReorder handle it
+  try{ e.preventDefault(); e.stopPropagation(); }catch(err){}
+  try{ e.currentTarget.classList.remove('ring-2','ring-[#7A0C2E]/20','ring-[#7A0C2E]/40','drag-over'); }catch(err){}
   try{
-    const roomDragId = e.dataTransfer.getData('text/room-id');
-    if(roomDragId && roomDragId.startsWith('rec')){
-      const isRoom = allRoomingRecords.some(r=>r.id===roomDragId);
-      if(isRoom){
-        console.log('dropJemaah ignored - this is room reorder drag', roomDragId);
-        return;
-      }
-    }
-    // Also check if plain text is actually a room id
-    const plain = e.dataTransfer.getData('text/plain');
-    if(plain && plain.startsWith('rec') && allRoomingRecords.some(r=>r.id===plain)){
-      // If draggedRoomId is set, this is definitely a room reorder
-      if(draggedRoomId || window.draggedRoomId){
-        console.log('dropJemaah ignored - plain is room id and room drag active', plain);
-        return;
-      }
-    }
+    document.querySelectorAll('[draggable="true"]').forEach(el=>{ el.style.opacity='1'; el.classList.remove('dragging'); el.style.border=''; });
   }catch(err){}
-  const staffId=e.dataTransfer.getData('text/staff-id') || e.dataTransfer.getData('application/x-staff-id'); const jId=e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/jemaah-id') || window._draggedJemaahId;
-  const id=staffId||jId; if(!id) return;
-  const rec=allRoomingRecords.find(r=>r.id===roomId);
-  if(rec){
-    const cap=rec.fields['KAPASITI']||4;
-    const curCount=(rec.fields['JEMAAH']||[]).length + getStaffForRoom(rec.id).length;
-    if(curCount>=cap && !staffId){
-      alert('Kapasiti Bilik Penuh\n\nBilik '+(rec.fields['Room ID / Nama Bilik']||roomId)+' telah mencapai kapasiti maksimum ('+curCount+'/'+cap+').\nSila pilih bilik lain.');
-      const el=document.querySelector(`[data-room-id="${roomId}"]`);
-      if(el){ el.classList.add('ring-2','ring-red-400'); setTimeout(()=>el.classList.remove('ring-2','ring-red-400'),800); }
-      return;
-    }
+  let jId = window._draggedJemaahId || '';
+  try{
+    const dtPlain = e.dataTransfer.getData('text/plain');
+    const dtJemaah = e.dataTransfer.getData('text/jemaah-id');
+    if(!jId) jId = dtJemaah || dtPlain || '';
+  }catch(err){}
+  if(!jId){
+    console.warn('dropJemaah: no jId');
+    window._draggedJemaahId = null;
+    try{ _stopAutoScroll(); }catch(err){}
+    return;
   }
-  if(staffList.some(s=>s.id===id) || id.startsWith('staff_')){ assignStaffToRoom(id,roomId); }
-  else { if(!isJemaahAssignedInLocation(id, activeLocation)) assignJemaahToRoom(id,roomId); }
+  if(allRoomingRecords.some(r=>r.id===jId) && (draggedRoomId || window.draggedRoomId)){
+    console.log('dropJemaah ignored - is room', jId);
+    window._draggedJemaahId = null;
+    return;
+  }
+  const rec = allRoomingRecords.find(r=>r.id===roomId);
+  if(!rec){
+    window._draggedJemaahId = null;
+    return;
+  }
+  if(isJemaahAssignedInLocation(jId, activeLocation)){
+    window._draggedJemaahId = null;
+    return;
+  }
+  const cap = rec.fields['KAPASITI']||4;
+  const curCount = (rec.fields['JEMAAH']||[]).length + (function(){ try{ return getStaffForRoom(rec.id).length; }catch(e){ return 0; } })();
+  if(curCount >= cap){
+    alert('Bilik '+(rec.fields['Room ID / Nama Bilik']||roomId)+' sudah penuh ('+curCount+'/'+cap+'). Tidak boleh tambah jemaah lagi.\n\nSila pilih bilik lain.');
+    const el=document.querySelector(`[data-room-id="${roomId}"]`);
+    if(el){ el.classList.add('ring-2','ring-red-400'); setTimeout(()=>el.classList.remove('ring-2','ring-red-400'),800); }
+    window._draggedJemaahId = null;
+    try{ _stopAutoScroll(); }catch(err){}
+    return;
+  }
+  console.log('dropJemaah ASSIGN', jId, 'to', roomId);
+  if(typeof assignJemaahToRoom==='function'){
+    assignJemaahToRoom(jId, roomId);
+  }
+  window._draggedJemaahId = null;
+  try{ _stopAutoScroll(); }catch(err){}
 }
+
 function quickAssign(jId){ if(isJemaahAssignedInLocation(jId, activeLocation)) return; const rooms=allRoomingRecords.filter(r=>(r.fields['LOKASI / CITY']||'MEKAH').toUpperCase()===activeLocation); const target=rooms.find(r=>{ const j=r.fields['JEMAAH']?.length||0; const s=(r.fields['STAFF / EXTRA']||'').split(',').filter(Boolean).length; return (j+s)<(r.fields['KAPASITI']||4); }); if(target) assignJemaahToRoom(jId,target.id); }
 function removeJemaahFromCurrentLoc(jId){
   const rec = allRoomingRecords.find(r=>(r.fields['LOKASI / CITY']||'MEKAH').toUpperCase()===activeLocation && (r.fields['JEMAAH']||[]).includes(jId));
