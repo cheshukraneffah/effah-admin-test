@@ -1717,6 +1717,7 @@ function makeNamelistSticky(){
       leftCard.style.overflow='hidden';
       leftCard.style.borderRadius='16px';
       leftCard.style.willChange='auto';
+      leftCard.style.pointerEvents='auto';
     }
 
     nl.style.flex='1 1 auto';
@@ -1726,6 +1727,7 @@ function makeNamelistSticky(){
     nl.style.overflowX='hidden';
     nl.style.backgroundColor='#ffffff';
     nl.style.pointerEvents='auto';
+    nl.style.userSelect='auto';
 
     const staffSec = document.getElementById('staffListContainer')?.parentElement;
     if(staffSec){
@@ -3554,6 +3556,44 @@ if(!window._roomingDragListenersAdded){
   document.addEventListener('drop', ()=>{ _stopAutoScroll(); });
   window._roomingDragListenersAdded = true;
   console.log('Drag listeners added ONCE');
+
+// V136 failsafe: ensure freeze never happens - reset on mouseup, dragend, drop anywhere
+(function(){
+  if(window._dragFailsafeAdded) return;
+  window._dragFailsafeAdded = true;
+  document.addEventListener('mouseup', ()=>{
+    setTimeout(()=>{
+      document.querySelectorAll('[draggable="true"]').forEach(el=>{
+        el.style.opacity='1';
+        el.classList.remove('dragging');
+        el.style.border='';
+      });
+      document.querySelectorAll('[data-room-id]').forEach(el=>{
+        el.classList.remove('drag-over','ring-2','ring-[#7A0C2E]/40','ring-[#7A0C2E]/20');
+      });
+      window._dragInProgress = false;
+    }, 100);
+  });
+  document.addEventListener('dragend', ()=>{
+    setTimeout(()=>{
+      document.querySelectorAll('[draggable="true"]').forEach(el=>{
+        el.style.opacity='1';
+        el.classList.remove('dragging');
+        el.style.border='';
+      });
+      window._dragInProgress = false;
+      try{ _stopAutoScroll(); }catch(e){}
+    }, 50);
+  });
+  document.addEventListener('drop', ()=>{
+    setTimeout(()=>{
+      window._dragInProgress = false;
+      try{ _stopAutoScroll(); }catch(e){}
+    }, 100);
+  });
+  console.log('V136 drag failsafe listeners added');
+})();
+
 }
 
 function renderLocationTabs(){
