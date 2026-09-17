@@ -1661,25 +1661,26 @@ function makeNamelistSticky(){
   try{
     const nl = document.getElementById('namelistContainer');
     if(!nl) return;
-    // Find left card - the 52% width card
     let leftCard = nl.closest('[class*="lg:w-"]');
     if(!leftCard) leftCard = nl.parentElement;
-    // The outer left column wrapper is the parent of leftCard's parent? Actually structure: flex-col lg:flex-row > w-[52%] card
+    // V128 FIX: sticky kiri - kira header height 80px
     if(leftCard){
       leftCard.style.position='sticky';
-      leftCard.style.top='12px';
+      leftCard.style.top='80px';
       leftCard.style.alignSelf='flex-start';
-      leftCard.style.zIndex='20';
+      leftCard.style.zIndex='30';
       leftCard.style.display='flex';
       leftCard.style.flexDirection='column';
       leftCard.style.backgroundColor='#ffffff';
-      leftCard.style.maxHeight='calc(100vh - 16px)';
+      leftCard.style.maxHeight='calc(100dvh - 96px)';
+      leftCard.style.height='calc(100dvh - 96px)';
       leftCard.style.overflow='hidden';
       leftCard.style.borderRadius='16px';
+      leftCard.style.boxShadow='0 1px 3px rgba(0,0,0,0.05)';
     }
     nl.style.flex='1 1 auto';
-    nl.style.maxHeight='48vh';
-    nl.style.minHeight='220px';
+    nl.style.maxHeight='50vh';
+    nl.style.minHeight='240px';
     nl.style.overflowY='auto';
     nl.style.overflowX='hidden';
     nl.style.backgroundColor='#ffffff';
@@ -1690,7 +1691,7 @@ function makeNamelistSticky(){
       staffSec.style.borderTop='2px solid #e2e8f0';
       staffSec.style.display='flex';
       staffSec.style.flexDirection='column';
-      staffSec.style.maxHeight='38vh';
+      staffSec.style.maxHeight='40vh';
       staffSec.style.overflow='hidden';
     }
     const staffCont = document.getElementById('staffListContainer');
@@ -1704,12 +1705,26 @@ function makeNamelistSticky(){
     if(rg){
       rg.style.overflow='visible';
       rg.style.maxHeight='none';
+      rg.style.alignSelf='flex-start';
     }
-    // Ensure parent flex row allows sticky
+    // Ensure parent flex row allows sticky - CRITICAL
     const flexRow = leftCard?.parentElement;
     if(flexRow){
       flexRow.style.alignItems='flex-start';
+      flexRow.style.overflow='visible';
+      flexRow.style.display='flex';
     }
+    // Ensure modul-rooming and main allow sticky
+    const modul = document.getElementById('modul-rooming');
+    if(modul){
+      modul.style.overflow='visible';
+    }
+    const main = document.querySelector('#mainPortalWrapper > main');
+    if(main){
+      main.style.overflowY='auto';
+      main.style.overflowX='hidden';
+    }
+    console.log('V128 sticky applied - leftCard sticky top 80px');
   }catch(e){ console.error('sticky fail', e); }
 }
 
