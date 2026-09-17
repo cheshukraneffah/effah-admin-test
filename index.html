@@ -29,56 +29,13 @@
         }
     </script>
     <style>
-    /* V124 FIX: Sidebar collapse tanpa kosong - flex layout preserved */
-    #sidebar {
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        flex-shrink: 0 !important;
-    }
-    #sidebar.collapsed {
-        width: 0 !important;
-        min-width: 0 !important;
-        overflow: hidden !important;
-        opacity: 0;
-        margin-left: -16rem !important;
-        transform: translateX(-20px);
-    }
-    #sidebar nav {
+    aside, #sidebar, .sidebar, nav.p-4 {
+        position: sticky !important;
+        top: 0 !important;
+        height: 100vh !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
     }
-    @media (max-width: 768px) {
-        #sidebar {
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
-            height: 100dvh !important;
-            z-index: 50 !important;
-            transform: translateX(-100%) !important;
-            width: 16rem !important;
-            min-width: 16rem !important;
-            margin-left: 0 !important;
-            opacity: 1 !important;
-        }
-        #sidebar.open {
-            transform: translateX(0) !important;
-        }
-        #sidebar.collapsed {
-            transform: translateX(-100%) !important;
-            margin-left: 0 !important;
-            width: 16rem !important;
-            opacity: 1 !important;
-        }
-        #mainPortalWrapper > main {
-            margin-left: 0 !important;
-            width: 100% !important;
-        }
-    }
-    /* Trip Akan Datang full box fix */
-    #upcomingTripsList {
-        max-height: none !important;
-        overflow: visible !important;
-    }
-    .calendar-legend, .legend-calendar { display: none !important; }
     aside::-webkit-scrollbar, #sidebar::-webkit-scrollbar { width: 4px; }
     aside::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
     #statusApiBadge, #statApiStatus { transition: all 0.3s; }
@@ -95,7 +52,19 @@
     #apiStatusBadge.offline { background: #fee2e2 !important; color: #dc2626 !important; }
     #apiStatusBadge.online { background: #dcfce7 !important; color: #16a34a !important; }
     #apiStatusBadge { transition: all 0.3s ease; }
-    </style>
+    
+    /* V125 FIX sidebar */
+    #sidebar { transition: all 0.3s cubic-bezier(0.4,0,0.2,1) !important; flex-shrink:0 !important; }
+    #sidebar.collapsed { width:0 !important; min-width:0 !important; overflow:hidden !important; opacity:0; margin-left:-16rem !important; transform:translateX(-20px); }
+    #sidebar nav { overflow-y:auto !important; }
+    @media (max-width:768px){
+        #sidebar { position:fixed !important; left:0 !important; top:0 !important; height:100dvh !important; z-index:50 !important; transform:translateX(-100%) !important; width:16rem !important; min-width:16rem !important; margin-left:0 !important; opacity:1 !important; }
+        #sidebar.open { transform:translateX(0) !important; }
+        #sidebar.collapsed { transform:translateX(-100%) !important; margin-left:0 !important; width:16rem !important; opacity:1 !important; }
+    }
+    #upcomingTripsList { max-height:none !important; overflow:visible !important; }
+    
+</style>
 </head>
 <body class="bg-brand-bg font-sans text-slate-800 antialiased selection:bg-brand-maroon selection:text-white">
 
@@ -133,7 +102,7 @@
                 </div>
                 <nav class="p-4 space-y-1.5 text-xs font-semibold">
                     <a href="#" onclick="switchTab('home')" id="nav-home" class="nav-link flex items-center space-x-3 px-3.5 py-3 rounded-xl transition text-white bg-slate-800/80">
-                        <i class="fa-solid fa-house w-5 text-emerald-400"></i>
+                        <i class="fa-solid fa-house w-5 text-slate-400"></i>
                         <span>Utama & Overview</span>
                     </a>
                     <div class="pt-4 pb-1 px-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pakej Umrah</div>
@@ -169,16 +138,34 @@
                     </a>
                 </nav>
             </div>
-            <div class="sidebar-bottom p-4 border-t border-slate-800 space-y-3 mt-auto">
+            <div class="p-4 border-t border-slate-800">
                 <div class="bg-slate-950/60 p-3 rounded-xl flex items-center justify-between text-xs">
                     <span class="text-slate-400 text-[11px]">Status API:</span>
                     <span id="apiStatusBadge" class="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-0.5 rounded-full font-bold text-[10px]">Offline</span>
                 </div>
-                <button onclick="logoutPortal()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold py-2.5 rounded-xl transition text-[12px] flex items-center justify-center gap-2 border border-slate-700/50">
-                    <i class="fa-solid fa-lock text-[11px]"></i><span>Kunci Portal</span>
-                </button>
             </div>
         </aside>
+
+<script>
+// V125 immediate restore - runs before main render to prevent flicker
+(function(){
+  try{
+    const isMobile = window.innerWidth < 768;
+    const sb = document.getElementById('sidebar');
+    if(!sb) return;
+    if(isMobile){
+      if(localStorage.getItem('effah_sidebar_mobile_open') === '1'){
+        sb.classList.add('open');
+      }
+    } else {
+      if(localStorage.getItem('effah_sidebar_collapsed') === '1'){
+        sb.classList.add('collapsed');
+      }
+    }
+  }catch(e){}
+})();
+</script>
+
 
         <main class="flex-1 flex flex-col min-w-0 overflow-y-auto">
             <header class="bg-white border-b border-slate-200/80 px-6 py-4 flex items-center justify-between sticky top-0 z-30" style="position:sticky;top:0;z-index:40;background:rgba(255,255,255,0.95);backdrop-filter:blur(16px);border-bottom:1px solid #e2e8f0;">
@@ -192,7 +179,9 @@
                         <span id="breadcrumbCurrent" class="text-slate-800 font-bold">Overview</span>
                     </div>
                 </div>
-                <div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-[11px] font-bold">ET</div></div>
+                <button onclick="logoutPortal()" class="text-xs bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 px-3 py-1.5 rounded-xl font-bold transition">
+                    <i class="fa-solid fa-lock mr-1"></i> Kunci
+                </button>
             </header>
 
             <div class="p-6 md:p-8 space-y-6 max-w-7xl w-full mx-auto">
@@ -268,14 +257,14 @@
                             <div id="calendarGrid" class="grid grid-cols-7 gap-1">
                                 <div class="text-center py-8 col-span-7 text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuat kalendar...</div>
                             </div>
-                            <!-- V124 legend removed -->
+                            <!-- V125 legend removed -->
                         </div>
                         <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 flex flex-col">
                             <div class="flex items-center justify-between mb-4">
                                 <h3 class="text-sm font-extrabold text-slate-900 tracking-tight">Trip Akan Datang</h3>
-                                <span class="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-full" id="upcomingCount">0 Trip</span>
+                                <!-- V125 6 Trip badge removed -->
                             </div>
-                            <div id="upcomingTripsList" class="space-y-2.5 flex-1 overflow-visible pr-1">
+                            <div id="upcomingTripsList" class="space-y-2.5 flex-1 overflow-y-auto max-h-[340px] pr-1">
                                 <div class="text-center py-10 text-slate-400 text-xs">Memuat trip akan datang...</div>
                             </div>
                             <button onclick="switchTab('pakej-umrah')" class="mt-4 w-full bg-slate-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-black transition">Lihat Semua Trip <i class="fa-solid fa-arrow-right ml-1"></i></button>
@@ -569,7 +558,7 @@
       alert('Trip pada '+day+'/'+(month+1)+'/'+year+':\n\n'+list);
     }
     function renderUpcoming30Days(){
-      // V124: 6 trip paling dekat, full box
+      // V125: 6 trip paling dekat
       const list = document.getElementById('upcomingTripsList');
       const countEl = document.getElementById('upcomingCount');
       if(!list) return;
@@ -583,7 +572,7 @@
       }).sort((a,b)=> new Date(a.fields['Mula Pakej']) - new Date(b.fields['Mula Pakej'])).slice(0,6);
       if(countEl) countEl.textContent = upcoming.length+' Trip';
       if(upcoming.length===0){
-        list.innerHTML = '<div class="text-center py-8 text-slate-400 text-xs"><i class="fa-solid fa-calendar-check text-2xl mb-2 text-slate-200"></i><p>Tiada trip akan datang</p><p class="text-[10px] mt-1">Musim '+activeHijriSeason+' - semua trip telah berlepas atau belum dijadualkan</p></div>';
+        list.innerHTML = '<div class="text-center py-8 text-slate-400 text-xs"><i class="fa-solid fa-calendar-check text-2xl mb-2 text-slate-200"></i><p>Tiada trip dalam 30 hari akan datang</p><p class="text-[10px] mt-1">Musim '+activeHijriSeason+' - semua trip telah berlepas atau belum dijadualkan</p></div>';
         return;
       }
       list.innerHTML = upcoming.map(rec=>{
@@ -716,70 +705,47 @@
 
 
 <script>
-// V124: Sidebar persistence - desktop collapsed + mobile open state
+// V125 FIX: sidebar toggle with localStorage persistence - desktop + mobile
+window.toggleSidebar = function(){
+  const sb = document.getElementById('sidebar');
+  if(!sb) return;
+  const isMobile = window.innerWidth < 768;
+  if(isMobile){
+    const isOpen = sb.classList.toggle('open');
+    try{ localStorage.setItem('effah_sidebar_mobile_open', isOpen ? '1' : '0'); }catch(e){}
+  } else {
+    const isCollapsed = sb.classList.toggle('collapsed');
+    try{ localStorage.setItem('effah_sidebar_collapsed', isCollapsed ? '1' : '0'); }catch(e){}
+  }
+};
+
 (function(){
-  function initSidebarState(){
+  function initSidebar(){
     const sb = document.getElementById('sidebar');
     if(!sb) return;
     const isMobile = window.innerWidth < 768;
-    if(isMobile){
-      const saved = localStorage.getItem('effah_sidebar_mobile_open');
-      if(saved === '1') sb.classList.add('open');
-      else sb.classList.remove('open');
-    } else {
-      const saved = localStorage.getItem('effah_sidebar_collapsed');
-      if(saved === '1') sb.classList.add('collapsed');
-      else sb.classList.remove('collapsed');
-    }
-  }
-  function checkRealApiStatus(){
-    const badge = document.getElementById('apiStatusBadge');
-    if(!badge) return;
-    const pat = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat');
-    const base = window.AIRTABLE_BASE_ID || localStorage.getItem('effah_base_id');
-    if(!pat || !base){
-      badge.textContent = 'Offline';
-      badge.className = 'bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-0.5 rounded-full font-bold text-[10px]';
-      return;
-    }
-    fetch(`https://api.airtable.com/v0/${base}/PAKEJ%20UMRAH?maxRecords=1`, {
-      headers: { Authorization: `Bearer ${pat}` }
-    }).then(r=>{
-      if(r.ok){
-        badge.textContent = 'Online';
-        badge.className = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold text-[10px]';
-        badge.style.background = '#dcfce7';
-        badge.style.color = '#16a34a';
-        badge.style.borderColor = '#86efac';
+    try{
+      if(isMobile){
+        const saved = localStorage.getItem('effah_sidebar_mobile_open');
+        if(saved === '1') sb.classList.add('open');
+        else sb.classList.remove('open');
       } else {
-        badge.textContent = 'Error';
-        badge.className = 'bg-amber-500/20 text-amber-600 border border-amber-500/30 px-2.5 py-0.5 rounded-full font-bold text-[10px]';
+        const saved = localStorage.getItem('effah_sidebar_collapsed');
+        if(saved === '1') sb.classList.add('collapsed');
+        else sb.classList.remove('collapsed');
       }
-    }).catch(()=>{
-      badge.textContent = 'Offline';
-      badge.className = 'bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-0.5 rounded-full font-bold text-[10px]';
-    });
+    }catch(e){}
   }
-  document.addEventListener('DOMContentLoaded', ()=>{
-    initSidebarState();
-    setTimeout(checkRealApiStatus, 800);
-    // Close sidebar when clicking outside on mobile
-    document.addEventListener('click', (e)=>{
-      const sb = document.getElementById('sidebar');
-      const burger = e.target.closest('button');
-      const isBurger = burger && burger.querySelector('.fa-bars');
-      if(window.innerWidth < 768 && sb && sb.classList.contains('open') && !sb.contains(e.target) && !isBurger){
-        sb.classList.remove('open');
-        localStorage.setItem('effah_sidebar_mobile_open', '0');
-      }
-    });
+  document.addEventListener('DOMContentLoaded', initSidebar);
+  window.addEventListener('resize', function(){
+    // On resize, re-apply correct state
+    const sb = document.getElementById('sidebar');
+    if(!sb) return;
+    // If switching from mobile to desktop, clear mobile open
+    if(window.innerWidth >= 768){
+      sb.classList.remove('open');
+    }
   });
-  window.addEventListener('resize', ()=>{
-    initSidebarState();
-  });
-  window.addEventListener('tripLoaded', checkRealApiStatus);
-  window.checkRealApiStatus = checkRealApiStatus;
-  window.initSidebarState = initSidebarState;
 })();
 </script>
 
