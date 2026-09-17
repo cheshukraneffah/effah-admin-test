@@ -1666,35 +1666,32 @@ function makeNamelistSticky(){
     const modul = document.getElementById('modul-rooming');
     if(!modul) return;
 
-    // V130 FIX: Find the top filter bar (contains roomingTripSelect)
     const tripSelect = document.getElementById('roomingTripSelect');
     let filterBar = null;
     if(tripSelect){
-      // tripSelect -> parent -> parent -> header div
       let el = tripSelect.parentElement;
-      // climb up to find the container with border-b or p-2.5
-      for(let i=0;i<5;i++){
+      for(let i=0;i<6;i++){
         if(!el) break;
-        if(el.classList.contains('border-b') || el.id==='roomingHeader' || el.querySelector('#roomingHijriTabs')){
+        if(el.classList.contains('border-b') || el.querySelector('#roomingHijriTabs')){
           filterBar = el;
           break;
         }
         el = el.parentElement;
       }
-      if(!filterBar) filterBar = tripSelect.closest('div.border-b') || tripSelect.closest('div.p-2\.5');
+      if(!filterBar) filterBar = tripSelect.closest('div.border-b');
     }
-    // Fallback: first child of modul that is not flex row
     if(!filterBar){
       const outer = modul.firstElementChild;
       if(outer){
-        // outer contains header + flex row
         for(const child of outer.children){
-          if(!child.classList.contains('flex') || !child.classList.contains('lg:flex-row')){
-            // this is likely header
-            filterBar = child;
-            break;
+          if(child.id!=='roomingGrid' && !child.classList.contains('lg:w-[52%]') && !child.classList.contains('lg:w-[48%]')){
+            if(child.querySelector('#roomingTripSelect') || child.querySelector('#roomingHijriTabs')){
+              filterBar = child;
+              break;
+            }
           }
         }
+        if(!filterBar && outer.firstElementChild) filterBar = outer.firstElementChild;
       }
     }
 
@@ -1707,10 +1704,8 @@ function makeNamelistSticky(){
       filterBar.style.borderBottom='1px solid #e2e8f0';
     }
 
-    // V130: Left card sticky below filter bar (64 + filterBar height ~ 80 = 144px)
     if(leftCard){
-      // Calculate filterBar height dynamically
-      const filterH = filterBar ? filterBar.offsetHeight : 80;
+      const filterH = filterBar ? filterBar.offsetHeight : 72;
       const topOffset = 64 + filterH + 12;
       leftCard.style.position='sticky';
       leftCard.style.top=topOffset+'px';
@@ -1719,33 +1714,40 @@ function makeNamelistSticky(){
       leftCard.style.display='flex';
       leftCard.style.flexDirection='column';
       leftCard.style.backgroundColor='#ffffff';
-      leftCard.style.maxHeight=`calc(100dvh - ${topOffset+16}px)`;
-      leftCard.style.height=`calc(100dvh - ${topOffset+16}px)`;
+      leftCard.style.maxHeight=`calc(100dvh - ${topOffset+8}px)`;
+      leftCard.style.height=`calc(100dvh - ${topOffset+8}px)`;
       leftCard.style.overflow='hidden';
       leftCard.style.borderRadius='16px';
-      leftCard.style.boxShadow='0 1px 3px rgba(0,0,0,0.05)';
-      leftCard.style.willChange='transform';
+      // Remove will-change that breaks drag
+      leftCard.style.willChange='auto';
     }
 
+    // V131: Restore proper inner scroll heights for drag
     nl.style.flex='1 1 auto';
-    nl.style.maxHeight='none';
+    nl.style.maxHeight='48vh';
+    nl.style.minHeight='220px';
     nl.style.height='auto';
-    nl.style.minHeight='0';
-    nl.style.flexGrow='1';
     nl.style.overflowY='auto';
     nl.style.overflowX='hidden';
     nl.style.backgroundColor='#ffffff';
+    nl.style.pointerEvents='auto';
 
     const staffSec = document.getElementById('staffListContainer')?.parentElement;
     if(staffSec){
       staffSec.style.flex='0 0 auto';
-      staffSec.style.maxHeight='38vh';
+      staffSec.style.display='flex';
+      staffSec.style.flexDirection='column';
+      staffSec.style.maxHeight='36vh';
       staffSec.style.overflow='hidden';
+      staffSec.style.backgroundColor='#ffffff';
+      staffSec.style.borderTop='2px solid #e2e8f0';
     }
     const staffCont = document.getElementById('staffListContainer');
     if(staffCont){
       staffCont.style.flex='1';
       staffCont.style.overflowY='auto';
+      staffCont.style.overflowX='hidden';
+      staffCont.style.pointerEvents='auto';
     }
     const rg=document.getElementById('roomingGrid');
     if(rg){
@@ -1761,14 +1763,14 @@ function makeNamelistSticky(){
     if(modul){
       modul.style.overflow='visible';
     }
-    // Ensure outer wrapper overflow visible
     const outer = modul.firstElementChild;
     if(outer){
       outer.style.overflow='visible';
     }
-    console.log('V130 sticky applied - filterBar top 64px, leftCard top '+(64 + (filterBar?filterBar.offsetHeight:80) + 12)+'px');
+    console.log('V131 sticky applied - filterBar 64px, leftCard '+ (64 + (filterBar?filterBar.offsetHeight:72) + 12) +'px, drag enabled');
   }catch(e){ console.error('sticky fail', e); }
 }
+
 
 
 
@@ -2003,19 +2005,43 @@ function _startAutoScroll(){
 }
 document.addEventListener('drop', ()=>{ _stopAutoScroll(); });
 function dragJemaah(e,jId){ 
-  if(isJemaahAssignedInLocation(jId, activeLocation)) { e.preventDefault(); return; }
+  if(isJemaahAssignedInLocation(jId, activeLocation)) { 
+    e.preventDefault(); 
+    console.log('already assigned, prevent drag', jId);
+    return; 
+  }
   window._draggedJemaahId = jId;
-  try{ e.dataTransfer.setData('text/plain',jId); e.dataTransfer.effectAllowed='move'; }catch(err){}
+  try{ 
+    e.dataTransfer.setData('text/plain', jId); 
+    e.dataTransfer.setData('text/jemaah-id', jId);
+    e.dataTransfer.effectAllowed='move'; 
+  }catch(err){ console.warn('setData fail', err); }
   const r=e.currentTarget; 
-  if(r) setTimeout(()=>{ r.style.opacity='0.3'; r.classList.add('dragging'); },0);
-  console.log('dragJemaah', jId);
+  if(r) {
+    setTimeout(()=>{ 
+      r.style.opacity='0.4'; 
+      r.classList.add('dragging'); 
+      r.style.border='1px dashed #7A0C2E';
+    },0);
+  }
+  console.log('dragJemaah START', jId);
 }
 function dragEnd(e){ 
-  try{ e.currentTarget.style.opacity='1'; e.currentTarget.classList.remove('dragging'); }catch(err){}
-  document.querySelectorAll('[draggable="true"]').forEach(el=>{ el.style.opacity='1'; el.classList.remove('dragging'); });
+  try{ 
+    if(e.currentTarget){
+      e.currentTarget.style.opacity='1'; 
+      e.currentTarget.classList.remove('dragging'); 
+      e.currentTarget.style.border='';
+    }
+  }catch(err){}
+  document.querySelectorAll('[draggable="true"]').forEach(el=>{ 
+    el.style.opacity='1'; 
+    el.classList.remove('dragging'); 
+    el.style.border='';
+  });
   window._draggedJemaahId = null;
   try{ _stopAutoScroll(); }catch(err){}
-  console.log('dragEnd');
+  console.log('dragEnd - reset all');
 }
 
 function dragRoom(e,roomId){
@@ -2189,7 +2215,13 @@ function dragRoomEnd(e){
   _stopAutoScroll();
 }
 function allowDropRoom(e){
-  try { e.preventDefault(); e.dataTransfer.dropEffect='move'; } catch(err){}
+  e.preventDefault();
+  try { e.dataTransfer.dropEffect='move'; } catch(err){}
+  window._lastDragY=e.clientY;
+  try{ _startAutoScroll(); }catch(err){}
+  const el=e.currentTarget;
+  if(el && el.classList) el.classList.add('drag-over','ring-2','ring-[#7A0C2E]/40');
+} catch(err){}
   window._lastDragY=e.clientY;
   try{ _startAutoScroll(); }catch(err){}
   const el=e.currentTarget;
@@ -2199,8 +2231,9 @@ function allowDropRoom(e){
 function dropJemaah(e,roomId){
   e.preventDefault(); 
   try{ e.currentTarget.classList.remove('ring-2','ring-[#7A0C2E]/20'); }catch(err){}
-  document.querySelectorAll('[draggable="true"]').forEach(el=>{ el.style.opacity='1'; el.classList.remove('dragging'); });
+  document.querySelectorAll('[draggable="true"]').forEach(el=>{ el.style.opacity='1'; el.classList.remove('dragging'); el.style.border=''; });
   window._draggedJemaahId = null;
+  try{ _stopAutoScroll(); }catch(e){}
   // If this is a room reorder drag (text/room-id), ignore here - let dropRoomReorder handle it
   try{
     const roomDragId = e.dataTransfer.getData('text/room-id');
@@ -2221,7 +2254,7 @@ function dropJemaah(e,roomId){
       }
     }
   }catch(err){}
-  const staffId=e.dataTransfer.getData('text/staff-id'); const jId=e.dataTransfer.getData('text/plain');
+  const staffId=e.dataTransfer.getData('text/staff-id') || e.dataTransfer.getData('application/x-staff-id'); const jId=e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/jemaah-id') || window._draggedJemaahId;
   const id=staffId||jId; if(!id) return;
   const rec=allRoomingRecords.find(r=>r.id===roomId);
   if(rec){
@@ -3649,7 +3682,13 @@ function handleRoomDragEnter(e){
   _startAutoScroll();
 }
 function allowDropRoom(e){
-  try { e.preventDefault(); e.dataTransfer.dropEffect='move'; } catch(err){}
+  e.preventDefault();
+  try { e.dataTransfer.dropEffect='move'; } catch(err){}
+  window._lastDragY=e.clientY;
+  try{ _startAutoScroll(); }catch(err){}
+  const el=e.currentTarget;
+  if(el && el.classList) el.classList.add('drag-over','ring-2','ring-[#7A0C2E]/40');
+} catch(err){}
   window._lastDragY=e.clientY;
   try{ _startAutoScroll(); }catch(err){}
   const el=e.currentTarget;
