@@ -28,20 +28,8 @@
             }
         }
     </script>
-    <style>
-        
-    /* V128 FINAL FIX: sidebar font gelap + rooming sticky */
-    #sidebar { color: #cbd5e1 !important; background: #0f172a !important; opacity: 1 !important; }
-    #sidebar .nav-link { color: #94a3b8 !important; opacity: 1 !important; }
-    #sidebar .nav-link i { color: #64748b !important; }
-    #sidebar .nav-link:hover { color: #ffffff !important; background: rgba(30,41,59,0.8) !important; }
-    #sidebar .nav-link.text-white { color: #ffffff !important; }
-    #sidebar .nav-link.text-white i { color: #94a3b8 !important; }
-    #sidebar.collapsed { opacity: 0 !important; pointer-events: none !important; }
-    #sidebar:not(.collapsed) { opacity: 1 !important; }
-    #modul-rooming { overflow: visible !important; }
-
-    /* V126 FIX: sidebar no scroll + collapse tanpa tolak header */
+        <style>
+    /* V129 FIX: sidebar + header sticky + rooming sticky */
     #sidebar {
         width: 16rem !important;
         min-width: 16rem !important;
@@ -53,6 +41,8 @@
         display: flex !important;
         flex-direction: column !important;
         transition: width 0.3s cubic-bezier(0.4,0,0.2,1), min-width 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.2s ease !important;
+        background: #0f172a !important;
+        color: #cbd5e1 !important;
     }
     #sidebar.collapsed {
         width: 0 !important;
@@ -62,17 +52,45 @@
         opacity: 0 !important;
         pointer-events: none !important;
     }
+    #sidebar:not(.collapsed) { opacity: 1 !important; }
     #sidebar > div:first-child { flex-shrink: 0 !important; }
     #sidebar nav {
         flex: 1 1 auto !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
     }
-    #sidebar .sidebar-bottom { flex-shrink: 0 !important; margin-top: auto !important; }
+    #sidebar .sidebar-bottom { flex-shrink: 0 !important; margin-top: auto !important; opacity: 1 !important; }
     #sidebar nav::-webkit-scrollbar { width: 4px; }
     #sidebar nav::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-    #mainPortalWrapper { display: flex !important; min-height: 100dvh !important; }
-    #mainPortalWrapper > main { flex: 1 1 auto !important; min-width: 0 !important; overflow-y: auto !important; }
+    /* Nav link colors - fix gelap */
+    #sidebar .nav-link { color: #94a3b8 !important; }
+    #sidebar .nav-link i { color: #64748b !important; }
+    #sidebar .nav-link:hover { color: #ffffff !important; background: rgba(30,41,59,0.8) !important; }
+    #sidebar .nav-link.text-white { color: #ffffff !important; background: rgba(30,41,59,0.8) !important; }
+    #sidebar .nav-link.text-white i { color: #cbd5e1 !important; }
+
+    /* Main wrapper - only main scrolls, header sticky inside main */
+    #mainPortalWrapper { display: flex !important; height: 100dvh !important; overflow: hidden !important; }
+    #mainPortalWrapper > main { flex: 1 1 auto !important; height: 100dvh !important; overflow-y: auto !important; overflow-x: hidden !important; min-width: 0 !important; }
+
+    /* Header sticky */
+    #mainPortalWrapper > main > header {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 40 !important;
+        background: rgba(255,255,255,0.95) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        border-bottom: 1px solid rgba(226,232,240,0.8) !important;
+    }
+
+    /* Trip Akan Datang full box */
+    #upcomingTripsList { max-height: none !important; overflow: visible !important; }
+
+    /* Rooming - allow sticky */
+    #modul-rooming { overflow: visible !important; }
+    #modul-rooming > div { overflow: visible !important; }
+
     @media (max-width: 768px) {
         #sidebar {
             position: fixed !important;
@@ -86,9 +104,7 @@
             opacity: 1 !important;
             pointer-events: auto !important;
         }
-        #sidebar.open {
-            transform: translateX(0) !important;
-        }
+        #sidebar.open { transform: translateX(0) !important; }
         #sidebar.collapsed {
             transform: translateX(-100%) !important;
             width: 16rem !important;
@@ -97,24 +113,6 @@
             opacity: 1 !important;
         }
     }
-    #upcomingTripsList { max-height: none !important; overflow: visible !important; }
-    .calendar-legend { display: none !important; }
-    aside::-webkit-scrollbar, #sidebar::-webkit-scrollbar { width: 4px; }
-    aside::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-    #statusApiBadge, #statApiStatus { transition: all 0.3s; }
-    header, .topbar, #topbar, .main-header, main > div:first-child.bg-white\/80,
-    #mainPortalWrapper > main > div:first-child, .sticky.top-0 {
-        position: sticky !important;
-        top: 0 !important;
-        z-index: 40 !important;
-        background: rgba(255,255,255,0.92) !important;
-        backdrop-filter: blur(16px) !important;
-        -webkit-backdrop-filter: blur(16px) !important;
-    }
-    /* V126 main handled by flex */
-    #apiStatusBadge.offline { background: #fee2e2 !important; color: #dc2626 !important; }
-    #apiStatusBadge.online { background: #dcfce7 !important; color: #16a34a !important; }
-    #apiStatusBadge { transition: all 0.3s ease; }
     </style>
 </head>
 <body class="bg-brand-bg font-sans text-slate-800 antialiased selection:bg-brand-maroon selection:text-white">
@@ -201,7 +199,7 @@
         </aside>
 
 <script>
-// V126 immediate restore - prevent flash
+// V129 immediate restore
 (function(){
   try{
     const sb = document.getElementById('sidebar');
@@ -308,14 +306,14 @@
                             <div id="calendarGrid" class="grid grid-cols-7 gap-1">
                                 <div class="text-center py-8 col-span-7 text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuat kalendar...</div>
                             </div>
-                            <!-- V126 legend removed -->
+                            <!-- V129 legend removed -->
                         </div>
                         <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 flex flex-col">
                             <div class="flex items-center justify-between mb-4">
                                 <h3 class="text-sm font-extrabold text-slate-900 tracking-tight">Trip Akan Datang</h3>
-                                <!-- V126 badge removed -->
+                                <!-- V129 badge removed -->
                             </div>
-                            <div id="upcomingTripsList" class="space-y-2.5 flex-1 pr-1 pr-1">
+                            <div id="upcomingTripsList" class="space-y-2.5 flex-1 pr-1">
                                 <div class="text-center py-10 text-slate-400 text-xs">Memuat trip akan datang...</div>
                             </div>
                             <button onclick="switchTab('pakej-umrah')" class="mt-4 w-full bg-slate-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-black transition">Lihat Semua Trip <i class="fa-solid fa-arrow-right ml-1"></i></button>
@@ -609,7 +607,7 @@
       alert('Trip pada '+day+'/'+(month+1)+'/'+year+':\n\n'+list);
     }
     function renderUpcoming30Days(){
-      // V126: 6 trip paling dekat, full box
+      // V129: 6 trip paling dekat
       const list = document.getElementById('upcomingTripsList');
       const countEl = document.getElementById('upcomingCount');
       if(!list) return;
@@ -621,7 +619,6 @@
         const mulaMid = new Date(mula); mulaMid.setHours(0,0,0,0);
         return mulaMid >= today;
       }).sort((a,b)=> new Date(a.fields['Mula Pakej']) - new Date(b.fields['Mula Pakej'])).slice(0,6);
-      if(countEl) countEl.textContent = upcoming.length+' Trip';
       if(countEl) countEl.textContent = upcoming.length+' Trip';
       if(upcoming.length===0){
         list.innerHTML = '<div class="text-center py-8 text-slate-400 text-xs"><i class="fa-solid fa-calendar-check text-2xl mb-2 text-slate-200"></i><p>Tiada trip akan datang</p><p class="text-[10px] mt-1">Musim '+activeHijriSeason+' - semua trip telah berlepas atau belum dijadualkan</p></div>';
@@ -757,7 +754,7 @@
 
 
 <script>
-// V126 FIX sidebar - no negative margin, no header shift
+// V129 FIX sidebar + header sticky
 window.toggleSidebar = function(){
   const sb = document.getElementById('sidebar');
   if(!sb) return;
@@ -787,19 +784,6 @@ window.toggleSidebar = function(){
   }
   document.addEventListener('DOMContentLoaded', initSidebar);
   window.addEventListener('resize', initSidebar);
-  // Close on outside click mobile
-  document.addEventListener('click', function(e){
-    const sb = document.getElementById('sidebar');
-    if(!sb) return;
-    if(window.innerWidth < 768 && sb.classList.contains('open')){
-      const burger = e.target.closest('button');
-      const isBurger = burger && (burger.getAttribute('onclick')||'').includes('toggleSidebar');
-      if(!sb.contains(e.target) && !isBurger){
-        sb.classList.remove('open');
-        try{ localStorage.setItem('effah_sidebar_mobile_open','0'); }catch(e){}
-      }
-    }
-  });
 })();
 </script>
 

@@ -1661,19 +1661,39 @@ function makeNamelistSticky(){
   try{
     const nl = document.getElementById('namelistContainer');
     if(!nl) return;
+    // Find left card - the 52% width card
     let leftCard = nl.closest('[class*="lg:w-"]');
     if(!leftCard) leftCard = nl.parentElement;
-    // V128 FIX: sticky kiri - kira header height 80px
+    
+    // V129 FIX: Make top filter bar sticky (ROOMING LIST header with date dropdown)
+    const modul = document.getElementById('modul-rooming');
+    if(modul){
+      const topFilter = modul.querySelector('div > div:first-child');
+      // The first div inside modul contains the date select and hijri tabs
+      const filterBar = modul.firstElementChild;
+      if(filterBar){
+        filterBar.style.position='sticky';
+        filterBar.style.top='64px';
+        filterBar.style.zIndex='35';
+        filterBar.style.backgroundColor='#ffffff';
+        filterBar.style.boxShadow='0 2px 4px rgba(0,0,0,0.05)';
+      }
+      // Also make the inner header (with 30 SEPT etc) sticky
+      const innerHeaders = modul.querySelectorAll('div.p-2\.5.border-b, div.flex.flex-col');
+      // Actually top filter is first child
+    }
+
+    // V129 FIX: Left card sticky below both headers (main header 64px + filter bar ~72px = 136px)
     if(leftCard){
       leftCard.style.position='sticky';
-      leftCard.style.top='80px';
+      leftCard.style.top='144px';
       leftCard.style.alignSelf='flex-start';
-      leftCard.style.zIndex='30';
+      leftCard.style.zIndex='25';
       leftCard.style.display='flex';
       leftCard.style.flexDirection='column';
       leftCard.style.backgroundColor='#ffffff';
-      leftCard.style.maxHeight='calc(100dvh - 96px)';
-      leftCard.style.height='calc(100dvh - 96px)';
+      leftCard.style.maxHeight='calc(100dvh - 160px)';
+      leftCard.style.height='calc(100dvh - 160px)';
       leftCard.style.overflow='hidden';
       leftCard.style.borderRadius='16px';
       leftCard.style.boxShadow='0 1px 3px rgba(0,0,0,0.05)';
@@ -1707,15 +1727,13 @@ function makeNamelistSticky(){
       rg.style.maxHeight='none';
       rg.style.alignSelf='flex-start';
     }
-    // Ensure parent flex row allows sticky - CRITICAL
+    // Ensure parent flex row allows sticky
     const flexRow = leftCard?.parentElement;
     if(flexRow){
       flexRow.style.alignItems='flex-start';
       flexRow.style.overflow='visible';
       flexRow.style.display='flex';
     }
-    // Ensure modul-rooming and main allow sticky
-    const modul = document.getElementById('modul-rooming');
     if(modul){
       modul.style.overflow='visible';
     }
@@ -1724,8 +1742,11 @@ function makeNamelistSticky(){
       main.style.overflowY='auto';
       main.style.overflowX='hidden';
     }
-    console.log('V128 sticky applied - leftCard sticky top 80px');
-  }catch(e){ console.error('sticky fail', e); }
+    console.log('V129 sticky applied - filter bar sticky 64px, leftCard sticky 144px');
+  }catch(e){ console.error('sticky fail', e);
+  }
+}
+ console.error('sticky fail', e); }
 }
 
 
@@ -1959,8 +1980,21 @@ function _startAutoScroll(){
   }, 30);
 }
 document.addEventListener('drop', ()=>{ _stopAutoScroll(); });
-function dragJemaah(e,jId){ if(isJemaahAssignedInLocation(jId, activeLocation)) return; e.dataTransfer.setData('text/plain',jId); const r=e.currentTarget; if(r) setTimeout(()=>r.style.opacity='0.3',0); }
-function dragEnd(e){ e.currentTarget.style.opacity='1'; }
+function dragJemaah(e,jId){ 
+  if(isJemaahAssignedInLocation(jId, activeLocation)) { e.preventDefault(); return; }
+  window._draggedJemaahId = jId;
+  try{ e.dataTransfer.setData('text/plain',jId); e.dataTransfer.effectAllowed='move'; }catch(err){}
+  const r=e.currentTarget; 
+  if(r) setTimeout(()=>{ r.style.opacity='0.3'; r.classList.add('dragging'); },0);
+  console.log('dragJemaah', jId);
+}
+function dragEnd(e){ 
+  try{ e.currentTarget.style.opacity='1'; e.currentTarget.classList.remove('dragging'); }catch(err){}
+  document.querySelectorAll('[draggable="true"]').forEach(el=>{ el.style.opacity='1'; el.classList.remove('dragging'); });
+  window._draggedJemaahId = null;
+  try{ _stopAutoScroll(); }catch(err){}
+  console.log('dragEnd');
+}
 
 function dragRoom(e,roomId){
   e.dataTransfer.setData('text/room-id', roomId);
@@ -2143,7 +2177,8 @@ function allowDropRoom(e){
 function dropJemaah(e,roomId){
   e.preventDefault(); 
   try{ e.currentTarget.classList.remove('ring-2','ring-[#7A0C2E]/20'); }catch(err){}
-  document.querySelectorAll('[draggable="true"]').forEach(el=>el.style.opacity='1');
+  document.querySelectorAll('[draggable="true"]').forEach(el=>{ el.style.opacity='1'; el.classList.remove('dragging'); });
+  window._draggedJemaahId = null;
   // If this is a room reorder drag (text/room-id), ignore here - let dropRoomReorder handle it
   try{
     const roomDragId = e.dataTransfer.getData('text/room-id');
@@ -2186,7 +2221,8 @@ function removeJemaahFromCurrentLoc(jId){
   if(rec) removeJemaahFromRoom(rec.id, jId);
 }
 async function assignJemaahToRoom(jId,roomId){ 
-  if(isJemaahAssignedInLocation(jId, activeLocation)) return; 
+  try{
+  if(isJemaahAssignedInLocation(jId, activeLocation)) { console.log('already assigned in loc', jId); return; }
   const rec=allRoomingRecords.find(r=>r.id===roomId); if(!rec) return;
   const cap=rec.fields['KAPASITI']||4;
   const curCount=(rec.fields['JEMAAH']||[]).length + getStaffForRoom(rec.id).length;
@@ -2198,6 +2234,7 @@ async function assignJemaahToRoom(jId,roomId){
     return; 
   }
   await updateRoomField(roomId,'JEMAAH',[...(rec.fields['JEMAAH']||[]),jId],true); 
+  }catch(e){ console.error('assignJemaahToRoom fail', e); alert('Gagal assign: '+e.message); }
 }
 async function removeJemaahFromRoom(roomId,jId){ const rec=allRoomingRecords.find(r=>r.id===roomId); await updateRoomField(roomId,'JEMAAH',(rec.fields['JEMAAH']||[]).filter(id=>id!==jId),true); }
 async function updateCap(roomId,delta){
