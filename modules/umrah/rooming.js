@@ -1661,65 +1661,91 @@ function makeNamelistSticky(){
   try{
     const nl = document.getElementById('namelistContainer');
     if(!nl) return;
-    // Find left card - the 52% width card
     let leftCard = nl.closest('[class*="lg:w-"]');
     if(!leftCard) leftCard = nl.parentElement;
-    
-    // V129 FIX: Make top filter bar sticky (ROOMING LIST header with date dropdown)
     const modul = document.getElementById('modul-rooming');
-    if(modul){
-      const topFilter = modul.querySelector('div > div:first-child');
-      // The first div inside modul contains the date select and hijri tabs
-      const filterBar = modul.firstElementChild;
-      if(filterBar){
-        filterBar.style.position='sticky';
-        filterBar.style.top='64px';
-        filterBar.style.zIndex='35';
-        filterBar.style.backgroundColor='#ffffff';
-        filterBar.style.boxShadow='0 2px 4px rgba(0,0,0,0.05)';
+    if(!modul) return;
+
+    // V130 FIX: Find the top filter bar (contains roomingTripSelect)
+    const tripSelect = document.getElementById('roomingTripSelect');
+    let filterBar = null;
+    if(tripSelect){
+      // tripSelect -> parent -> parent -> header div
+      let el = tripSelect.parentElement;
+      // climb up to find the container with border-b or p-2.5
+      for(let i=0;i<5;i++){
+        if(!el) break;
+        if(el.classList.contains('border-b') || el.id==='roomingHeader' || el.querySelector('#roomingHijriTabs')){
+          filterBar = el;
+          break;
+        }
+        el = el.parentElement;
       }
-      // Also make the inner header (with 30 SEPT etc) sticky
-      const innerHeaders = modul.querySelectorAll('div.p-2\.5.border-b, div.flex.flex-col');
-      // Actually top filter is first child
+      if(!filterBar) filterBar = tripSelect.closest('div.border-b') || tripSelect.closest('div.p-2\.5');
+    }
+    // Fallback: first child of modul that is not flex row
+    if(!filterBar){
+      const outer = modul.firstElementChild;
+      if(outer){
+        // outer contains header + flex row
+        for(const child of outer.children){
+          if(!child.classList.contains('flex') || !child.classList.contains('lg:flex-row')){
+            // this is likely header
+            filterBar = child;
+            break;
+          }
+        }
+      }
     }
 
-    // V129 FIX: Left card sticky below both headers (main header 64px + filter bar ~72px = 136px)
+    if(filterBar){
+      filterBar.style.position='sticky';
+      filterBar.style.top='64px';
+      filterBar.style.zIndex='35';
+      filterBar.style.backgroundColor='#ffffff';
+      filterBar.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)';
+      filterBar.style.borderBottom='1px solid #e2e8f0';
+    }
+
+    // V130: Left card sticky below filter bar (64 + filterBar height ~ 80 = 144px)
     if(leftCard){
+      // Calculate filterBar height dynamically
+      const filterH = filterBar ? filterBar.offsetHeight : 80;
+      const topOffset = 64 + filterH + 12;
       leftCard.style.position='sticky';
-      leftCard.style.top='144px';
+      leftCard.style.top=topOffset+'px';
       leftCard.style.alignSelf='flex-start';
       leftCard.style.zIndex='25';
       leftCard.style.display='flex';
       leftCard.style.flexDirection='column';
       leftCard.style.backgroundColor='#ffffff';
-      leftCard.style.maxHeight='calc(100dvh - 160px)';
-      leftCard.style.height='calc(100dvh - 160px)';
+      leftCard.style.maxHeight=`calc(100dvh - ${topOffset+16}px)`;
+      leftCard.style.height=`calc(100dvh - ${topOffset+16}px)`;
       leftCard.style.overflow='hidden';
       leftCard.style.borderRadius='16px';
       leftCard.style.boxShadow='0 1px 3px rgba(0,0,0,0.05)';
+      leftCard.style.willChange='transform';
     }
+
     nl.style.flex='1 1 auto';
-    nl.style.maxHeight='50vh';
-    nl.style.minHeight='240px';
+    nl.style.maxHeight='none';
+    nl.style.height='auto';
+    nl.style.minHeight='0';
+    nl.style.flexGrow='1';
     nl.style.overflowY='auto';
     nl.style.overflowX='hidden';
     nl.style.backgroundColor='#ffffff';
+
     const staffSec = document.getElementById('staffListContainer')?.parentElement;
     if(staffSec){
       staffSec.style.flex='0 0 auto';
-      staffSec.style.backgroundColor='#ffffff';
-      staffSec.style.borderTop='2px solid #e2e8f0';
-      staffSec.style.display='flex';
-      staffSec.style.flexDirection='column';
-      staffSec.style.maxHeight='40vh';
+      staffSec.style.maxHeight='38vh';
       staffSec.style.overflow='hidden';
     }
     const staffCont = document.getElementById('staffListContainer');
     if(staffCont){
       staffCont.style.flex='1';
       staffCont.style.overflowY='auto';
-      staffCont.style.overflowX='hidden';
-      staffCont.style.backgroundColor='#ffffff';
     }
     const rg=document.getElementById('roomingGrid');
     if(rg){
@@ -1727,24 +1753,23 @@ function makeNamelistSticky(){
       rg.style.maxHeight='none';
       rg.style.alignSelf='flex-start';
     }
-    // Ensure parent flex row allows sticky
     const flexRow = leftCard?.parentElement;
     if(flexRow){
       flexRow.style.alignItems='flex-start';
       flexRow.style.overflow='visible';
-      flexRow.style.display='flex';
     }
     if(modul){
       modul.style.overflow='visible';
     }
-    const main = document.querySelector('#mainPortalWrapper > main');
-    if(main){
-      main.style.overflowY='auto';
-      main.style.overflowX='hidden';
+    // Ensure outer wrapper overflow visible
+    const outer = modul.firstElementChild;
+    if(outer){
+      outer.style.overflow='visible';
     }
-    console.log('V129 sticky applied - filter bar sticky 64px, leftCard sticky 144px');
+    console.log('V130 sticky applied - filterBar top 64px, leftCard top '+(64 + (filterBar?filterBar.offsetHeight:80) + 12)+'px');
   }catch(e){ console.error('sticky fail', e); }
 }
+
 
 
 function filterRoomingNamelist(){ renderNamelist(); }
@@ -3524,6 +3549,19 @@ if(!window._roomingDragListenersAdded){
   document.addEventListener('drop', ()=>{ _stopAutoScroll(); });
   window._roomingDragListenersAdded = true;
   console.log('Drag listeners added ONCE');
+
+// V130 CSS injection for sticky fallback
+(function(){
+  const style = document.createElement('style');
+  style.textContent = `
+    #modul-rooming { overflow: visible !important; }
+    #modul-rooming > div { overflow: visible !important; }
+    #modul-rooming .flex-col.lg\:flex-row { overflow: visible !important; align-items: flex-start !important; }
+    #modul-rooming div[class*="lg:w-[52%"] { will-change: transform; }
+  `;
+  document.head.appendChild(style);
+})();
+
 }
 
 function renderLocationTabs(){
