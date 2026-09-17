@@ -29,27 +29,34 @@
         }
     </script>
     <style>
-    /* V122 FIX scroll - sidebar tak scroll kosong, nav je scroll */
+    /* V123 FIX scroll + full height */
     #sidebar {
-        position: sticky !important;
+        position: fixed !important;
         top: 0 !important;
+        left: 0 !important;
         height: 100dvh !important;
         overflow: hidden !important;
         display: flex !important;
         flex-direction: column !important;
+        transform: translateX(0);
+        transition: transform 0.3s ease-in-out !important;
     }
-    #sidebar > div:first-child {
-        flex-shrink: 0 !important;
+    #sidebar.collapsed {
+        transform: translateX(-100%) !important;
     }
+    #sidebar > div:first-child { flex-shrink: 0 !important; }
     #sidebar nav {
         flex: 1 1 auto !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
         height: auto !important;
     }
-    #sidebar .sidebar-bottom {
-        flex-shrink: 0 !important;
-        margin-top: auto !important;
+    #sidebar .sidebar-bottom { flex-shrink: 0 !important; margin-top: auto !important; }
+    main { margin-left: 16rem; transition: margin-left 0.3s ease-in-out; }
+    main.full-width { margin-left: 0 !important; }
+    @media (max-width: 768px) {
+        main { margin-left: 0 !important; }
+        #sidebar { z-index: 50 !important; }
     }
     aside::-webkit-scrollbar, #sidebar::-webkit-scrollbar { width: 4px; }
     aside::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
@@ -240,14 +247,14 @@
                             <div id="calendarGrid" class="grid grid-cols-7 gap-1">
                                 <div class="text-center py-8 col-span-7 text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuat kalendar...</div>
                             </div>
-                            <!-- V122 legend removed -->
+                            <!-- V123 legend removed -->
                         </div>
-                        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 flex flex-col">
+                        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 flex flex-col h-full">
                             <div class="flex items-center justify-between mb-4">
                                 <h3 class="text-sm font-extrabold text-slate-900 tracking-tight">Trip Akan Datang</h3>
                                 <span class="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-full" id="upcomingCount">0 Trip</span>
                             </div>
-                            <div id="upcomingTripsList" class="space-y-2.5 flex-1 overflow-y-auto max-h-[340px] pr-1">
+                            <div id="upcomingTripsList" class="space-y-2.5 flex-1 pr-1">
                                 <div class="text-center py-10 text-slate-400 text-xs">Memuat trip akan datang...</div>
                             </div>
                             <button onclick="switchTab('pakej-umrah')" class="mt-4 w-full bg-slate-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-black transition">Lihat Semua Trip <i class="fa-solid fa-arrow-right ml-1"></i></button>
@@ -541,7 +548,7 @@
       alert('Trip pada '+day+'/'+(month+1)+'/'+year+':\n\n'+list);
     }
     function renderUpcoming30Days(){
-      // V122: Ubah jadi Trip Akan Datang - 6 trip paling dekat, bukan 30 hari je
+      // V123: Trip Akan Datang - 6 paling dekat, full box, takde max-h
       const list = document.getElementById('upcomingTripsList');
       const countEl = document.getElementById('upcomingCount');
       if(!list) return;
@@ -683,6 +690,57 @@
   window.openPreviewModal = function(url, title){ return window.openTripPreviewModal(url, title); };
   document.addEventListener('keydown', function(e){ if(e.key === 'Escape'){ const open = Array.from(document.querySelectorAll('#attachmentPreviewModal')).some(m=> !m.classList.contains('hidden')); if(open) window.closePreviewModal(); } });
   console.log('✅ V21.1 Modal - Tall passport fix');
+})();
+</script>
+
+
+<script>
+// V123: Sidebar state persistence + real API status check
+(function(){
+  function initSidebarState(){
+    const saved = localStorage.getItem('effah_sidebar_collapsed');
+    if(saved === '1'){
+      const sb = document.getElementById('sidebar');
+      const main = document.querySelector('main');
+      if(sb) sb.classList.add('collapsed');
+      if(main) main.classList.add('full-width');
+    }
+  }
+  function checkRealApiStatus(){
+    const badge = document.getElementById('apiStatusBadge');
+    if(!badge) return;
+    const pat = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat');
+    const base = window.AIRTABLE_BASE_ID || localStorage.getItem('effah_base_id');
+    if(!pat || !base){
+      badge.textContent = 'Offline';
+      badge.className = 'bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-0.5 rounded-full font-bold text-[10px]';
+      return;
+    }
+    // Try real ping to Airtable
+    fetch(`https://api.airtable.com/v0/${base}/PAKEJ%20UMRAH?maxRecords=1`, {
+      headers: { Authorization: `Bearer ${pat}` }
+    }).then(r=>{
+      if(r.ok){
+        badge.textContent = 'Online';
+        badge.className = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold text-[10px]';
+        badge.style.background = '#dcfce7';
+        badge.style.color = '#16a34a';
+        badge.style.borderColor = '#86efac';
+      } else {
+        badge.textContent = 'Error';
+        badge.className = 'bg-amber-500/20 text-amber-600 border border-amber-500/30 px-2.5 py-0.5 rounded-full font-bold text-[10px]';
+      }
+    }).catch(()=>{
+      badge.textContent = 'Offline';
+      badge.className = 'bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-0.5 rounded-full font-bold text-[10px]';
+    });
+  }
+  document.addEventListener('DOMContentLoaded', ()=>{
+    initSidebarState();
+    setTimeout(checkRealApiStatus, 800);
+  });
+  window.addEventListener('tripLoaded', checkRealApiStatus);
+  window.checkRealApiStatus = checkRealApiStatus;
 })();
 </script>
 
