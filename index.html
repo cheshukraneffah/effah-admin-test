@@ -30,18 +30,16 @@
     </script>
     <style>
         
-    /* V128 FIX: sidebar font gelap - force light */
-    #sidebar { color: #cbd5e1 !important; background: #0f172a !important; }
+    /* V128 FINAL FIX: sidebar font gelap + rooming sticky */
+    #sidebar { color: #cbd5e1 !important; background: #0f172a !important; opacity: 1 !important; }
     #sidebar .nav-link { color: #94a3b8 !important; opacity: 1 !important; }
     #sidebar .nav-link i { color: #64748b !important; }
     #sidebar .nav-link:hover { color: #ffffff !important; background: rgba(30,41,59,0.8) !important; }
-    #sidebar .nav-link:hover i { color: #cbd5e1 !important; }
-    #sidebar .nav-link.text-white { color: #ffffff !important; background: rgba(30,41,59,0.8) !important; }
-    #sidebar .nav-link.text-white i { color: #cbd5e1 !important; }
-    #sidebar div[class*="uppercase"] { color: #475569 !important; }
-    #sidebar .sidebar-bottom { opacity: 1 !important; }
-    #sidebar.collapsed { opacity: 0 !important; }
+    #sidebar .nav-link.text-white { color: #ffffff !important; }
+    #sidebar .nav-link.text-white i { color: #94a3b8 !important; }
+    #sidebar.collapsed { opacity: 0 !important; pointer-events: none !important; }
     #sidebar:not(.collapsed) { opacity: 1 !important; }
+    #modul-rooming { overflow: visible !important; }
 
     /* V126 FIX: sidebar no scroll + collapse tanpa tolak header */
     #sidebar {
@@ -117,31 +115,7 @@
     #apiStatusBadge.offline { background: #fee2e2 !important; color: #dc2626 !important; }
     #apiStatusBadge.online { background: #dcfce7 !important; color: #16a34a !important; }
     #apiStatusBadge { transition: all 0.3s ease; }
-    
-    /* V128 FIX: Rooming List namelist sticky - kiri stick, bilik je scroll */
-    #modul-rooming { overflow: visible !important; display: block !important; }
-    #modul-rooming > div { align-items: flex-start !important; }
-    #modul-rooming [id="namelistContainer"] { 
-        position: relative !important; 
-    }
-    /* Left card - 52% width */
-    #modul-rooming div[class*="lg:w-"] {
-        position: sticky !important;
-        top: 16px !important;
-        align-self: flex-start !important;
-        z-index: 20 !important;
-        max-height: calc(100vh - 32px) !important;
-        overflow: hidden !important;
-        display: flex !important;
-        flex-direction: column !important;
-    }
-    /* Ensure parent flex row allows sticky */
-    #modul-rooming > div.flex-col { align-items: flex-start !important; }
-    #modul-rooming #roomingGrid { overflow: visible !important; max-height: none !important; }
-    /* Main should allow sticky children */
-    #mainPortalWrapper > main { overflow-y: auto !important; overflow-x: hidden !important; }
-
-</style>
+    </style>
 </head>
 <body class="bg-brand-bg font-sans text-slate-800 antialiased selection:bg-brand-maroon selection:text-white">
 
