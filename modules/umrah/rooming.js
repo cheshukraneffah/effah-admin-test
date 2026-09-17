@@ -1661,43 +1661,20 @@ function makeNamelistSticky(){
   try{
     const nl = document.getElementById('namelistContainer');
     if(!nl) return;
+    // Find left card - the 52% width card
     let leftCard = nl.closest('[class*="lg:w-"]');
     if(!leftCard) leftCard = nl.parentElement;
-    const modul = document.getElementById('modul-rooming');
-    if(!modul) return;
-    const tripSelect = document.getElementById('roomingTripSelect');
-    let filterBar = null;
-    if(tripSelect){
-      let el = tripSelect.parentElement;
-      for(let i=0;i<6;i++){
-        if(!el) break;
-        if(el.classList.contains('border-b') || el.querySelector('#roomingHijriTabs')){
-          filterBar = el; break;
-        }
-        el = el.parentElement;
-      }
-      if(!filterBar) filterBar = tripSelect.closest('div.border-b');
-    }
-    if(filterBar){
-      filterBar.style.position='sticky';
-      filterBar.style.top='64px';
-      filterBar.style.zIndex='35';
-      filterBar.style.backgroundColor='#ffffff';
-    }
+    // The outer left column wrapper is the parent of leftCard's parent? Actually structure: flex-col lg:flex-row > w-[52%] card
     if(leftCard){
-      const filterH = filterBar ? filterBar.offsetHeight : 72;
-      const topOffset = 64 + filterH + 12;
       leftCard.style.position='sticky';
-      leftCard.style.top=topOffset+'px';
+      leftCard.style.top='12px';
       leftCard.style.alignSelf='flex-start';
-      leftCard.style.zIndex='25';
+      leftCard.style.zIndex='20';
       leftCard.style.display='flex';
       leftCard.style.flexDirection='column';
       leftCard.style.backgroundColor='#ffffff';
-      leftCard.style.maxHeight=`calc(100dvh - ${topOffset+8}px)`;
-      leftCard.style.height=`calc(100dvh - ${topOffset+8}px)`;
-      // V137: overflow visible to prevent drag freeze, inner containers handle scroll
-      leftCard.style.overflow='visible';
+      leftCard.style.maxHeight='calc(100vh - 16px)';
+      leftCard.style.overflow='hidden';
       leftCard.style.borderRadius='16px';
     }
     nl.style.flex='1 1 auto';
@@ -1709,34 +1686,32 @@ function makeNamelistSticky(){
     const staffSec = document.getElementById('staffListContainer')?.parentElement;
     if(staffSec){
       staffSec.style.flex='0 0 auto';
+      staffSec.style.backgroundColor='#ffffff';
+      staffSec.style.borderTop='2px solid #e2e8f0';
       staffSec.style.display='flex';
       staffSec.style.flexDirection='column';
-      staffSec.style.maxHeight='36vh';
+      staffSec.style.maxHeight='38vh';
       staffSec.style.overflow='hidden';
     }
     const staffCont = document.getElementById('staffListContainer');
     if(staffCont){
       staffCont.style.flex='1';
       staffCont.style.overflowY='auto';
+      staffCont.style.overflowX='hidden';
+      staffCont.style.backgroundColor='#ffffff';
     }
     const rg=document.getElementById('roomingGrid');
     if(rg){
       rg.style.overflow='visible';
       rg.style.maxHeight='none';
     }
+    // Ensure parent flex row allows sticky
     const flexRow = leftCard?.parentElement;
     if(flexRow){
       flexRow.style.alignItems='flex-start';
-      flexRow.style.overflow='visible';
-    }
-    if(modul){
-      modul.style.overflow='visible';
-      const outer = modul.firstElementChild;
-      if(outer) outer.style.overflow='visible';
     }
   }catch(e){ console.error('sticky fail', e); }
 }
-
 
 
 function filterRoomingNamelist(){ renderNamelist(); }
@@ -1944,8 +1919,6 @@ function renderStaffList(){
 function setActiveLocation(loc){ activeLocation=loc.toUpperCase(); localStorage.setItem('effah_active_location',activeLocation); const el=document.getElementById('copyTargetLoc'); if(el) el.textContent=activeLocation; renderLocationTabs(); renderRoomingGrid(); renderNamelist(); renderStaffList(); }
 function _stopAutoScroll(){ if(_autoScrollInterval){ clearInterval(_autoScrollInterval); _autoScrollInterval=null; } }
 function _startAutoScroll(){
-  // V137 DISABLED auto scroll to prevent freeze - was causing stuck drag
-  return;
   if(_autoScrollInterval) return;
   _autoScrollInterval=setInterval(()=>{
     const y=window._lastDragY||0;
@@ -1971,23 +1944,8 @@ function _startAutoScroll(){
   }, 30);
 }
 document.addEventListener('drop', ()=>{ _stopAutoScroll(); });
-function dragJemaah(e,jId){ 
-  if(isJemaahAssignedInLocation(jId, activeLocation)) { e.preventDefault(); return false; }
-  window._draggedJemaahId = jId;
-  try{ e.dataTransfer.setData('text/plain', jId); e.dataTransfer.effectAllowed='move'; }catch(err){}
-  // V137: No opacity change to prevent freeze
-  console.log('dragJemaah', jId);
-}
-function dragEnd(e){ 
-  try{ if(e && e.currentTarget){ e.currentTarget.style.opacity='1'; } }catch(err){}
-  try{
-    document.querySelectorAll('[draggable="true"]').forEach(el=>{ el.style.opacity='1'; });
-    document.querySelectorAll('[data-room-id]').forEach(el=>{ el.classList.remove('drag-over','ring-2','ring-[#7A0C2E]/40'); });
-  }catch(err){}
-  window._draggedJemaahId = null;
-  try{ _stopAutoScroll(); }catch(err){}
-  console.log('dragEnd');
-}
+function dragJemaah(e,jId){ if(isJemaahAssignedInLocation(jId, activeLocation)) return; e.dataTransfer.setData('text/plain',jId); const r=e.currentTarget; if(r) setTimeout(()=>r.style.opacity='0.3',0); }
+function dragEnd(e){ e.currentTarget.style.opacity='1'; }
 
 function dragRoom(e,roomId){
   e.dataTransfer.setData('text/room-id', roomId);
@@ -3517,21 +3475,6 @@ if(!window._roomingDragListenersAdded){
   document.addEventListener('drop', ()=>{ _stopAutoScroll(); });
   window._roomingDragListenersAdded = true;
   console.log('Drag listeners added ONCE');
-
-// V137 failsafe
-if(!window._v137Failsafe){
-  window._v137Failsafe = true;
-  document.addEventListener('mouseup', ()=>{
-    document.querySelectorAll('[draggable="true"]').forEach(el=>el.style.opacity='1');
-    document.querySelectorAll('[data-room-id]').forEach(el=>el.classList.remove('drag-over','ring-2','ring-[#7A0C2E]/40'));
-    try{ _stopAutoScroll(); }catch(e){}
-  });
-  document.addEventListener('dragend', ()=>{
-    document.querySelectorAll('[draggable="true"]').forEach(el=>el.style.opacity='1');
-    try{ _stopAutoScroll(); }catch(e){}
-  });
-}
-
 }
 
 function renderLocationTabs(){

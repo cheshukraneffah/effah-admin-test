@@ -28,91 +28,30 @@
             }
         }
     </script>
-        <style>
-    /* V129 FIX: sidebar + header sticky + rooming sticky */
-    #sidebar {
-        width: 16rem !important;
-        min-width: 16rem !important;
-        flex: 0 0 16rem !important;
-        height: 100dvh !important;
+    <style>
+    aside, #sidebar, .sidebar, nav.p-4 {
         position: sticky !important;
         top: 0 !important;
-        overflow: hidden !important;
-        display: flex !important;
-        flex-direction: column !important;
-        transition: width 0.3s cubic-bezier(0.4,0,0.2,1), min-width 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.2s ease !important;
-        background: #0f172a !important;
-        color: #cbd5e1 !important;
-    }
-    #sidebar.collapsed {
-        width: 0 !important;
-        min-width: 0 !important;
-        flex: 0 0 0 !important;
-        overflow: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-    }
-    #sidebar:not(.collapsed) { opacity: 1 !important; }
-    #sidebar > div:first-child { flex-shrink: 0 !important; }
-    #sidebar nav {
-        flex: 1 1 auto !important;
+        height: 100vh !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
     }
-    #sidebar .sidebar-bottom { flex-shrink: 0 !important; margin-top: auto !important; opacity: 1 !important; }
-    #sidebar nav::-webkit-scrollbar { width: 4px; }
-    #sidebar nav::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-    /* Nav link colors - fix gelap */
-    #sidebar .nav-link { color: #94a3b8 !important; }
-    #sidebar .nav-link i { color: #64748b !important; }
-    #sidebar .nav-link:hover { color: #ffffff !important; background: rgba(30,41,59,0.8) !important; }
-    #sidebar .nav-link.text-white { color: #ffffff !important; background: rgba(30,41,59,0.8) !important; }
-    #sidebar .nav-link.text-white i { color: #cbd5e1 !important; }
-
-    /* Main wrapper - only main scrolls, header sticky inside main */
-    #mainPortalWrapper { display: flex !important; height: 100dvh !important; overflow: hidden !important; }
-    #mainPortalWrapper > main { flex: 1 1 auto !important; height: 100dvh !important; overflow-y: auto !important; overflow-x: hidden !important; min-width: 0 !important; }
-
-    /* Header sticky */
-    #mainPortalWrapper > main > header {
+    aside::-webkit-scrollbar, #sidebar::-webkit-scrollbar { width: 4px; }
+    aside::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    #statusApiBadge, #statApiStatus { transition: all 0.3s; }
+    header, .topbar, #topbar, .main-header, main > div:first-child.bg-white\/80,
+    #mainPortalWrapper > main > div:first-child, .sticky.top-0 {
         position: sticky !important;
         top: 0 !important;
         z-index: 40 !important;
-        background: rgba(255,255,255,0.95) !important;
+        background: rgba(255,255,255,0.92) !important;
         backdrop-filter: blur(16px) !important;
         -webkit-backdrop-filter: blur(16px) !important;
-        border-bottom: 1px solid rgba(226,232,240,0.8) !important;
     }
-
-    /* Trip Akan Datang full box */
-    #upcomingTripsList { max-height: none !important; overflow: visible !important; }
-
-    /* Rooming - allow sticky */
-    #modul-rooming { overflow: visible !important; }
-    #modul-rooming > div { overflow: visible !important; }
-
-    @media (max-width: 768px) {
-        #sidebar {
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
-            z-index: 50 !important;
-            transform: translateX(-100%) !important;
-            width: 16rem !important;
-            min-width: 16rem !important;
-            flex: none !important;
-            opacity: 1 !important;
-            pointer-events: auto !important;
-        }
-        #sidebar.open { transform: translateX(0) !important; }
-        #sidebar.collapsed {
-            transform: translateX(-100%) !important;
-            width: 16rem !important;
-            min-width: 16rem !important;
-            flex: none !important;
-            opacity: 1 !important;
-        }
-    }
+    main { overflow-y: auto !important; height: 100vh !important; }
+    #apiStatusBadge.offline { background: #fee2e2 !important; color: #dc2626 !important; }
+    #apiStatusBadge.online { background: #dcfce7 !important; color: #16a34a !important; }
+    #apiStatusBadge { transition: all 0.3s ease; }
     </style>
 </head>
 <body class="bg-brand-bg font-sans text-slate-800 antialiased selection:bg-brand-maroon selection:text-white">
@@ -151,7 +90,7 @@
                 </div>
                 <nav class="p-4 space-y-1.5 text-xs font-semibold">
                     <a href="#" onclick="switchTab('home')" id="nav-home" class="nav-link flex items-center space-x-3 px-3.5 py-3 rounded-xl transition text-white bg-slate-800/80">
-                        <i class="fa-solid fa-house w-5 text-slate-400"></i>
+                        <i class="fa-solid fa-house w-5 text-emerald-400"></i>
                         <span>Utama & Overview</span>
                     </a>
                     <div class="pt-4 pb-1 px-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pakej Umrah</div>
@@ -187,36 +126,13 @@
                     </a>
                 </nav>
             </div>
-            <div class="sidebar-bottom p-4 border-t border-slate-800 space-y-3 mt-auto">
+            <div class="p-4 border-t border-slate-800">
                 <div class="bg-slate-950/60 p-3 rounded-xl flex items-center justify-between text-xs">
                     <span class="text-slate-400 text-[11px]">Status API:</span>
                     <span id="apiStatusBadge" class="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-0.5 rounded-full font-bold text-[10px]">Offline</span>
                 </div>
-                <button onclick="logoutPortal()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold py-2.5 rounded-xl transition text-[12px] flex items-center justify-center gap-2 border border-slate-700/50">
-                    <i class="fa-solid fa-lock text-[11px]"></i><span>Kunci Portal</span>
-                </button>
             </div>
         </aside>
-
-<script>
-// V129 immediate restore
-(function(){
-  try{
-    const sb = document.getElementById('sidebar');
-    if(!sb) return;
-    if(window.innerWidth >= 768){
-      if(localStorage.getItem('effah_sidebar_collapsed') === '1'){
-        sb.classList.add('collapsed');
-      }
-    } else {
-      if(localStorage.getItem('effah_sidebar_mobile_open') === '1'){
-        sb.classList.add('open');
-      }
-    }
-  }catch(e){}
-})();
-</script>
-
 
         <main class="flex-1 flex flex-col min-w-0 overflow-y-auto">
             <header class="bg-white border-b border-slate-200/80 px-6 py-4 flex items-center justify-between sticky top-0 z-30" style="position:sticky;top:0;z-index:40;background:rgba(255,255,255,0.95);backdrop-filter:blur(16px);border-bottom:1px solid #e2e8f0;">
@@ -230,7 +146,9 @@
                         <span id="breadcrumbCurrent" class="text-slate-800 font-bold">Overview</span>
                     </div>
                 </div>
-                <div class="w-2"></div>
+                <button onclick="logoutPortal()" class="text-xs bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 px-3 py-1.5 rounded-xl font-bold transition">
+                    <i class="fa-solid fa-lock mr-1"></i> Kunci
+                </button>
             </header>
 
             <div class="p-6 md:p-8 space-y-6 max-w-7xl w-full mx-auto">
@@ -306,14 +224,18 @@
                             <div id="calendarGrid" class="grid grid-cols-7 gap-1">
                                 <div class="text-center py-8 col-span-7 text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuat kalendar...</div>
                             </div>
-                            <!-- V129 legend removed -->
+                            <div class="flex items-center gap-3 mt-4 pt-4 border-t border-slate-100 text-[10px]">
+                                <div class="flex items-center gap-1.5"><span class="w-2 h-2 bg-emerald-500 rounded-full"></span> Ada Trip</div>
+                                <div class="flex items-center gap-1.5"><span class="w-2 h-2 bg-slate-900 rounded-full"></span> Hari Ini</div>
+                                <div class="flex items-center gap-1.5"><span class="w-2 h-2 bg-amber-400 rounded-full"></span> Dalam 30 Hari</div>
+                            </div>
                         </div>
                         <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 flex flex-col">
                             <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-sm font-extrabold text-slate-900 tracking-tight">Trip Akan Datang</h3>
-                                <!-- V129 badge removed -->
+                                <h3 class="text-sm font-extrabold text-slate-900 tracking-tight">Dalam 30 Hari</h3>
+                                <span class="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-full" id="upcomingCount">0 Trip</span>
                             </div>
-                            <div id="upcomingTripsList" class="space-y-2.5 flex-1 pr-1">
+                            <div id="upcomingTripsList" class="space-y-2.5 flex-1 overflow-y-auto max-h-[340px] pr-1">
                                 <div class="text-center py-10 text-slate-400 text-xs">Memuat trip akan datang...</div>
                             </div>
                             <button onclick="switchTab('pakej-umrah')" class="mt-4 w-full bg-slate-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-black transition">Lihat Semua Trip <i class="fa-solid fa-arrow-right ml-1"></i></button>
@@ -607,21 +529,21 @@
       alert('Trip pada '+day+'/'+(month+1)+'/'+year+':\n\n'+list);
     }
     function renderUpcoming30Days(){
-      // V129: 6 trip paling dekat
       const list = document.getElementById('upcomingTripsList');
       const countEl = document.getElementById('upcomingCount');
       if(!list) return;
       const today = new Date(); today.setHours(0,0,0,0);
+      const in30 = new Date(); in30.setDate(today.getDate()+30);
       const sourceTrips = (cachedTrips.length>0) ? cachedTrips : (allTripDataForCalendar||[]);
       const upcoming = sourceTrips.filter(rec=>{
         const mula = rec.fields['Mula Pakej'] ? new Date(rec.fields['Mula Pakej']) : null;
         if(!mula) return false; 
         const mulaMid = new Date(mula); mulaMid.setHours(0,0,0,0);
-        return mulaMid >= today;
-      }).sort((a,b)=> new Date(a.fields['Mula Pakej']) - new Date(b.fields['Mula Pakej'])).slice(0,6);
+        return mulaMid >= today && mulaMid <= in30;
+      }).sort((a,b)=> new Date(a.fields['Mula Pakej']) - new Date(b.fields['Mula Pakej']));
       if(countEl) countEl.textContent = upcoming.length+' Trip';
       if(upcoming.length===0){
-        list.innerHTML = '<div class="text-center py-8 text-slate-400 text-xs"><i class="fa-solid fa-calendar-check text-2xl mb-2 text-slate-200"></i><p>Tiada trip akan datang</p><p class="text-[10px] mt-1">Musim '+activeHijriSeason+' - semua trip telah berlepas atau belum dijadualkan</p></div>';
+        list.innerHTML = '<div class="text-center py-8 text-slate-400 text-xs"><i class="fa-solid fa-calendar-check text-2xl mb-2 text-slate-200"></i><p>Tiada trip dalam 30 hari akan datang</p><p class="text-[10px] mt-1">Musim '+activeHijriSeason+' - semua trip telah berlepas atau belum dijadualkan</p></div>';
         return;
       }
       list.innerHTML = upcoming.map(rec=>{
@@ -749,41 +671,6 @@
   window.openPreviewModal = function(url, title){ return window.openTripPreviewModal(url, title); };
   document.addEventListener('keydown', function(e){ if(e.key === 'Escape'){ const open = Array.from(document.querySelectorAll('#attachmentPreviewModal')).some(m=> !m.classList.contains('hidden')); if(open) window.closePreviewModal(); } });
   console.log('✅ V21.1 Modal - Tall passport fix');
-})();
-</script>
-
-
-<script>
-// V129 FIX sidebar + header sticky
-window.toggleSidebar = function(){
-  const sb = document.getElementById('sidebar');
-  if(!sb) return;
-  const isMobile = window.innerWidth < 768;
-  if(isMobile){
-    const isOpen = sb.classList.toggle('open');
-    try{ localStorage.setItem('effah_sidebar_mobile_open', isOpen ? '1' : '0'); }catch(e){}
-  } else {
-    const isCollapsed = sb.classList.toggle('collapsed');
-    try{ localStorage.setItem('effah_sidebar_collapsed', isCollapsed ? '1' : '0'); }catch(e){}
-  }
-};
-(function(){
-  function initSidebar(){
-    const sb = document.getElementById('sidebar');
-    if(!sb) return;
-    try{
-      if(window.innerWidth >= 768){
-        if(localStorage.getItem('effah_sidebar_collapsed') === '1') sb.classList.add('collapsed');
-        else sb.classList.remove('collapsed');
-        sb.classList.remove('open');
-      } else {
-        if(localStorage.getItem('effah_sidebar_mobile_open') === '1') sb.classList.add('open');
-        else sb.classList.remove('open');
-      }
-    }catch(e){}
-  }
-  document.addEventListener('DOMContentLoaded', initSidebar);
-  window.addEventListener('resize', initSidebar);
 })();
 </script>
 
