@@ -29,35 +29,56 @@
         }
     </script>
     <style>
-    /* V123 FIX scroll + full height */
+    /* V124 FIX: Sidebar collapse tanpa kosong - flex layout preserved */
     #sidebar {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        height: 100dvh !important;
-        overflow: hidden !important;
-        display: flex !important;
-        flex-direction: column !important;
-        transform: translateX(0);
-        transition: transform 0.3s ease-in-out !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        flex-shrink: 0 !important;
     }
     #sidebar.collapsed {
-        transform: translateX(-100%) !important;
+        width: 0 !important;
+        min-width: 0 !important;
+        overflow: hidden !important;
+        opacity: 0;
+        margin-left: -16rem !important;
+        transform: translateX(-20px);
     }
-    #sidebar > div:first-child { flex-shrink: 0 !important; }
     #sidebar nav {
-        flex: 1 1 auto !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
-        height: auto !important;
     }
-    #sidebar .sidebar-bottom { flex-shrink: 0 !important; margin-top: auto !important; }
-    main { margin-left: 16rem; transition: margin-left 0.3s ease-in-out; }
-    main.full-width { margin-left: 0 !important; }
     @media (max-width: 768px) {
-        main { margin-left: 0 !important; }
-        #sidebar { z-index: 50 !important; }
+        #sidebar {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            height: 100dvh !important;
+            z-index: 50 !important;
+            transform: translateX(-100%) !important;
+            width: 16rem !important;
+            min-width: 16rem !important;
+            margin-left: 0 !important;
+            opacity: 1 !important;
+        }
+        #sidebar.open {
+            transform: translateX(0) !important;
+        }
+        #sidebar.collapsed {
+            transform: translateX(-100%) !important;
+            margin-left: 0 !important;
+            width: 16rem !important;
+            opacity: 1 !important;
+        }
+        #mainPortalWrapper > main {
+            margin-left: 0 !important;
+            width: 100% !important;
+        }
     }
+    /* Trip Akan Datang full box fix */
+    #upcomingTripsList {
+        max-height: none !important;
+        overflow: visible !important;
+    }
+    .calendar-legend, .legend-calendar { display: none !important; }
     aside::-webkit-scrollbar, #sidebar::-webkit-scrollbar { width: 4px; }
     aside::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
     #statusApiBadge, #statApiStatus { transition: all 0.3s; }
@@ -148,7 +169,7 @@
                     </a>
                 </nav>
             </div>
-            <div class="sidebar-bottom p-4 border-t border-slate-800 space-y-3">
+            <div class="sidebar-bottom p-4 border-t border-slate-800 space-y-3 mt-auto">
                 <div class="bg-slate-950/60 p-3 rounded-xl flex items-center justify-between text-xs">
                     <span class="text-slate-400 text-[11px]">Status API:</span>
                     <span id="apiStatusBadge" class="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-0.5 rounded-full font-bold text-[10px]">Offline</span>
@@ -247,14 +268,14 @@
                             <div id="calendarGrid" class="grid grid-cols-7 gap-1">
                                 <div class="text-center py-8 col-span-7 text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuat kalendar...</div>
                             </div>
-                            <!-- V123 legend removed -->
+                            <!-- V124 legend removed -->
                         </div>
-                        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 flex flex-col h-full">
+                        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 flex flex-col">
                             <div class="flex items-center justify-between mb-4">
                                 <h3 class="text-sm font-extrabold text-slate-900 tracking-tight">Trip Akan Datang</h3>
                                 <span class="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-full" id="upcomingCount">0 Trip</span>
                             </div>
-                            <div id="upcomingTripsList" class="space-y-2.5 flex-1 pr-1">
+                            <div id="upcomingTripsList" class="space-y-2.5 flex-1 overflow-visible pr-1">
                                 <div class="text-center py-10 text-slate-400 text-xs">Memuat trip akan datang...</div>
                             </div>
                             <button onclick="switchTab('pakej-umrah')" class="mt-4 w-full bg-slate-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-black transition">Lihat Semua Trip <i class="fa-solid fa-arrow-right ml-1"></i></button>
@@ -548,7 +569,7 @@
       alert('Trip pada '+day+'/'+(month+1)+'/'+year+':\n\n'+list);
     }
     function renderUpcoming30Days(){
-      // V123: Trip Akan Datang - 6 paling dekat, full box, takde max-h
+      // V124: 6 trip paling dekat, full box
       const list = document.getElementById('upcomingTripsList');
       const countEl = document.getElementById('upcomingCount');
       if(!list) return;
@@ -695,15 +716,20 @@
 
 
 <script>
-// V123: Sidebar state persistence + real API status check
+// V124: Sidebar persistence - desktop collapsed + mobile open state
 (function(){
   function initSidebarState(){
-    const saved = localStorage.getItem('effah_sidebar_collapsed');
-    if(saved === '1'){
-      const sb = document.getElementById('sidebar');
-      const main = document.querySelector('main');
-      if(sb) sb.classList.add('collapsed');
-      if(main) main.classList.add('full-width');
+    const sb = document.getElementById('sidebar');
+    if(!sb) return;
+    const isMobile = window.innerWidth < 768;
+    if(isMobile){
+      const saved = localStorage.getItem('effah_sidebar_mobile_open');
+      if(saved === '1') sb.classList.add('open');
+      else sb.classList.remove('open');
+    } else {
+      const saved = localStorage.getItem('effah_sidebar_collapsed');
+      if(saved === '1') sb.classList.add('collapsed');
+      else sb.classList.remove('collapsed');
     }
   }
   function checkRealApiStatus(){
@@ -716,7 +742,6 @@
       badge.className = 'bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-0.5 rounded-full font-bold text-[10px]';
       return;
     }
-    // Try real ping to Airtable
     fetch(`https://api.airtable.com/v0/${base}/PAKEJ%20UMRAH?maxRecords=1`, {
       headers: { Authorization: `Bearer ${pat}` }
     }).then(r=>{
@@ -738,9 +763,23 @@
   document.addEventListener('DOMContentLoaded', ()=>{
     initSidebarState();
     setTimeout(checkRealApiStatus, 800);
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', (e)=>{
+      const sb = document.getElementById('sidebar');
+      const burger = e.target.closest('button');
+      const isBurger = burger && burger.querySelector('.fa-bars');
+      if(window.innerWidth < 768 && sb && sb.classList.contains('open') && !sb.contains(e.target) && !isBurger){
+        sb.classList.remove('open');
+        localStorage.setItem('effah_sidebar_mobile_open', '0');
+      }
+    });
+  });
+  window.addEventListener('resize', ()=>{
+    initSidebarState();
   });
   window.addEventListener('tripLoaded', checkRealApiStatus);
   window.checkRealApiStatus = checkRealApiStatus;
+  window.initSidebarState = initSidebarState;
 })();
 </script>
 
