@@ -4416,239 +4416,252 @@ setTimeout(updateVisaCountBadge, 2000);
 window.openDeleteStaffModal=openDeleteStaffModal; window.closeDeleteStaffModal=closeDeleteStaffModal; window.deleteSingleStaffFromModal=deleteSingleStaffFromModal; window.confirmBulkDeleteStaff=confirmBulkDeleteStaff; window.performDeleteStaff=performDeleteStaff; window.toggleAllDeleteStaff=toggleAllDeleteStaff; window.deleteStaff=deleteStaff;
 
 
-// ===== FIX V118 - FREEZE CURSOR GRIP BUG =====
-console.log('ROOMING V118 FREEZE FIX loaded');
+// ===== FIX V119 - CLICK TO ASSIGN, DISABLE DRAG FREEZE COMPLETELY =====
+console.log('ROOMING V119 CLICK-TO-ASSIGN loaded - drag disabled to fix freeze');
 
-window._draggedJemaahId = window._draggedJemaahId || null;
-window._draggedStaffId = window._draggedStaffId || null;
-window._isDragging = false;
+window._selectedJemaahId = window._selectedJemaahId || null;
+window._selectedStaffId = window._selectedStaffId || null;
 
-function forceCleanupDrag(){
-  window._isDragging = false;
-  window._draggedJemaahId = null;
-  window._draggedStaffId = null;
-  window.draggedRoomId = null;
-  window._draggedRoomId = null;
-  if(window._autoScrollInterval){
-    try{ clearInterval(window._autoScrollInterval); }catch(e){}
-    window._autoScrollInterval = null;
-    _autoScrollInterval = null;
+// Function to select jemaah
+window.selectJemaahForAssign = function(jId){
+  // If already selected, deselect
+  if(window._selectedJemaahId === jId){
+    window._selectedJemaahId = null;
+    window._selectedStaffId = null;
+    console.log('Deselect jemaah', jId);
+    try{ renderNamelist(); }catch(e){}
+    try{ renderRoomingGrid(); }catch(e){}
+    // Remove highlight banner
+    const banner = document.getElementById('selectedJemaahBanner');
+    if(banner) banner.remove();
+    return;
   }
-  try{
-    document.querySelectorAll('[draggable="true"]').forEach(el=>{
-      el.style.opacity='1';
-      el.style.cursor='';
+  window._selectedJemaahId = jId;
+  window._selectedStaffId = null;
+  const jRec = (typeof allRoomingJemaah !== 'undefined' ? allRoomingJemaah.find(j=>j.id===jId) : null);
+  const name = jRec ? (typeof getJemaahName === 'function' ? getJemaahName(jRec.fields) : jId) : jId;
+  console.log('Selected jemaah for assign', jId, name);
+  
+  // Show banner
+  let banner = document.getElementById('selectedJemaahBanner');
+  if(!banner){
+    banner = document.createElement('div');
+    banner.id = 'selectedJemaahBanner';
+    banner.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 18px;border-radius:9999px;font-size:12px;font-weight:700;z-index:99999;box-shadow:0 10px 30px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;';
+    document.body.appendChild(banner);
+  }
+  banner.innerHTML = `<span>✓ ${name} dipilih</span><span style="background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:9999px;font-size:10px;">Klik slot kosong untuk assign • Klik lagi untuk batal</span><button onclick="window._selectedJemaahId=null;window._selectedStaffId=null;document.getElementById('selectedJemaahBanner')?.remove();try{renderNamelist();renderRoomingGrid();}catch(e){}" style="background:#fff;color:#0f172a;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;">✕</button>`;
+  
+  try{ renderNamelist(); }catch(e){}
+  try{ renderRoomingGrid(); }catch(e){}
+};
+
+window.selectStaffForAssign = function(sId){
+  if(window._selectedStaffId === sId){
+    window._selectedStaffId = null;
+    window._selectedJemaahId = null;
+    const banner = document.getElementById('selectedJemaahBanner');
+    if(banner) banner.remove();
+    try{ renderNamelist(); renderStaffList(); renderRoomingGrid(); }catch(e){}
+    return;
+  }
+  window._selectedStaffId = sId;
+  window._selectedJemaahId = null;
+  const sRec = (typeof staffList !== 'undefined' ? staffList.find(s=>s.id===sId||s.airtableId===sId) : null);
+  const name = sRec ? sRec.name : sId;
+  console.log('Selected staff for assign', sId, name);
+  let banner = document.getElementById('selectedJemaahBanner');
+  if(!banner){
+    banner = document.createElement('div');
+    banner.id = 'selectedJemaahBanner';
+    banner.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#7A0C2E;color:#fff;padding:10px 18px;border-radius:9999px;font-size:12px;font-weight:700;z-index:99999;box-shadow:0 10px 30px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;';
+    document.body.appendChild(banner);
+  }
+  banner.innerHTML = `<span>✓ ${name} (STAFF) dipilih</span><span style="background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:9999px;font-size:10px;">Klik slot kosong untuk assign</span><button onclick="window._selectedJemaahId=null;window._selectedStaffId=null;document.getElementById('selectedJemaahBanner')?.remove();try{renderNamelist();renderStaffList();renderRoomingGrid();}catch(e){}" style="background:#fff;color:#7A0C2E;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;">✕</button>`;
+  try{ renderNamelist(); renderStaffList(); renderRoomingGrid(); }catch(e){}
+};
+
+window.handleRoomSlotClick = function(roomId){
+  const jId = window._selectedJemaahId;
+  const sId = window._selectedStaffId;
+  if(!jId && !sId){
+    // No selection, maybe show hint
+    console.log('No jemaah/staff selected, click jemaah first');
+    // Flash all empty slots
+    document.querySelectorAll('[data-empty-slot]').forEach(el=>{
+      el.classList.add('ring-2','ring-amber-400');
+      setTimeout(()=>el.classList.remove('ring-2','ring-amber-400'), 800);
     });
-    document.querySelectorAll('.drag-over, .ring-2, .ring-emerald-300, .ring-[#7A0C2E]/40').forEach(el=>{
-      try{ el.classList.remove('drag-over','ring-2','ring-emerald-300','ring-[#7A0C2E]/40','ring-[#7A0C2E]/20'); }catch(e){}
-    });
-    document.body.style.cursor='';
-    document.documentElement.style.cursor='';
-  }catch(e){}
-  // console.log('forceCleanupDrag done');
-}
-
-// Override dragJemaah with safe version
-window.dragJemaah = function(e,jId){
-  if(typeof isJemaahAssignedInLocation === 'function' && isJemaahAssignedInLocation(jId, activeLocation)) return;
-  window._draggedJemaahId = jId;
-  window._draggedStaffId = null;
-  window._isDragging = true;
-  try{
-    if(e.dataTransfer){
-      e.dataTransfer.clearData();
-      e.dataTransfer.setData('text/plain', jId);
-      e.dataTransfer.setData('text/jemaah-id', jId);
-      e.dataTransfer.effectAllowed = 'move';
-      // Set drag image to avoid ghost freeze
-      if(e.currentTarget){
-        try{
-          const crt = e.currentTarget.cloneNode(true);
-          crt.style.position='absolute';
-          crt.style.top='-1000px';
-          crt.style.opacity='0.8';
-          document.body.appendChild(crt);
-          e.dataTransfer.setDragImage(crt, 20, 20);
-          setTimeout(()=>{ try{ crt.remove(); }catch(e){} }, 0);
-        }catch(err){}
-      }
-    }
-  }catch(err){}
-  const r=e.currentTarget;
-  if(r){
-    r.style.opacity='0.4';
-    r.style.cursor='grabbing';
+    return;
   }
-  document.body.style.cursor='grabbing';
-  console.log('DRAG START JEMAAH', jId);
-  e.stopPropagation();
-};
-
-window.dragStaff = function(e,staffId){
-  if(typeof isStaffAssignedInLocation === 'function' && isStaffAssignedInLocation(staffId, activeLocation)) return;
-  window._draggedStaffId = staffId;
-  window._draggedJemaahId = null;
-  window._isDragging = true;
+  const id = sId || jId;
+  const isStaff = !!sId;
+  console.log('Assign via click', {roomId, id, isStaff});
   try{
-    if(e.dataTransfer){
-      e.dataTransfer.clearData();
-      e.dataTransfer.setData('text/plain', staffId);
-      e.dataTransfer.setData('text/staff-id', staffId);
-      e.dataTransfer.setData('application/x-staff-id', staffId);
-      e.dataTransfer.effectAllowed='move';
-    }
-  }catch(err){}
-  const row=e.currentTarget;
-  if(row){
-    row.style.opacity='0.4';
-    row.style.cursor='grabbing';
-  }
-  document.body.style.cursor='grabbing';
-  console.log('DRAG START STAFF', staffId);
-  e.stopPropagation();
-};
-
-window.dragEnd = function(e){
-  try{
-    if(e && e.currentTarget) e.currentTarget.style.opacity='1';
-  }catch(err){}
-  forceCleanupDrag();
-  console.log('DRAG END');
-};
-
-window.dragStaffEnd = window.dragEnd;
-window.dragRoomEnd = function(e){
-  try{
-    const el=e.currentTarget.closest('[data-room-id]');
-    if(el) el.style.opacity='1';
-  }catch(err){}
-  forceCleanupDrag();
-};
-
-window.allowDrop = function(e){
-  try{
-    e.preventDefault();
-    e.stopPropagation();
-    if(e.dataTransfer) e.dataTransfer.dropEffect='move';
-  }catch(err){}
-  window._lastDragY = e.clientY;
-  const el=e.currentTarget;
-  if(el && el.classList){
-    el.classList.add('drag-over','ring-2','ring-emerald-300');
-  }
-};
-
-window.allowDropRoom = window.allowDrop;
-
-// Override dropJemaah with safe version that always cleanup
-window.dropJemaah = function(e,roomId){
-  try{ e.preventDefault(); e.stopPropagation(); }catch(err){}
-  let id = null;
-  let isStaff = false;
-  try{
-    const dt = e.dataTransfer;
-    let staffId = '';
-    let jId = '';
-    if(dt){
-      staffId = dt.getData('text/staff-id') || dt.getData('application/x-staff-id') || '';
-      jId = dt.getData('text/jemaah-id') || dt.getData('application/x-jemaah-id') || dt.getData('text/plain') || '';
-    }
-    // Fallback to window vars (critical for freeze bug)
-    if(!staffId) staffId = window._draggedStaffId || '';
-    if(!jId) jId = window._draggedJemaahId || '';
-    // If staffId exists and matches staffList, treat as staff
-    if(staffId){
-      try{
-        const isStaffCheck = (typeof staffList !== 'undefined' && staffList.some(s=>s.id===staffId||s.airtableId===staffId)) || staffId.startsWith('staff_');
-        if(isStaffCheck){
-          id = staffId;
-          isStaff = true;
-        }
-      }catch(err){}
-    }
-    if(!id && jId){
-      // Check if jId is actually a room id (reorder) - ignore
-      try{
-        if(jId.startsWith('rec') && typeof allRoomingRecords !== 'undefined' && allRoomingRecords.some(r=>r.id===jId) && (window.draggedRoomId || window._draggedRoomId)){
-          console.log('dropJemaah ignored - room reorder', jId);
-          forceCleanupDrag();
-          return;
-        }
-      }catch(err){}
-      id = jId;
-    }
-    console.log('DROP JEMAAH', {roomId, id, isStaff, staffId, jId});
-    if(!id){
-      console.warn('DROP no id');
-      forceCleanupDrag();
-      return;
-    }
-    // Capacity check
-    if(typeof allRoomingRecords !== 'undefined'){
-      const rec = allRoomingRecords.find(r=>r.id===roomId);
-      if(rec){
-        const cap = rec.fields['KAPASITI']||4;
-        const curCount = (rec.fields['JEMAAH']||[]).length + (typeof getStaffForRoom==='function'? getStaffForRoom(rec.id).length : 0);
-        if(curCount>=cap && !isStaff){
-          alert('Bilik penuh ('+curCount+'/'+cap+')');
-          forceCleanupDrag();
-          return;
-        }
-      }
-    }
     if(isStaff){
       if(typeof assignStaffToRoom === 'function') assignStaffToRoom(id, roomId);
       else if(typeof quickAssignStaffToRoom === 'function') quickAssignStaffToRoom(id, roomId);
     }else{
       if(typeof isJemaahAssignedInLocation === 'function' && isJemaahAssignedInLocation(id, activeLocation)){
-        console.log('Jemaah already assigned in loc, skip', id);
-        forceCleanupDrag();
+        alert('Jemaah sudah ada bilik di '+activeLocation);
         return;
       }
       if(typeof assignJemaahToRoom === 'function') assignJemaahToRoom(id, roomId);
-      else if(typeof quickAssignToRoom === 'function') quickAssignToRoom(id, roomId);
     }
-  }catch(err){
-    console.error('dropJemaah error', err);
+  }catch(e){
+    console.error('Assign error', e);
+    alert('Gagal assign: '+e.message);
   }finally{
-    // Always cleanup even if assign fails
-    setTimeout(forceCleanupDrag, 50);
+    window._selectedJemaahId = null;
+    window._selectedStaffId = null;
+    const banner = document.getElementById('selectedJemaahBanner');
+    if(banner) banner.remove();
+    setTimeout(()=>{
+      try{ renderNamelist(); }catch(e){}
+      try{ renderRoomingGrid(); }catch(e){}
+      try{ renderStaffList(); }catch(e){}
+    }, 200);
   }
 };
 
-// Global safety nets to prevent freeze
-if(!window._roomingFreezeFixAdded){
-  document.addEventListener('dragend', forceCleanupDrag, true);
-  document.addEventListener('drop', forceCleanupDrag, true);
-  document.addEventListener('mouseup', function(){
-    if(window._isDragging){
-      setTimeout(forceCleanupDrag, 100);
-    }
-  }, true);
-  document.addEventListener('keydown', function(e){
-    if(e.key === 'Escape' && window._isDragging){
-      forceCleanupDrag();
-    }
-  }, true);
-  // Prevent context menu during drag
-  document.addEventListener('contextmenu', function(e){
-    if(window._isDragging){
-      e.preventDefault();
-      forceCleanupDrag();
-    }
-  });
-  window._roomingFreezeFixAdded = true;
-  console.log('Freeze fix listeners added');
+// Patch renderNamelist to use click instead of drag
+const _origRenderNamelist = window.renderNamelist;
+window.renderNamelist = function(){
+  if(typeof _origRenderNamelist === 'function'){
+    // Call original but we will post-process to remove draggable
+    _origRenderNamelist();
+  }
+  // Post-process: replace draggable with click
+  try{
+    const cont = document.getElementById('namelistContainer');
+    if(!cont) return;
+    // Find all elements that had draggable and replace behavior
+    const items = cont.querySelectorAll('[draggable="true"]');
+    items.forEach(el=>{
+      const ondrag = el.getAttribute('ondragstart');
+      if(!ondrag) return;
+      const match = ondrag.match(/dragJemaah.*'([^']+)'/);
+      const matchStaff = ondrag.match(/dragStaff.*'([^']+)'/);
+      const jId = match ? match[1] : (matchStaff ? matchStaff[1] : null);
+      const isStaff = !!matchStaff;
+      if(jId){
+        el.removeAttribute('draggable');
+        el.removeAttribute('ondragstart');
+        el.removeAttribute('ondragend');
+        el.style.cursor = 'pointer';
+        // Preserve original classes but add selected ring if selected
+        if((window._selectedJemaahId === jId) || (window._selectedStaffId === jId)){
+          el.classList.add('ring-2','ring-emerald-500','bg-emerald-50');
+        }
+        el.onclick = function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          if(isStaff) selectStaffForAssign(jId);
+          else selectJemaahForAssign(jId);
+        };
+      }
+    });
+  }catch(e){ console.error('renderNamelist patch error', e); }
+};
+
+// Patch renderRoomingGrid empty slots
+const _origRenderRoomingGrid = window.renderRoomingGrid;
+window.renderRoomingGrid = function(){
+  if(typeof _origRenderRoomingGrid === 'function'){
+    _origRenderRoomingGrid();
+  }
+  try{
+    const grid = document.getElementById('roomingGrid');
+    if(!grid) return;
+    // Find all empty slot divs that had ondragover/ondrop and replace with click
+    const slots = grid.querySelectorAll('[ondragover][ondrop]');
+    slots.forEach(el=>{
+      const ondrop = el.getAttribute('ondrop');
+      if(!ondrop) return;
+      const match = ondrop.match(/dropJemaah.*'([^']+)'/);
+      if(!match) return;
+      const roomId = match[1];
+      el.removeAttribute('ondragover');
+      el.removeAttribute('ondrop');
+      el.setAttribute('data-empty-slot', roomId);
+      el.style.cursor = 'pointer';
+      el.classList.add('hover:bg-emerald-50','hover:border-emerald-300','transition');
+      el.onclick = function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        handleRoomSlotClick(roomId);
+      };
+      // Add visual hint if something selected
+      if(window._selectedJemaahId || window._selectedStaffId){
+        el.classList.add('bg-amber-50','border-amber-300','animate-pulse');
+        el.innerHTML = '<span style="font-size:10px;font-weight:bold;color:#92400e;">+ Klik untuk assign</span>';
+      }
+    });
+    // Also patch data-room-id cards to remove drag-over handlers that cause freeze
+    const roomCards = grid.querySelectorAll('[data-room-id]');
+    roomCards.forEach(card=>{
+      card.removeAttribute('ondragover');
+      card.removeAttribute('ondragleave');
+      card.removeAttribute('ondrop');
+      // Keep room reorder via button only, not whole card
+    });
+  }catch(e){ console.error('renderRoomingGrid patch error', e); }
+};
+
+// Also patch staff list
+const _origRenderStaffList = window.renderStaffList;
+if(typeof _origRenderStaffList === 'function'){
+  window.renderStaffList = function(){
+    _origRenderStaffList();
+    try{
+      const cont = document.getElementById('staffListContainer') || document.getElementById('staffContainer');
+      if(!cont) return;
+      const items = cont.querySelectorAll('[draggable="true"]');
+      items.forEach(el=>{
+        const ondrag = el.getAttribute('ondragstart');
+        if(!ondrag) return;
+        const match = ondrag.match(/dragStaff.*'([^']+)'/);
+        if(!match) return;
+        const sId = match[1];
+        el.removeAttribute('draggable');
+        el.removeAttribute('ondragstart');
+        el.removeAttribute('ondragend');
+        el.style.cursor='pointer';
+        if(window._selectedStaffId === sId){
+          el.classList.add('ring-2','ring-[#7A0C2E]');
+        }
+        el.onclick = function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          selectStaffForAssign(sId);
+        };
+      });
+    }catch(e){ console.error('renderStaffList patch error', e); }
+  };
 }
 
-// Fix CSS for draggable to prevent grab freeze
-(function(){
-  const style = document.createElement('style');
-  style.textContent = `
-    [draggable="true"]{ user-select:none; -webkit-user-drag:element; cursor:grab; }
-    [draggable="true"]:active{ cursor:grabbing !important; }
-    .drag-over{ background:#ecfdf5 !important; border-color:#10b981 !important; }
-    body[style*="grabbing"] *{ cursor:grabbing !important; }
-  `;
-  document.head.appendChild(style);
-})();
+// Disable native drag globally to prevent freeze
+document.addEventListener('dragstart', function(e){
+  // Only allow room reorder drag (grip button), block jemaah/staff drag
+  const target = e.target;
+  const isRoomGrip = target.closest && target.closest('[data-room-id]') && target.getAttribute('draggable') === 'true' && target.innerHTML && target.innerHTML.includes('fa-grip');
+  const isRoomCardGrip = e.target.getAttribute && e.target.getAttribute('ondragstart') && e.target.getAttribute('ondragstart').includes('handleRoomDragStart');
+  if(!isRoomGrip && !isRoomCardGrip){
+    // Check if it's jemaah/staff drag - block it, we use click now
+    const dragAttr = target.getAttribute && target.getAttribute('ondragstart');
+    if(dragAttr && (dragAttr.includes('dragJemaah') || dragAttr.includes('dragStaff'))){
+      e.preventDefault();
+      e.stopPropagation();
+      // Instead trigger click selection
+      const match = dragAttr.match(/'([^']+)'/);
+      if(match){
+        const id = match[1];
+        if(dragAttr.includes('dragStaff')) selectStaffForAssign(id);
+        else selectJemaahForAssign(id);
+      }
+      return false;
+    }
+  }
+}, true);
+
+console.log('V119 click-to-assign fully active - drag disabled for jemaah/staff');
