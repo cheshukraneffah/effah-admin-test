@@ -4414,3 +4414,241 @@ window.updateVisaCountBadge=updateVisaCountBadge;
 setTimeout(updateVisaCountBadge, 2000);
 
 window.openDeleteStaffModal=openDeleteStaffModal; window.closeDeleteStaffModal=closeDeleteStaffModal; window.deleteSingleStaffFromModal=deleteSingleStaffFromModal; window.confirmBulkDeleteStaff=confirmBulkDeleteStaff; window.performDeleteStaff=performDeleteStaff; window.toggleAllDeleteStaff=toggleAllDeleteStaff; window.deleteStaff=deleteStaff;
+
+
+// ===== FIX V118 - FREEZE CURSOR GRIP BUG =====
+console.log('ROOMING V118 FREEZE FIX loaded');
+
+window._draggedJemaahId = window._draggedJemaahId || null;
+window._draggedStaffId = window._draggedStaffId || null;
+window._isDragging = false;
+
+function forceCleanupDrag(){
+  window._isDragging = false;
+  window._draggedJemaahId = null;
+  window._draggedStaffId = null;
+  window.draggedRoomId = null;
+  window._draggedRoomId = null;
+  if(window._autoScrollInterval){
+    try{ clearInterval(window._autoScrollInterval); }catch(e){}
+    window._autoScrollInterval = null;
+    _autoScrollInterval = null;
+  }
+  try{
+    document.querySelectorAll('[draggable="true"]').forEach(el=>{
+      el.style.opacity='1';
+      el.style.cursor='';
+    });
+    document.querySelectorAll('.drag-over, .ring-2, .ring-emerald-300, .ring-[#7A0C2E]/40').forEach(el=>{
+      try{ el.classList.remove('drag-over','ring-2','ring-emerald-300','ring-[#7A0C2E]/40','ring-[#7A0C2E]/20'); }catch(e){}
+    });
+    document.body.style.cursor='';
+    document.documentElement.style.cursor='';
+  }catch(e){}
+  // console.log('forceCleanupDrag done');
+}
+
+// Override dragJemaah with safe version
+window.dragJemaah = function(e,jId){
+  if(typeof isJemaahAssignedInLocation === 'function' && isJemaahAssignedInLocation(jId, activeLocation)) return;
+  window._draggedJemaahId = jId;
+  window._draggedStaffId = null;
+  window._isDragging = true;
+  try{
+    if(e.dataTransfer){
+      e.dataTransfer.clearData();
+      e.dataTransfer.setData('text/plain', jId);
+      e.dataTransfer.setData('text/jemaah-id', jId);
+      e.dataTransfer.effectAllowed = 'move';
+      // Set drag image to avoid ghost freeze
+      if(e.currentTarget){
+        try{
+          const crt = e.currentTarget.cloneNode(true);
+          crt.style.position='absolute';
+          crt.style.top='-1000px';
+          crt.style.opacity='0.8';
+          document.body.appendChild(crt);
+          e.dataTransfer.setDragImage(crt, 20, 20);
+          setTimeout(()=>{ try{ crt.remove(); }catch(e){} }, 0);
+        }catch(err){}
+      }
+    }
+  }catch(err){}
+  const r=e.currentTarget;
+  if(r){
+    r.style.opacity='0.4';
+    r.style.cursor='grabbing';
+  }
+  document.body.style.cursor='grabbing';
+  console.log('DRAG START JEMAAH', jId);
+  e.stopPropagation();
+};
+
+window.dragStaff = function(e,staffId){
+  if(typeof isStaffAssignedInLocation === 'function' && isStaffAssignedInLocation(staffId, activeLocation)) return;
+  window._draggedStaffId = staffId;
+  window._draggedJemaahId = null;
+  window._isDragging = true;
+  try{
+    if(e.dataTransfer){
+      e.dataTransfer.clearData();
+      e.dataTransfer.setData('text/plain', staffId);
+      e.dataTransfer.setData('text/staff-id', staffId);
+      e.dataTransfer.setData('application/x-staff-id', staffId);
+      e.dataTransfer.effectAllowed='move';
+    }
+  }catch(err){}
+  const row=e.currentTarget;
+  if(row){
+    row.style.opacity='0.4';
+    row.style.cursor='grabbing';
+  }
+  document.body.style.cursor='grabbing';
+  console.log('DRAG START STAFF', staffId);
+  e.stopPropagation();
+};
+
+window.dragEnd = function(e){
+  try{
+    if(e && e.currentTarget) e.currentTarget.style.opacity='1';
+  }catch(err){}
+  forceCleanupDrag();
+  console.log('DRAG END');
+};
+
+window.dragStaffEnd = window.dragEnd;
+window.dragRoomEnd = function(e){
+  try{
+    const el=e.currentTarget.closest('[data-room-id]');
+    if(el) el.style.opacity='1';
+  }catch(err){}
+  forceCleanupDrag();
+};
+
+window.allowDrop = function(e){
+  try{
+    e.preventDefault();
+    e.stopPropagation();
+    if(e.dataTransfer) e.dataTransfer.dropEffect='move';
+  }catch(err){}
+  window._lastDragY = e.clientY;
+  const el=e.currentTarget;
+  if(el && el.classList){
+    el.classList.add('drag-over','ring-2','ring-emerald-300');
+  }
+};
+
+window.allowDropRoom = window.allowDrop;
+
+// Override dropJemaah with safe version that always cleanup
+window.dropJemaah = function(e,roomId){
+  try{ e.preventDefault(); e.stopPropagation(); }catch(err){}
+  let id = null;
+  let isStaff = false;
+  try{
+    const dt = e.dataTransfer;
+    let staffId = '';
+    let jId = '';
+    if(dt){
+      staffId = dt.getData('text/staff-id') || dt.getData('application/x-staff-id') || '';
+      jId = dt.getData('text/jemaah-id') || dt.getData('application/x-jemaah-id') || dt.getData('text/plain') || '';
+    }
+    // Fallback to window vars (critical for freeze bug)
+    if(!staffId) staffId = window._draggedStaffId || '';
+    if(!jId) jId = window._draggedJemaahId || '';
+    // If staffId exists and matches staffList, treat as staff
+    if(staffId){
+      try{
+        const isStaffCheck = (typeof staffList !== 'undefined' && staffList.some(s=>s.id===staffId||s.airtableId===staffId)) || staffId.startsWith('staff_');
+        if(isStaffCheck){
+          id = staffId;
+          isStaff = true;
+        }
+      }catch(err){}
+    }
+    if(!id && jId){
+      // Check if jId is actually a room id (reorder) - ignore
+      try{
+        if(jId.startsWith('rec') && typeof allRoomingRecords !== 'undefined' && allRoomingRecords.some(r=>r.id===jId) && (window.draggedRoomId || window._draggedRoomId)){
+          console.log('dropJemaah ignored - room reorder', jId);
+          forceCleanupDrag();
+          return;
+        }
+      }catch(err){}
+      id = jId;
+    }
+    console.log('DROP JEMAAH', {roomId, id, isStaff, staffId, jId});
+    if(!id){
+      console.warn('DROP no id');
+      forceCleanupDrag();
+      return;
+    }
+    // Capacity check
+    if(typeof allRoomingRecords !== 'undefined'){
+      const rec = allRoomingRecords.find(r=>r.id===roomId);
+      if(rec){
+        const cap = rec.fields['KAPASITI']||4;
+        const curCount = (rec.fields['JEMAAH']||[]).length + (typeof getStaffForRoom==='function'? getStaffForRoom(rec.id).length : 0);
+        if(curCount>=cap && !isStaff){
+          alert('Bilik penuh ('+curCount+'/'+cap+')');
+          forceCleanupDrag();
+          return;
+        }
+      }
+    }
+    if(isStaff){
+      if(typeof assignStaffToRoom === 'function') assignStaffToRoom(id, roomId);
+      else if(typeof quickAssignStaffToRoom === 'function') quickAssignStaffToRoom(id, roomId);
+    }else{
+      if(typeof isJemaahAssignedInLocation === 'function' && isJemaahAssignedInLocation(id, activeLocation)){
+        console.log('Jemaah already assigned in loc, skip', id);
+        forceCleanupDrag();
+        return;
+      }
+      if(typeof assignJemaahToRoom === 'function') assignJemaahToRoom(id, roomId);
+      else if(typeof quickAssignToRoom === 'function') quickAssignToRoom(id, roomId);
+    }
+  }catch(err){
+    console.error('dropJemaah error', err);
+  }finally{
+    // Always cleanup even if assign fails
+    setTimeout(forceCleanupDrag, 50);
+  }
+};
+
+// Global safety nets to prevent freeze
+if(!window._roomingFreezeFixAdded){
+  document.addEventListener('dragend', forceCleanupDrag, true);
+  document.addEventListener('drop', forceCleanupDrag, true);
+  document.addEventListener('mouseup', function(){
+    if(window._isDragging){
+      setTimeout(forceCleanupDrag, 100);
+    }
+  }, true);
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && window._isDragging){
+      forceCleanupDrag();
+    }
+  }, true);
+  // Prevent context menu during drag
+  document.addEventListener('contextmenu', function(e){
+    if(window._isDragging){
+      e.preventDefault();
+      forceCleanupDrag();
+    }
+  });
+  window._roomingFreezeFixAdded = true;
+  console.log('Freeze fix listeners added');
+}
+
+// Fix CSS for draggable to prevent grab freeze
+(function(){
+  const style = document.createElement('style');
+  style.textContent = `
+    [draggable="true"]{ user-select:none; -webkit-user-drag:element; cursor:grab; }
+    [draggable="true"]:active{ cursor:grabbing !important; }
+    .drag-over{ background:#ecfdf5 !important; border-color:#10b981 !important; }
+    body[style*="grabbing"] *{ cursor:grabbing !important; }
+  `;
+  document.head.appendChild(style);
+})();
