@@ -1684,11 +1684,9 @@ function makeNamelistSticky(){
       const outer = modul.firstElementChild;
       if(outer){
         for(const child of outer.children){
-          if(child.id!=='roomingGrid' && !child.classList.contains('lg:w-[52%]') && !child.classList.contains('lg:w-[48%]')){
-            if(child.querySelector('#roomingTripSelect') || child.querySelector('#roomingHijriTabs')){
-              filterBar = child;
-              break;
-            }
+          if(child.querySelector && (child.querySelector('#roomingTripSelect') || child.querySelector('#roomingHijriTabs'))){
+            filterBar = child;
+            break;
           }
         }
         if(!filterBar && outer.firstElementChild) filterBar = outer.firstElementChild;
@@ -1718,15 +1716,12 @@ function makeNamelistSticky(){
       leftCard.style.height=`calc(100dvh - ${topOffset+8}px)`;
       leftCard.style.overflow='hidden';
       leftCard.style.borderRadius='16px';
-      // Remove will-change that breaks drag
       leftCard.style.willChange='auto';
     }
 
-    // V131: Restore proper inner scroll heights for drag
     nl.style.flex='1 1 auto';
     nl.style.maxHeight='48vh';
     nl.style.minHeight='220px';
-    nl.style.height='auto';
     nl.style.overflowY='auto';
     nl.style.overflowX='hidden';
     nl.style.backgroundColor='#ffffff';
@@ -1767,10 +1762,9 @@ function makeNamelistSticky(){
     if(outer){
       outer.style.overflow='visible';
     }
-    console.log('V131 sticky applied - filterBar 64px, leftCard '+ (64 + (filterBar?filterBar.offsetHeight:72) + 12) +'px, drag enabled');
+    console.log('V131 sticky applied - filterBar 64px, leftCard '+(64 + (filterBar?filterBar.offsetHeight:72) + 12)+'px');
   }catch(e){ console.error('sticky fail', e); }
 }
-
 
 
 
@@ -2005,43 +1999,19 @@ function _startAutoScroll(){
 }
 document.addEventListener('drop', ()=>{ _stopAutoScroll(); });
 function dragJemaah(e,jId){ 
-  if(isJemaahAssignedInLocation(jId, activeLocation)) { 
-    e.preventDefault(); 
-    console.log('already assigned, prevent drag', jId);
-    return; 
-  }
+  if(isJemaahAssignedInLocation(jId, activeLocation)) { e.preventDefault(); return; }
   window._draggedJemaahId = jId;
-  try{ 
-    e.dataTransfer.setData('text/plain', jId); 
-    e.dataTransfer.setData('text/jemaah-id', jId);
-    e.dataTransfer.effectAllowed='move'; 
-  }catch(err){ console.warn('setData fail', err); }
+  try{ e.dataTransfer.setData('text/plain',jId); e.dataTransfer.effectAllowed='move'; }catch(err){}
   const r=e.currentTarget; 
-  if(r) {
-    setTimeout(()=>{ 
-      r.style.opacity='0.4'; 
-      r.classList.add('dragging'); 
-      r.style.border='1px dashed #7A0C2E';
-    },0);
-  }
-  console.log('dragJemaah START', jId);
+  if(r) setTimeout(()=>{ r.style.opacity='0.3'; r.classList.add('dragging'); },0);
+  console.log('dragJemaah', jId);
 }
 function dragEnd(e){ 
-  try{ 
-    if(e.currentTarget){
-      e.currentTarget.style.opacity='1'; 
-      e.currentTarget.classList.remove('dragging'); 
-      e.currentTarget.style.border='';
-    }
-  }catch(err){}
-  document.querySelectorAll('[draggable="true"]').forEach(el=>{ 
-    el.style.opacity='1'; 
-    el.classList.remove('dragging'); 
-    el.style.border='';
-  });
+  try{ e.currentTarget.style.opacity='1'; e.currentTarget.classList.remove('dragging'); }catch(err){}
+  document.querySelectorAll('[draggable="true"]').forEach(el=>{ el.style.opacity='1'; el.classList.remove('dragging'); });
   window._draggedJemaahId = null;
   try{ _stopAutoScroll(); }catch(err){}
-  console.log('dragEnd - reset all');
+  console.log('dragEnd');
 }
 
 function dragRoom(e,roomId){
@@ -2215,13 +2185,7 @@ function dragRoomEnd(e){
   _stopAutoScroll();
 }
 function allowDropRoom(e){
-  e.preventDefault();
-  try { e.dataTransfer.dropEffect='move'; } catch(err){}
-  window._lastDragY=e.clientY;
-  try{ _startAutoScroll(); }catch(err){}
-  const el=e.currentTarget;
-  if(el && el.classList) el.classList.add('drag-over','ring-2','ring-[#7A0C2E]/40');
-} catch(err){}
+  try { e.preventDefault(); e.dataTransfer.dropEffect='move'; } catch(err){}
   window._lastDragY=e.clientY;
   try{ _startAutoScroll(); }catch(err){}
   const el=e.currentTarget;
@@ -2231,9 +2195,8 @@ function allowDropRoom(e){
 function dropJemaah(e,roomId){
   e.preventDefault(); 
   try{ e.currentTarget.classList.remove('ring-2','ring-[#7A0C2E]/20'); }catch(err){}
-  document.querySelectorAll('[draggable="true"]').forEach(el=>{ el.style.opacity='1'; el.classList.remove('dragging'); el.style.border=''; });
+  document.querySelectorAll('[draggable="true"]').forEach(el=>{ el.style.opacity='1'; el.classList.remove('dragging'); });
   window._draggedJemaahId = null;
-  try{ _stopAutoScroll(); }catch(e){}
   // If this is a room reorder drag (text/room-id), ignore here - let dropRoomReorder handle it
   try{
     const roomDragId = e.dataTransfer.getData('text/room-id');
@@ -3582,19 +3545,6 @@ if(!window._roomingDragListenersAdded){
   document.addEventListener('drop', ()=>{ _stopAutoScroll(); });
   window._roomingDragListenersAdded = true;
   console.log('Drag listeners added ONCE');
-
-// V130 CSS injection for sticky fallback
-(function(){
-  const style = document.createElement('style');
-  style.textContent = `
-    #modul-rooming { overflow: visible !important; }
-    #modul-rooming > div { overflow: visible !important; }
-    #modul-rooming .flex-col.lg\:flex-row { overflow: visible !important; align-items: flex-start !important; }
-    #modul-rooming div[class*="lg:w-[52%"] { will-change: transform; }
-  `;
-  document.head.appendChild(style);
-})();
-
 }
 
 function renderLocationTabs(){
@@ -3682,13 +3632,7 @@ function handleRoomDragEnter(e){
   _startAutoScroll();
 }
 function allowDropRoom(e){
-  e.preventDefault();
-  try { e.dataTransfer.dropEffect='move'; } catch(err){}
-  window._lastDragY=e.clientY;
-  try{ _startAutoScroll(); }catch(err){}
-  const el=e.currentTarget;
-  if(el && el.classList) el.classList.add('drag-over','ring-2','ring-[#7A0C2E]/40');
-} catch(err){}
+  try { e.preventDefault(); e.dataTransfer.dropEffect='move'; } catch(err){}
   window._lastDragY=e.clientY;
   try{ _startAutoScroll(); }catch(err){}
   const el=e.currentTarget;
