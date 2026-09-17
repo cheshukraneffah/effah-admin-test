@@ -1743,10 +1743,7 @@ function makeNamelistSticky(){
       main.style.overflowX='hidden';
     }
     console.log('V129 sticky applied - filter bar sticky 64px, leftCard sticky 144px');
-  }catch(e){ console.error('sticky fail', e);
-  }
-}
- console.error('sticky fail', e); }
+  }catch(e){ console.error('sticky fail', e); }
 }
 
 
