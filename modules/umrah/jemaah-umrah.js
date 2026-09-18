@@ -503,7 +503,6 @@ async function addNewOptionToField(fieldName, newOptionName){
     const fieldMeta = jemaahMetaFieldsByName[fieldName];
     if(!fieldMeta){ alert('Ralat: Medan ' + fieldName + ' tidak dijumpai dalam pangkalan data.'); return false; }
 
-    // SPECIAL CASE: EJEN adalah linked record ke table EJEN LIST
     if(fieldName === 'EJEN' || fieldMeta.type === 'multipleRecordLinks' || fieldMeta.type === 'singleRecordLink'){
       try{
         const ejenUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/EJEN%20LIST`;
@@ -524,13 +523,6 @@ async function addNewOptionToField(fieldName, newOptionName){
         }
         alert(`Ejen '${newOptionName}' telah berjaya ditambahkan ke dalam senarai EJEN.`);
         if(typeof filterAndRenderJemaahGrid === 'function') filterAndRenderJemaahGrid();
-        const ejenListModal = document.getElementById('ejenListModal');
-        if(ejenListModal){
-          const html = `<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${newEjen.id}" class="ejen-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon" checked><span class="text-xs font-bold text-slate-700">${newOptionName}</span><span class="text-[10px] text-slate-400 ml-auto">AKTIF</span></label>` + ejenListModal.innerHTML;
-          ejenListModal.innerHTML = html;
-          document.querySelectorAll('.ejen-checkbox').forEach(cb=>{ cb.addEventListener('change', updateEjenSelected); });
-          if(typeof updateEjenSelected === 'function') updateEjenSelected();
-        }
         return true;
       }catch(e){
         alert('Ralat semasa menambah ejen: ' + e.message);
@@ -543,13 +535,12 @@ async function addNewOptionToField(fieldName, newOptionName){
       alert('Makluman: Pilihan tersebut telah wujud dalam senarai.'); return false;
     }
 
-    // V70 FINAL - ikut trip-umrah.js yang proven berjaya di tab Trip (hanya {name} tanpa id tanpa color)
-    // Ini fix 422 "Changing a field's type or number precision is currently not supported"
-    const cleanedExisting = existing.map(c=> ({ name: c.name }));
+    // V71 - 100% ikut contoh working trip-umrah.js kau bagi
+    const cleanedExisting = existing.map(c=> ({ id: c.id, name: c.name }));
     const updatedChoices = [...cleanedExisting, { name: newOptionName }];
 
     const url = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${jemaahMetaTableId}/fields/${fieldMeta.id}`;
-    console.log('PATCH (trip method) payload:', JSON.stringify({options:{choices:updatedChoices}}));
+    console.log('PATCH trip example:', JSON.stringify({options:{choices:updatedChoices}}));
     const res = await fetch(url, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' },
@@ -562,9 +553,9 @@ async function addNewOptionToField(fieldName, newOptionName){
       let errMsg = errText;
       try{
         const errJson = JSON.parse(errText);
-        errMsg = errJson.error?.message || errJson.error || errText;
+        errMsg = errJson.error?.message || JSON.stringify(errJson.error) || errText;
       }catch{}
-      alert('Gagal menambah pilihan: ' + errMsg.toString().substring(0,500));
+      alert('Gagal menambah pilihan: ' + errMsg.toString().substring(0,600));
       return false;
     }
     const updatedField = await res.json();
