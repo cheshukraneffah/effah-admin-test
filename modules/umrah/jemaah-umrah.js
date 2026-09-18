@@ -27,6 +27,10 @@ let selectedJemaahIds = new Set();
 
 // Hidden Fields Tracking
 let hiddenColumns = JSON.parse(localStorage.getItem('jemaahHiddenColumns')) || {};
+// V60: Always hide AGE and DOB (formula fields) as requested - user wants them not in toggle
+hiddenColumns['col-age'] = true;
+hiddenColumns['col-dob'] = true;
+localStorage.setItem('jemaahHiddenColumns', JSON.stringify(hiddenColumns));
 
 // Sort State Tracking
 let currentSortField = 'NAME';
@@ -425,7 +429,7 @@ async function fetchTripMapping() {
     }
 }
 
-// V51: Fetch field options dari Airtable meta API - direct fetch, tak hardcoded
+// V51: Fetch field options daripada Airtable meta API - direct fetch, tak hardcoded
 async function fetchJemaahMetaOptions(){
   try{
     if(typeof AIRTABLE_PAT === 'undefined' || !AIRTABLE_PAT){
@@ -484,20 +488,20 @@ async function fetchEjenList(){
 }
 async function addNewOptionToField(fieldName, newOptionName){
   try{
-    if(!jemaahMetaTableId){ alert('Meta table ID belum load'); return false; }
+    if(!jemaahMetaTableId){ alert('Ralat: ID jadual meta belum dimuatkan. Sila muat semula halaman.'); return false; }
     const fieldMeta = jemaahMetaFieldsByName[fieldName];
-    if(!fieldMeta){ alert('Field '+fieldName+' tak jumpa'); return false; }
+    if(!fieldMeta){ alert('Ralat: Medan ' + fieldName + ' tidak dijumpai dalam pangkalan data.'); return false; }
     const existingChoices = (fieldMeta.options && fieldMeta.options.choices) ? fieldMeta.options.choices : [];
-    if(existingChoices.some(c=> c.name.toUpperCase() === newOptionName.toUpperCase())){ alert('Option sudah wujud'); return false; }
+    if(existingChoices.some(c=> c.name.toUpperCase() === newOptionName.toUpperCase())){ alert('Makluman: Pilihan tersebut telah wujud dalam senarai.'); return false; }
     const updatedChoices = [...existingChoices, { name: newOptionName }];
     const url = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${jemaahMetaTableId}/fields/${fieldMeta.id}`;
     const res = await fetch(url, { method: 'PATCH', headers: { Authorization: `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ options: { ...fieldMeta.options, choices: updatedChoices } }) });
-    if(!res.ok){ const txt = await res.text(); alert('Gagal: '+txt); return false; }
+    if(!res.ok){ const txt = await res.text(); alert('Gagal melaksanakan operasi: ' + txt); return false; }
     const updatedField = await res.json();
     jemaahMetaFieldsByName[fieldName] = updatedField;
     jemaahFieldOptions[fieldName] = updatedField.options.choices.map(c=>({ id: c.id, name: c.name, color: c.color }));
-    alert(`Option '${newOptionName}' ditambah ke ${fieldName}`); filterAndRenderJemaahGrid(); return true;
-  }catch(e){ alert('Error: '+e.message); return false; }
+    alert(`Pilihan '${newOptionName}' telah berjaya ditambahkan ke dalam medan ${fieldName}.`); filterAndRenderJemaahGrid(); return true;
+  }catch(e){ alert('Ralat telah berlaku: ' + e.message); return false; }
 }
 function handleAddNewOption(fieldName, selectEl){
   const newVal = prompt(`Tambah option baru untuk ${fieldName}:`);
@@ -981,10 +985,44 @@ function filterAndRenderJemaahGrid() {
         });
     }
 
+    // V60 FIX: Proper sorting for AGE (muda-tua) and handle empty values - fixes Nur Dini Damia at bottom
+    function parseAgeToMonthsForSort(ageStr){
+      if(!ageStr) return -1; // Empty AGE at bottom for ASC, will be handled
+      const s = ageStr.toString().toLowerCase().trim();
+      if(!s || s==='-' || s.toLowerCase()==='tbc') return -1;
+      let years = 0, months = 0;
+      const yMatch = s.match(/(\d+)\s*y/);
+      const mMatch = s.match(/(\d+)\s*m/);
+      if(yMatch) years = parseInt(yMatch[1])||0;
+      if(mMatch) months = parseInt(mMatch[1])||0;
+      if(!yMatch && !mMatch){
+        const num = parseFloat(s)||0;
+        if(num>0){
+          years = Math.floor(num);
+          months = Math.round((num - years)*12);
+        }
+      }
+      return years*12 + months;
+    }
+
     filtered.sort((a, b) => {
         let valA = a.fields[currentSortField] || '';
         let valB = b.fields[currentSortField] || '';
-
+        
+        // Special handling for AGE field - sort by total months (muda-tua)
+        if(currentSortField === 'AGE'){
+          const monthsA = parseAgeToMonthsForSort(valA);
+          const monthsB = parseAgeToMonthsForSort(valB);
+          // Handle empty AGE: put at bottom regardless of direction
+          if(monthsA===-1 && monthsB===-1) return 0;
+          if(monthsA===-1) return 1; // A empty -> after B
+          if(monthsB===-1) return -1; // B empty -> after A
+          if(monthsA < monthsB) return currentSortDir === 'asc' ? -1 : 1;
+          if(monthsA > monthsB) return currentSortDir === 'asc' ? 1 : -1;
+          return 0;
+        }
+        
+        // For other fields: case-insensitive string compare
         if (typeof valA === 'string') valA = valA.toLowerCase();
         if (typeof valB === 'string') valB = valB.toLowerCase();
 
@@ -1183,12 +1221,12 @@ async function handleInlineFileUpload(recId, fieldName, fileList, cellBoxId) {
             }
             filterAndRenderJemaahGrid();
         } else {
-            alert("Gagal simpan ke Airtable.");
+            alert("Gagal menyimpan data ke Airtable. Sila periksa sambungan internet anda dan cuba semula.");
             filterAndRenderJemaahGrid();
         }
     } catch (err) {
         console.error("Inline upload exception:", err);
-        alert("Ralat semasa upload fail.");
+        alert("Ralat semasa memuat naik fail. Sila pastikan format fail adalah betul dan cuba semula.");
         filterAndRenderJemaahGrid();
     }
 }
@@ -1259,7 +1297,7 @@ function clearJemaahSelection() {
 async function bulkDeleteJemaah() {
     if (selectedJemaahIds.size === 0) return;
 
-    if (!confirm(`Adakah anda pasti nak padam ${selectedJemaahIds.size} rekod jemaah yang dipilih dari Airtable?`)) return;
+    if (!confirm(`Adakah anda pasti ingin memadam ${selectedJemaahIds.size} rekod jemaah yang dipilih daripada Airtable? Tindakan ini tidak boleh dibatalkan dan akan memadam data secara kekal.`)) return;
 
     const idsToDelete = Array.from(selectedJemaahIds);
     const delBtn = document.getElementById('btnBulkDelete');
@@ -1404,13 +1442,13 @@ function openAddTripModal() {
                     tamatEl.min = mulaEl.value;
                     if(tamatEl.value && tamatEl.value < mulaEl.value){
                         tamatEl.value = '';
-                        alert('Tarikh tamat tidak boleh sebelum tarikh mula.');
+                        alert('Ralat Pengesahan Tarikh: Tarikh tamat tidak boleh ditetapkan sebelum tarikh mula. Sila semak semula tarikh yang dimasukkan.');
                     }
                 }
             });
             tamatEl.addEventListener('change', ()=>{
                 if(mulaEl.value && tamatEl.value && tamatEl.value < mulaEl.value){
-                    alert('Tarikh tamat tidak boleh sebelum tarikh mula. Sila pilih tarikh selepas atau sama dengan tarikh mula.');
+                    alert('Ralat Pengesahan Tarikh: Tarikh tamat tidak boleh sebelum tarikh mula. Sila pilih tarikh tamat yang sama atau selepas tarikh mula.');
                     tamatEl.value = '';
                 }
             });
@@ -1434,12 +1472,12 @@ async function createNewTripFromModal() {
     const totalSeatVal = formData.get('Total Seat');
 
     if (!mulaPakej || !tamatPakej) {
-        alert("Sila masukkan Tarikh Mula dan Tarikh Tamat Pakej!");
+        alert("Sila lengkapkan maklumat yang diperlukan: Tarikh Mula dan Tarikh Tamat Pakej adalah wajib diisi.");
         return;
     }
 
     if (tamatPakej < mulaPakej) {
-        alert("Tarikh tamat tidak boleh sebelum tarikh mula. Sila betulkan tarikh.");
+        alert("Ralat Pengesahan Tarikh: Tarikh tamat tidak boleh sebelum tarikh mula. Sila betulkan tarikh yang dimasukkan.");
         return;
     }
 
@@ -1482,16 +1520,16 @@ async function createNewTripFromModal() {
             if(typeof fetchTripUmrahData === 'function') await fetchTripUmrahData(true);
             if(typeof renderViewsSidebar === 'function') renderViewsSidebar();
             closeExpandModal();
-            alert('Pakej / Trip Umrah telah berjaya ditambahkan.');
+            alert('Berjaya: Pakej / Trip Umrah telah berjaya ditambahkan ke dalam sistem.');
         } else {
             const errData = await response.json();
             console.error('Create trip failed', errData);
             let msg = errData.error?.message || 'Gagal menambah trip baharu.';
-            alert(`Gagal menambah trip baharu: ${msg}`);
+            alert(`Gagal menambah trip baharu: ${msg}. Sila periksa maklumat dan cuba semula.`);
         }
     } catch (e) {
         console.error("Error creating trip:", e);
-        alert(`Ralat semasa menambah trip: ${e.message}`);
+        alert(`Ralat sistem semasa menambah trip: ${e.message}. Sila hubungi pentadbir sistem jika masalah berterusan.`);
     } finally {
         if (saveBtn) saveBtn.innerHTML = 'Simpan Trip';
     }
@@ -1728,7 +1766,7 @@ function renderDropZoneHtml(recId, fieldName, currentFiles) {
 }
 
 async function confirmDeleteAttachment(recId, fieldName, indexToDelete = null) {
-    if (!confirm(`Adakah anda pasti mahu memadam fail ${fieldName} ini?`)) {
+    if (!confirm(`Adakah anda pasti ingin memadam fail ${fieldName} ini? Tindakan ini akan memadam fail secara kekal daripada rekod.`)) {
         return;
     }
 
@@ -1764,11 +1802,11 @@ async function confirmDeleteAttachment(recId, fieldName, indexToDelete = null) {
                 openExpandModal(recId);
             }
         } else {
-            alert("Gagal memadam fail.");
+            alert("Gagal memadam fail. Sila cuba semula atau hubungi pentadbir sistem.");
         }
     } catch (e) {
         console.error("Error deleting attachment:", e);
-        alert("Ralat sambungan rangkaian.");
+        alert("Ralat sambungan rangkaian. Sila periksa sambungan internet anda dan cuba semula.");
     }
 }
 
@@ -1950,7 +1988,7 @@ async function saveJemaahFromModal(recId) {
 }
 
 async function deleteJemaahFromModal(recId) {
-    if (!confirm("Adakah anda pasti nak padam rekod jemaah ini?")) return;
+    if (!confirm("Adakah anda pasti ingin memadam rekod jemaah ini? Tindakan ini tidak boleh dibatalkan dan rekod akan dipadam secara kekal daripada sistem.")) return;
 
     allJemaahUmrahRecords = allJemaahUmrahRecords.filter(r => r.id !== recId);
     filterAndRenderJemaahGrid();
@@ -1981,6 +2019,7 @@ function openAddJemaahModal() {
         saveBtn.onclick = createNewJemaahFromModal;
     }
 
+    // Build trip options from Airtable (not hardcoded)
     const tripOptionsHtml = rawTripRecordsList.map(t => {
         const title = tripMap[t.id] ? tripMap[t.id].title : cleanTripName(t.fields['Trip']);
         const isCurrentActiveTrip = (selectedTripFilter !== 'ALL' && selectedTripFilter !== 'TBC' && selectedTripFilter === title);
@@ -1988,68 +2027,169 @@ function openAddJemaahModal() {
         return `<option value="${t.id}" ${selected}>${title}</option>`;
     }).join('');
 
+    // Build dropdown options from Airtable meta (not hardcoded)
+    function buildSelectOptions(fieldName, placeholder){
+        const options = jemaahFieldOptions[fieldName] || [];
+        let html = `<option value="">${placeholder}</option>`;
+        if(options.length>0){
+            options.forEach(opt=>{
+                html += `<option value="${opt.name}">${opt.name}</option>`;
+            });
+        }
+        return html;
+    }
+
+    // Build ejen options from ejenListCache (Airtable EJEN LIST)
+    const ejenOptionsHtml = (()=> {
+        let html = '<option value="">-- Pilih Ejen --</option>';
+        if(ejenListCache && ejenListCache.length>0){
+            ejenListCache.forEach(e=>{
+                html += `<option value="${e.id}">${e.name}</option>`;
+            });
+        }
+        html += '<option value="__ADD_NEW__" style="font-weight:bold;color:#800020;">+ Tambah Ejen Baharu</option>';
+        return html;
+    })();
+
+    // V60: All fields except AGE and DOB (formula) as requested
     container.innerHTML = `
-        <form id="addModalForm" class="space-y-4">
+        <form id="addModalForm" class="space-y-3 max-h-[65vh] overflow-y-auto pr-2 scrollbar-thin">
             
-            <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2">
-                <label class="font-bold text-slate-500 uppercase">NAME *</label>
-                <div class="sm:col-span-2">
-                    <input type="text" name="NAME" required placeholder="Contoh: AHMAD BIN ABDULLAH" class="w-full p-2.5 font-bold text-sm text-slate-900 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none uppercase">
+            <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                <h4 class="font-bold text-[11px] text-slate-600 uppercase tracking-wider mb-2">Maklumat Peribadi</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
+                    <label class="font-bold text-slate-500 uppercase text-[11px]">NAME *</label>
+                    <div class="sm:col-span-2">
+                        <input type="text" name="NAME" required placeholder="CONTOH: AHMAD BIN ABDULLAH" class="w-full p-2.5 font-bold text-sm text-slate-900 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none uppercase">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
+                    <label class="font-bold text-slate-500 uppercase text-[11px]">IC NO.</label>
+                    <div class="sm:col-span-2">
+                        <input type="text" name="IC NO." placeholder="900101015555" class="w-full p-2.5 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
+                    <label class="font-bold text-slate-500 uppercase text-[11px]">GENDER</label>
+                    <div class="sm:col-span-2">
+                        <select name="GENDER" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+                            ${buildSelectOptions('GENDER', '-- Pilih Jantina --')}
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
+                    <label class="font-bold text-slate-500 uppercase text-[11px]">DOB (FOREIGNER)</label>
+                    <div class="sm:col-span-2">
+                        <input type="date" name="DOB (FOREIGNER)" class="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+                        <p class="text-[10px] text-slate-400 mt-1">Untuk jemaah warga asing sahaja</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2">
+                    <label class="font-bold text-slate-500 uppercase text-[11px]">NATIONALITY</label>
+                    <div class="sm:col-span-2">
+                        <select name="NATIONALITY" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+                            ${buildSelectOptions('NATIONALITY', '-- Pilih Warganegara --')}
+                        </select>
+                    </div>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 border-t border-slate-100 pt-3">
-                <label class="font-bold text-slate-500 uppercase">IC NO.</label>
-                <div class="sm:col-span-2">
-                    <input type="text" name="IC NO." placeholder="900101015555" class="w-full p-2.5 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+            <div class="bg-sky-50/50 rounded-xl p-3 border border-sky-100">
+                <h4 class="font-bold text-[11px] text-sky-700 uppercase tracking-wider mb-2">Dokumen Perjalanan</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
+                    <label class="font-bold text-slate-500 uppercase text-[11px]">PASSPORT NO.</label>
+                    <div class="sm:col-span-2">
+                        <input type="text" name="PASSPORT NO." placeholder="A12345678" class="w-full p-2.5 font-mono font-bold uppercase border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                    <div>
+                        <label class="font-bold text-slate-500 uppercase text-[11px] block mb-1">DATE OF ISSUE</label>
+                        <input type="date" name="DATE OF ISSUE" class="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-500 uppercase text-[11px] block mb-1">DATE OF EXPIRE</label>
+                        <input type="date" name="DATE OF EXPIRE" class="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
+                    <label class="font-bold text-slate-500 uppercase text-[11px]">STATUS VISA</label>
+                    <div class="sm:col-span-2">
+                        <select name="STATUS VISA" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+                            ${buildSelectOptions('STATUS VISA', '-- Pilih Status Visa --')}
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2">
+                    <label class="font-bold text-slate-500 uppercase text-[11px]">FIT TICKET</label>
+                    <div class="sm:col-span-2">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="FIT TICKET" class="w-4 h-4 rounded border-slate-300 text-brand-maroon focus:ring-brand-maroon">
+                            <span class="text-xs font-bold text-slate-600">Tiket FIT</span>
+                        </label>
+                    </div>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 border-t border-slate-100 pt-3">
-                <label class="font-bold text-slate-500 uppercase">PASSPORT NO.</label>
-                <div class="sm:col-span-2">
-                    <input type="text" name="PASSPORT NO." placeholder="A12345678" class="w-full p-2.5 font-mono font-bold uppercase border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+            <div class="bg-amber-50/50 rounded-xl p-3 border border-amber-100">
+                <h4 class="font-bold text-[11px] text-amber-700 uppercase tracking-wider mb-2">Maklumat Trip & Pakej</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
+                    <label class="font-bold text-slate-500 uppercase text-[11px]">TRIP</label>
+                    <div class="sm:col-span-2">
+                        <select name="TRIP" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+                            <option value="">-- TBC / Tanpa Trip --</option>
+                            ${tripOptionsHtml}
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
+                    <label class="font-bold text-slate-500 uppercase text-[11px]">BOARD BASIS</label>
+                    <div class="sm:col-span-2">
+                        <select name="BOARD BASIS" multiple class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none min-h-[80px]">
+                            ${buildSelectOptions('BOARD BASIS', '')}
+                        </select>
+                        <p class="text-[10px] text-slate-400 mt-1">Tekan Ctrl/Cmd untuk pilih lebih dari satu</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
+                    <label class="font-bold text-slate-500 uppercase text-[11px]">PAKEJ</label>
+                    <div class="sm:col-span-2">
+                        <select name="PAKEJ" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+                            ${buildSelectOptions('PAKEJ', '-- Pilih Pakej --')}
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
+                    <label class="font-bold text-slate-500 uppercase text-[11px]">INSURAN</label>
+                    <div class="sm:col-span-2">
+                        <select name="INSURAN" multiple class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none min-h-[80px]">
+                            ${buildSelectOptions('INSURAN', '')}
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2 mb-3">
+                    <div>
+                        <label class="font-bold text-slate-500 uppercase text-[11px] block mb-1">TRAIN</label>
+                        <label class="flex items-center gap-2 cursor-pointer border border-slate-300 rounded-xl p-2.5 bg-white">
+                            <input type="checkbox" name="TRAIN" class="w-4 h-4 rounded border-slate-300 text-brand-maroon focus:ring-brand-maroon">
+                            <span class="text-xs font-bold">Kereta Api</span>
+                        </label>
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-500 uppercase text-[11px] block mb-1">EJEN</label>
+                        <select name="EJEN" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none text-xs">
+                            ${ejenOptionsHtml}
+                        </select>
+                    </div>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 border-t border-slate-100 pt-3">
-                <label class="font-bold text-slate-500 uppercase">GENDER</label>
-                <div class="sm:col-span-2">
-                    <select name="GENDER" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
-                        <option value="">-- Pilih --</option>
-                        <option value="MALE">MALE</option>
-                        <option value="FEMALE">FEMALE</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 border-t border-slate-100 pt-3">
-                <label class="font-bold text-slate-500 uppercase">STATUS VISA</label>
-                <div class="sm:col-span-2">
-                    <select name="STATUS VISA" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
-                        <option value="">-- Pilih --</option>
-                        <option value="TOURIST">TOURIST</option>
-                        <option value="TOURIST (VALID)">TOURIST (VALID)</option>
-                        <option value="UMRAH">UMRAH</option>
-                        <option value="UMRAH (VALID)">UMRAH (VALID)</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 border-t border-slate-100 pt-3">
-                <label class="font-bold text-slate-500 uppercase">TRIP</label>
-                <div class="sm:col-span-2">
-                    <select name="TRIP" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
-                        <option value="">-- TBC / Tanpa Trip --</option>
-                        ${tripOptionsHtml}
-                    </select>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 border-t border-slate-100 pt-3">
-                <label class="font-bold text-slate-500 uppercase">NOTES</label>
-                <div class="sm:col-span-2">
-                    <textarea name="Notes" rows="2" class="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none"></textarea>
+            <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-start gap-2">
+                    <label class="font-bold text-slate-500 uppercase text-[11px]">NOTES</label>
+                    <div class="sm:col-span-2">
+                        <textarea name="NOTES" rows="3" placeholder="Catatan tambahan..." class="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none text-sm"></textarea>
+                    </div>
                 </div>
             </div>
 
@@ -2066,21 +2206,82 @@ async function createNewJemaahFromModal() {
     const formData = new FormData(form);
     const nameVal = formData.get('NAME');
 
-    if (!nameVal) {
-        alert("Sila masukkan NAMA Jemaah!");
+    if (!nameVal || !nameVal.trim()) {
+        alert("Maklumat Tidak Lengkap: Sila masukkan nama jemaah. Medan Nama adalah wajib diisi.");
         return;
     }
 
     let payloadFields = {};
-    formData.forEach((val, key) => {
-        if (key === 'NAME' || key === 'PASSPORT NO.') {
-            payloadFields[key] = val ? val.toUpperCase().trim() : null;
-        } else if (key === 'TRIP') {
-            payloadFields[key] = val ? [val] : null;
-        } else {
-            payloadFields[key] = val === '' ? null : val;
+    
+    // Handle text fields - uppercase for NAME and PASSPORT
+    const nameInput = form.querySelector('[name="NAME"]');
+    if(nameInput && nameInput.value) payloadFields['NAME'] = nameInput.value.toUpperCase().trim();
+    
+    const icInput = form.querySelector('[name="IC NO."]');
+    if(icInput && icInput.value) payloadFields['IC NO.'] = icInput.value.trim();
+    
+    const passportInput = form.querySelector('[name="PASSPORT NO."]');
+    if(passportInput && passportInput.value) payloadFields['PASSPORT NO.'] = passportInput.value.toUpperCase().trim();
+    
+    // Handle single selects (from Airtable, not hardcoded)
+    const singleSelectFields = ['GENDER', 'NATIONALITY', 'STATUS VISA', 'PAKEJ'];
+    singleSelectFields.forEach(fieldName=>{
+        const el = form.querySelector(`[name="${fieldName}"]`);
+        if(el && el.value && el.value!=='__ADD_NEW__'){
+            payloadFields[fieldName] = el.value;
         }
     });
+    
+    // Handle date fields
+    const dateFields = ['DOB (FOREIGNER)', 'DATE OF ISSUE', 'DATE OF EXPIRE'];
+    dateFields.forEach(fieldName=>{
+        const el = form.querySelector(`[name="${fieldName}"]`);
+        if(el && el.value){
+            payloadFields[fieldName] = el.value;
+        }
+    });
+    
+    // Handle multi-select fields (BOARD BASIS, INSURAN) - array
+    const multiSelectFields = ['BOARD BASIS', 'INSURAN'];
+    multiSelectFields.forEach(fieldName=>{
+        const el = form.querySelector(`[name="${fieldName}"]`);
+        if(el){
+            const selected = Array.from(el.selectedOptions).map(o=>o.value).filter(v=>v);
+            if(selected.length>0) payloadFields[fieldName] = selected;
+        }
+    });
+    
+    // Handle checkbox fields (FIT TICKET, TRAIN) - boolean
+    const checkboxFields = ['FIT TICKET', 'TRAIN'];
+    checkboxFields.forEach(fieldName=>{
+        const el = form.querySelector(`[name="${fieldName}"]`);
+        if(el){
+            payloadFields[fieldName] = el.checked ? true : false;
+        }
+    });
+    
+    // Handle link fields - TRIP and EJEN (array of record IDs)
+    const tripEl = form.querySelector('[name="TRIP"]');
+    if(tripEl && tripEl.value){
+        payloadFields['TRIP'] = [tripEl.value];
+    }
+    
+    const ejenEl = form.querySelector('[name="EJEN"]');
+    if(ejenEl && ejenEl.value && ejenEl.value!=='__ADD_NEW__'){
+        payloadFields['EJEN'] = [ejenEl.value];
+    }
+    
+    // Handle NOTES
+    const notesEl = form.querySelector('[name="NOTES"]');
+    if(notesEl && notesEl.value){
+        payloadFields['NOTES'] = notesEl.value.trim();
+    }
+    
+    // Handle NOTES as NOTES field (Airtable field is NOTES or Notes)
+    const notesAlt = form.querySelector('[name="Notes"]');
+    if(notesAlt && notesAlt.value && !payloadFields['NOTES']){
+        payloadFields['NOTES'] = notesAlt.value.trim();
+    }
 
     const saveBtn = document.getElementById('modalSaveBtn');
     if (saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Menambah...';
@@ -2101,11 +2302,16 @@ async function createNewJemaahFromModal() {
             allJemaahUmrahRecords.unshift(newRecord);
             filterAndRenderJemaahGrid();
             closeExpandModal();
+            // Success feedback formal
+            console.log('Berjaya menambah jemaah baharu:', newRecord.id);
         } else {
-            alert("Gagal menambah jemaah baharu.");
+            const errText = await response.text();
+            console.error('Gagal menambah jemaah:', errText);
+            alert("Gagal menambah jemaah baharu. Sila pastikan semua maklumat wajib telah diisi dengan betul dan cuba semula. Ralat: " + errText.substring(0,200));
         }
     } catch (e) {
-        console.error("Error creating jemaah:", e);
+        console.error("Ralat semasa menambah jemaah:", e);
+        alert("Ralat sistem semasa menambah jemaah baharu: " + e.message + ". Sila periksa sambungan internet dan cuba semula.");
     } finally {
         if (saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-plus mr-1"></i> Tambah Jemaah';
     }
@@ -2311,8 +2517,11 @@ function buildHideFieldsList() {
     if (!listContainer) return;
     listContainer.innerHTML = '';
 
+    // V60 FIX: Exclude AGE and DOB (formula fields) from toggle list as requested
+    const excludedFromToggle = ['col-age', 'col-dob']; // AGE and DOB are formula, hide permanently
     const orderedDefs = [];
     columnOrder.forEach(k=>{
+      if(excludedFromToggle.includes(k)) return; // Skip AGE and DOB
       const def = columnDefinitions.find(c=> c.key===k);
       if(def) orderedDefs.push(def);
     });
@@ -2402,7 +2611,11 @@ function filterFieldsList(){
 }
 
 function resetFieldsToDefault(){
-  hiddenColumns = {};
+  // V60: Keep AGE and DOB hidden as they are formula fields - user requested
+  hiddenColumns = {
+    'col-age': true,
+    'col-dob': true
+  };
   columnOrder = [
     'col-idx', 'col-name', 'col-picture', 'col-ic', 'col-passport', 
     'col-gender', 'col-age', 'col-dob', 'col-dobf', 'col-nat', 
@@ -2410,8 +2623,8 @@ function resetFieldsToDefault(){
     'col-fit', 'col-trip', 'col-issue', 'col-expire', 'col-notes',
     'col-board', 'col-train', 'col-insuran', 'col-pakej', 'col-ejen'
   ];
-  localStorage.removeItem('jemaahColOrder');
-  localStorage.removeItem('jemaahHiddenColumns');
+  localStorage.setItem('jemaahColOrder', JSON.stringify(columnOrder));
+  localStorage.setItem('jemaahHiddenColumns', JSON.stringify(hiddenColumns));
   renderTableHeader();
   filterAndRenderJemaahGrid();
   buildHideFieldsList();
@@ -2451,7 +2664,7 @@ function applyHiddenColumns() {
     });
 }
 
-// 📦 Dapatkan Array Fail Attachment dari Airtable
+// 📦 Dapatkan Array Fail Attachment daripada Airtable
 function getAttachmentArray(attachmentField) {
     if (attachmentField && Array.isArray(attachmentField)) {
         return attachmentField;
