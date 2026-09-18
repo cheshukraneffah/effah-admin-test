@@ -495,7 +495,12 @@ async function fetchJemaahMetaOptionsFromMeta(){
     targetTable.fields.forEach(field=>{
       jemaahMetaFieldsByName[field.name] = field;
       if(field.options?.choices){
-        jemaahFieldOptions[field.name] = field.options.choices.map(c=> ({ id: c.id, name: c.name, color: c.color }));
+        // V84: Filter out blank options - jangan simpan blank ke portal
+        const filtered = field.options.choices.filter(c=> c.name && c.name.trim()!=='');
+        if(filtered.length !== field.options.choices.length){
+          console.warn(`⚠️ Filtered ${field.options.choices.length - filtered.length} blank options from ${field.name}`);
+        }
+        jemaahFieldOptions[field.name] = filtered.map(c=> ({ id: c.id, name: c.name, color: c.color }));
       }
     });
     console.log('✅ Jemaah V78 loaded', Object.keys(jemaahMetaFieldsByName).length, 'fields');
@@ -520,7 +525,7 @@ async function cleanBlankOptions(fieldName){
     const base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_base_id')||'appSsn4JyQD4DnYu0';
     const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
     if(!base||!pat) return;
-    console.log(`Cleaning blank options for ${fieldName}...`);
+    console.log(`V84 Cleaning blank options for ${fieldName}...`);
     _jemaahMetaCache = null;
     await fetchJemaahMetaOptionsFromMeta();
     if(!_jemaahMetaCache) return;
@@ -529,14 +534,19 @@ async function cleanBlankOptions(fieldName){
     const choices = targetField.options?.choices||[];
     const blankChoices = choices.filter(c=> !c.name || c.name.trim()==='');
     const realChoices = choices.filter(c=> c.name && c.name.trim()!=='');
-    console.log(`Found ${blankChoices.length} blank choices in ${fieldName}:`, blankChoices);
+    console.log(`Found ${blankChoices.length} blank choices in ${fieldName}:`, blankChoices.map(c=> c.id));
+    console.log(`Real choices: ${realChoices.length}`, realChoices.map(c=> c.name));
     if(blankChoices.length===0){
-      console.log(`No blank choices in ${fieldName}`);
-      return;
+      console.log(`No blank choices in ${fieldName} - already clean`);
+      return true;
     }
-    // Keep only real choices with real IDs
-    const realChoicesWithId = realChoices.filter(c=> c.id && c.id.length===17).map(c=> ({id: c.id, name: c.name}));
-    console.log(`Cleaning: keeping ${realChoicesWithId.length} real choices, removing ${blankChoices.length} blank`);
+    // V84: Keep only real choices with real 17-char IDs, filter out blank completely
+    const realChoicesWithId = realChoices.filter(c=> c.id && c.id.length===17 && c.name && c.name.trim()!=='').map(c=> ({id: c.id, name: c.name}));
+    console.log(`V84 Cleaning: keeping ${realChoicesWithId.length} real (non-blank), removing ${blankChoices.length} blank`);
+    if(realChoicesWithId.length===0){
+      console.error(`Cannot clean ${fieldName} - no real choices left, would delete all options`);
+      return false;
+    }
     const metaUrl = `https://api.airtable.com/v0/meta/bases/${base}/tables/${_jemaahMetaCache.id}/fields/${targetField.id}`;
     const res = await fetch(metaUrl, {
       method:'PATCH',
@@ -544,13 +554,17 @@ async function cleanBlankOptions(fieldName){
       body: JSON.stringify({options:{choices: realChoicesWithId}})
     });
     const text = await res.text();
-    console.log(`Clean ${fieldName} result:`, res.status, text.substring(0,500));
+    console.log(`V84 Clean ${fieldName} result:`, res.status, text.substring(0,500));
     if(res.ok){
-      console.log(`✅ Cleaned blank options from ${fieldName}`);
+      console.log(`✅ V84 Cleaned ${blankChoices.length} blank options from ${fieldName}`);
       await fetchJemaahMetaOptionsFromMeta();
       if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+      return true;
+    } else {
+      console.error(`Failed to clean ${fieldName}:`, text);
+      return false;
     }
-  }catch(e){ console.error('cleanBlankOptions error', e); }
+  }catch(e){ console.error('cleanBlankOptions V84 error', e); return false; }
 }
 
 async function cleanAllBlankOptions(){
@@ -923,9 +937,18 @@ function renderMultiSelectCell(recId, fieldName, currentValues){
 }
 
 function toggleMultiSelectValue(recId, fieldName, value, isChecked){
+  // V84: Prevent blank values from being added
+  if(!value || value.trim()===''){
+    console.warn('Prevented blank value in toggleMultiSelectValue');
+    return;
+  }
   const rec = allJemaahUmrahRecords.find(r=> r.id===recId); if(!rec) return;
   let current = rec.fields[fieldName]; let arr = Array.isArray(current) ? [...current] : (current ? [current] : []);
+  // Filter out any existing blank
+  arr = arr.filter(v=> v && v.trim()!=='');
   if(isChecked){ if(!arr.includes(value)) arr.push(value); } else { arr = arr.filter(v=> v!==value); }
+  // Final filter blank before sending
+  arr = arr.filter(v=> v && v.trim()!=='');
   updateJemaahField(recId, fieldName, arr); rec.fields[fieldName] = arr; filterAndRenderJemaahGrid();
 }
 function removeMultiSelectValue(recId, fieldName, value){ toggleMultiSelectValue(recId, fieldName, value, false); }
