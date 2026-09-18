@@ -503,9 +503,7 @@ async function addNewOptionToField(fieldName, newOptionName){
     const fieldMeta = jemaahMetaFieldsByName[fieldName];
     if(!fieldMeta){ alert('Ralat: Medan ' + fieldName + ' tidak dijumpai dalam pangkalan data.'); return false; }
 
-    // SPECIAL CASE: EJEN adalah linked record ke table EJEN LIST, bukan select field
-    // Untuk linked record, kita create record baru di table EJEN LIST, bukan update field options via meta API
-    // Ini fix untuk error "Changing a field's type or number precision is currently not supported"
+    // SPECIAL CASE: EJEN adalah linked record ke table EJEN LIST
     if(fieldName === 'EJEN' || fieldMeta.type === 'multipleRecordLinks' || fieldMeta.type === 'singleRecordLink'){
       try{
         const ejenUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/EJEN%20LIST`;
@@ -545,16 +543,13 @@ async function addNewOptionToField(fieldName, newOptionName){
       alert('Makluman: Pilihan tersebut telah wujud dalam senarai.'); return false;
     }
 
-    // FIX 422 ikut PDF Airtable: existing KENA ada id, baru TANPA id, hantar hanya choices
-    const cleanedExisting = existing.map(c=> ({
-      id: c.id,
-      name: c.name,
-      ...(c.color? { color: c.color } : {})
-    }));
+    // V70 FINAL - ikut trip-umrah.js yang proven berjaya di tab Trip (hanya {name} tanpa id tanpa color)
+    // Ini fix 422 "Changing a field's type or number precision is currently not supported"
+    const cleanedExisting = existing.map(c=> ({ name: c.name }));
     const updatedChoices = [...cleanedExisting, { name: newOptionName }];
 
     const url = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${jemaahMetaTableId}/fields/${fieldMeta.id}`;
-    console.log('Updating field:', fieldName, 'type:', fieldMeta.type, 'with', updatedChoices.length, 'choices');
+    console.log('PATCH (trip method) payload:', JSON.stringify({options:{choices:updatedChoices}}));
     const res = await fetch(url, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' },
@@ -563,18 +558,13 @@ async function addNewOptionToField(fieldName, newOptionName){
 
     if(!res.ok){
       const errText = await res.text();
-      console.error('Meta API error for field', fieldName, 'type', fieldMeta.type, ':', errText);
+      console.error('Meta API error for field', fieldName, ':', errText);
       let errMsg = errText;
       try{
         const errJson = JSON.parse(errText);
         errMsg = errJson.error?.message || errJson.error || errText;
       }catch{}
-      if(errMsg.toLowerCase().includes('type') || errMsg.toLowerCase().includes('precision')){
-        alert(`Ralat: Medan '${fieldName}' jenis '${fieldMeta.type}' tidak boleh tambah pilihan melalui API ini. Sila tambah terus di Airtable.
-Detail: ${errMsg.substring(0,250)}`);
-      } else {
-        alert('Gagal menambah pilihan: ' + errMsg.toString().substring(0,400));
-      }
+      alert('Gagal menambah pilihan: ' + errMsg.toString().substring(0,500));
       return false;
     }
     const updatedField = await res.json();
