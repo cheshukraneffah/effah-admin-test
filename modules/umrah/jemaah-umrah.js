@@ -559,9 +559,16 @@ async function autoCleanBlankOnLoad(){
   }catch(e){ console.warn('V85 Auto-clean error', e); }
 }
 
-// Run auto-clean after 2 seconds and again after 5 seconds to catch late loads
-setTimeout(autoCleanBlankOnLoad, 2000);
-setTimeout(autoCleanBlankOnLoad, 5000);
+// V86: Run auto-clean more aggressively for NATIONALITY which still has blank
+setTimeout(autoCleanBlankOnLoad, 1500);
+setTimeout(autoCleanBlankOnLoad, 3500);
+setTimeout(autoCleanBlankOnLoad, 7000);
+// Also specifically clean NATIONALITY on load
+setTimeout(async ()=>{
+  console.log('V86 Specific clean for NATIONALITY...');
+  await cleanBlankOptions('NATIONALITY', true);
+}, 2500);
+
 
 
 async function fetchJemaahMetaOptionsFromMeta(){
