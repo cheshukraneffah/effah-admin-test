@@ -109,8 +109,8 @@ function renderTripUmrahHTML() {
     const container = document.getElementById('modul-pakej-umrah');
     if (!container) return;
     container.innerHTML = `
-        <div class="flex flex-col lg:flex-row gap-6 min-h-[calc(100vh-140px)]">
-            <div class="w-full lg:w-80 bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-4 flex flex-col flex-shrink-0">
+        <div class="flex flex-col lg:flex-row gap-6 min-h-[calc(100vh-140px)] items-stretch">
+            <div class="w-full lg:w-80 bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-4 flex flex-col flex-shrink-0 lg:sticky lg:top-4 self-start max-h-[calc(100vh-100px)] overflow-hidden">
                 <div class="mb-3">
                     <div id="hijriFilterTabs" class="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide"></div>
                     <div class="mt-3 p-2.5 bg-slate-50 rounded-xl border border-slate-100">
@@ -156,7 +156,7 @@ function renderTripUmrahHTML() {
                         <div id="tripLoadingBar" class="bg-slate-900 h-2 rounded-full transition-all duration-300 ease-out" style="width:0%"></div>
                     </div>
                 </div>
-                <div id="tripSidebarContainer" class="space-y-1 overflow-y-auto flex-1 max-h-[60vh] pr-1">
+                <div id="tripSidebarContainer" class="space-y-1 overflow-y-auto flex-1 pr-1 scrollbar-thin">
                     <div class="text-center py-10 text-slate-400 text-xs">
                         <div class="w-8 h-8 mx-auto mb-2 border-2 border-slate-200 border-t-slate-900 rounded-full animate-spin"></div>
                         Memuat trip...
@@ -393,7 +393,7 @@ function updateHijriFilterTabs(){
   Object.keys(counts).forEach(h=>{
     if(!order.includes(h) && counts[h]>0 && !existingHijri.includes(h)) existingHijri.push(h);
   });
-  // Sort by order
+  // Sort by order - earliest first (1448H, then 1449H, etc)
   existingHijri.sort((a,b)=>{
     const ia=order.indexOf(a); const ib=order.indexOf(b);
     if(ia!==-1 && ib!==-1) return ia-ib;
@@ -401,6 +401,16 @@ function updateHijriFilterTabs(){
     if(ib!==-1) return 1;
     return a.localeCompare(b);
   });
+  // V39 FIX: Auto-select earliest season on first load instead of SEMUA
+  // User request: bila load portal auto select season paling awal (1448H now, 1449 later), taknak SEMUA dulu
+  if(!window._hijriInitialSet && tripFilters.hijri==='All' && existingHijri.length>0){
+    const earliest = existingHijri[0]; // e.g., 1448H is earliest
+    console.log('V39 auto-select earliest hijri season:', earliest, 'instead of SEMUA');
+    tripFilters.hijri = earliest;
+    window._hijriInitialSet = true;
+    // Trigger filter after this function completes to avoid recursion
+    setTimeout(()=>{ if(typeof filterTripSidebar==='function') filterTripSidebar(); }, 50);
+  }
   let html = `<button onclick="setHijriFilter('All')" class="px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${tripFilters.hijri==='All' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}">SEMUA <span class="ml-1 opacity-70">(${total})</span></button>`;
   existingHijri.forEach(h=>{
     const c = counts[h]||0;
@@ -1144,6 +1154,12 @@ function sortTripJemaahModalBy(field){
     renderTripJemaahModalTable();
   }
 }
+window.openTripJemaahListModal = openTripJemaahListModal;
+window.closeTripJemaahListModal = closeTripJemaahListModal;
+window.renderTripJemaahModalTable = renderTripJemaahModalTable;
+window.filterTripJemaahModalTable = filterTripJemaahModalTable;
+window.sortTripJemaahModalBy = sortTripJemaahModalBy;
+
 
 
 }
