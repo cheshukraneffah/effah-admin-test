@@ -503,12 +503,49 @@ async function addNewOptionToField(fieldName, newOptionName){
     const fieldMeta = jemaahMetaFieldsByName[fieldName];
     if(!fieldMeta){ alert('Ralat: Medan ' + fieldName + ' tidak dijumpai dalam pangkalan data.'); return false; }
 
+    // SPECIAL CASE: EJEN adalah linked record ke table EJEN LIST, bukan select field
+    // Untuk linked record, kita create record baru di table EJEN LIST, bukan update field options via meta API
+    // Ini fix untuk error "Changing a field's type or number precision is currently not supported"
+    if(fieldName === 'EJEN' || fieldMeta.type === 'multipleRecordLinks' || fieldMeta.type === 'singleRecordLink'){
+      try{
+        const ejenUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/EJEN%20LIST`;
+        const ejenRes = await fetch(ejenUrl, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { 'NAMA EJEN': newOptionName, 'STATUS': 'AKTIF' } })
+        });
+        if(!ejenRes.ok){
+          const errTxt = await ejenRes.text();
+          console.error('Gagal tambah ejen baru:', errTxt);
+          alert('Gagal menambah ejen baru: ' + errTxt.substring(0,300));
+          return false;
+        }
+        const newEjen = await ejenRes.json();
+        if(typeof ejenListCache !== 'undefined'){
+          ejenListCache.push({ id: newEjen.id, name: newOptionName, status: 'AKTIF', raw: newEjen });
+        }
+        alert(`Ejen '${newOptionName}' telah berjaya ditambahkan ke dalam senarai EJEN.`);
+        if(typeof filterAndRenderJemaahGrid === 'function') filterAndRenderJemaahGrid();
+        const ejenListModal = document.getElementById('ejenListModal');
+        if(ejenListModal){
+          const html = `<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${newEjen.id}" class="ejen-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon" checked><span class="text-xs font-bold text-slate-700">${newOptionName}</span><span class="text-[10px] text-slate-400 ml-auto">AKTIF</span></label>` + ejenListModal.innerHTML;
+          ejenListModal.innerHTML = html;
+          document.querySelectorAll('.ejen-checkbox').forEach(cb=>{ cb.addEventListener('change', updateEjenSelected); });
+          if(typeof updateEjenSelected === 'function') updateEjenSelected();
+        }
+        return true;
+      }catch(e){
+        alert('Ralat semasa menambah ejen: ' + e.message);
+        return false;
+      }
+    }
+
     const existing = fieldMeta.options?.choices || [];
     if(existing.some(c=> c.name.toUpperCase() === newOptionName.toUpperCase())){
       alert('Makluman: Pilihan tersebut telah wujud dalam senarai.'); return false;
     }
 
-    // FIX 422 - ikut PDF Airtable: existing KENA ada id, baru TANPA id, hantar hanya choices
+    // FIX 422 ikut PDF Airtable: existing KENA ada id, baru TANPA id, hantar hanya choices
     const cleanedExisting = existing.map(c=> ({
       id: c.id,
       name: c.name,
@@ -517,6 +554,7 @@ async function addNewOptionToField(fieldName, newOptionName){
     const updatedChoices = [...cleanedExisting, { name: newOptionName }];
 
     const url = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${jemaahMetaTableId}/fields/${fieldMeta.id}`;
+    console.log('Updating field:', fieldName, 'type:', fieldMeta.type, 'with', updatedChoices.length, 'choices');
     const res = await fetch(url, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' },
@@ -525,12 +563,17 @@ async function addNewOptionToField(fieldName, newOptionName){
 
     if(!res.ok){
       const errText = await res.text();
-      console.error('Meta API error:', errText);
+      console.error('Meta API error for field', fieldName, 'type', fieldMeta.type, ':', errText);
+      let errMsg = errText;
       try{
         const errJson = JSON.parse(errText);
-        alert('Gagal menambah pilihan: ' + (errJson.error?.message || errJson.error || errText).toString().substring(0,300));
-      }catch{
-        alert('Gagal melaksanakan operasi: '+errText.substring(0,300));
+        errMsg = errJson.error?.message || errJson.error || errText;
+      }catch{}
+      if(errMsg.toLowerCase().includes('type') || errMsg.toLowerCase().includes('precision')){
+        alert(`Ralat: Medan '${fieldName}' jenis '${fieldMeta.type}' tidak boleh tambah pilihan melalui API ini. Sila tambah terus di Airtable.
+Detail: ${errMsg.substring(0,250)}`);
+      } else {
+        alert('Gagal menambah pilihan: ' + errMsg.toString().substring(0,400));
       }
       return false;
     }
@@ -540,7 +583,11 @@ async function addNewOptionToField(fieldName, newOptionName){
     alert(`Pilihan '${newOptionName}' telah berjaya ditambahkan ke dalam medan ${fieldName}.`);
     if(typeof filterAndRenderJemaahGrid === 'function') filterAndRenderJemaahGrid();
     return true;
-  }catch(e){ alert('Ralat telah berlaku: '+e.message); return false; }
+  }catch(e){ 
+    console.error('addNewOptionToField exception:', e);
+    alert('Ralat telah berlaku: '+e.message); 
+    return false; 
+  }
 }
 
 
