@@ -556,37 +556,40 @@ async function addNewOptionToField(fieldName, newOptionName){
   try{
     const FULL_BASE_ID = 'appSsn4JyQD4DnYu0';
     let base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id')||FULL_BASE_ID;
-    if(!base || base.length!==17){ base = FULL_BASE_ID; }
+    if(!base || base.length!==17){ base = FULL_BASE_ID; try{ localStorage.setItem('effah_base_id', FULL_BASE_ID); localStorage.setItem('effah_api_base', FULL_BASE_ID); }catch{} }
     const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
     if(!base||!pat){ alert('Konfigurasi Airtable tidak ditemui'); return false; }
 
-    // Force fresh fetch like rooming.js - clear cache first
+    console.log(`\n=== V80 addNewOptionToField ${fieldName} -> ${newOptionName} ===`);
+    console.log('Base:', base, 'len', base.length, 'PAT len', pat?.length);
+
+    // Force fresh fetch
     _jemaahMetaCache = null;
     await fetchJemaahMetaOptionsFromMeta();
     if(!_jemaahMetaCache){
-      alert('Tidak dapat mencapai metadata Airtable. Check PAT dan base ID.');
+      alert('Tidak dapat mencapai metadata Airtable.');
       return false;
     }
     const tableId = _jemaahMetaCache.id;
     const fields = _jemaahMetaCache.fields||[];
+    console.log('Table:', _jemaahMetaCache.name, 'id', tableId, 'fields', fields.length);
+    console.log('Available fields:', fields.map(f=> `${f.name}(${f.type})`).join(', '));
+
     const targetField = fields.find(f=> (f.name||'').toUpperCase()===fieldName.toUpperCase());
     if(!targetField){
-      alert(`Medan ${fieldName} tidak ditemui.`);
+      alert(`Medan ${fieldName} tidak ditemui. Available: ${fields.map(f=> f.name).join(', ')}`);
       return false;
     }
+    console.log(`Target field ${fieldName}:`, { id: targetField.id, id_len: targetField.id.length, type: targetField.type, choices_len: targetField.options?.choices?.length||0, choices: (targetField.options?.choices||[]).map(c=> ({id: c.id, len: c.id?.length, name: c.name})) });
+
     if(targetField.type!=='singleSelect' && targetField.type!=='multipleSelects'){
-      // Handle linked record like EJEN, TRIP
       if(targetField.type==='multipleRecordLinks' || targetField.type==='singleRecordLink' || fieldName==='EJEN' || fieldName==='TRIP'){
         const linkedTable = fieldName==='EJEN' ? 'EJEN LIST' : 'PAKEJ UMRAH';
         const linkedField = fieldName==='EJEN' ? 'NAMA EJEN' : 'NAMA PAKEJ';
         try{
           const url = `https://api.airtable.com/v0/${base}/${encodeURIComponent(linkedTable)}`;
-          const res = await fetch(url, {
-            method:'POST',
-            headers:{ Authorization: `Bearer ${pat}`, 'Content-Type':'application/json' },
-            body: JSON.stringify({ fields: { [linkedField]: newOptionName } })
-          });
-          if(!res.ok){ alert('Gagal tambah di '+linkedTable+': '+await res.text().then(t=>t.substring(0,300))); return false; }
+          const res = await fetch(url, { method:'POST', headers:{ Authorization: `Bearer ${pat}`, 'Content-Type':'application/json' }, body: JSON.stringify({ fields: { [linkedField]: newOptionName } }) });
+          if(!res.ok){ const t=await res.text(); alert('Gagal tambah di '+linkedTable+': '+t.substring(0,300)); return false; }
           alert(`'${newOptionName}' berjaya ditambah ke ${linkedTable}.`);
           await fetchJemaahMetaOptionsFromMeta();
           if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
@@ -598,93 +601,121 @@ async function addNewOptionToField(fieldName, newOptionName){
     }
 
     const existingChoices = (targetField.options && targetField.options.choices) ? targetField.options.choices : [];
-    console.log(`Existing choices for ${fieldName}:`, existingChoices.map(c=> ({id: c.id, len: c.id?.length, name: c.name})));
+    console.log(`Existing choices for ${fieldName}:`, existingChoices.length, existingChoices.map(c=> `${c.name}(${c.id?.length})`));
 
     if(existingChoices.some(c=> (c.name||'').toUpperCase()===newOptionName.toUpperCase())){
       alert(`${newOptionName} telah wujud di dalam Airtable.`);
       return false;
     }
 
-    // Validate IDs length - must be 17
-    const badIds = existingChoices.filter(c=> c.id && c.id.length!==17);
-    if(badIds.length>0){
-      console.error('❌ Found truncated IDs (15 chars):', badIds);
-      alert(`ID lama truncated dikesan: ${badIds.map(c=> c.id).join(', ')}. Ini punca 422. Code akan cuba guna real IDs dari fresh fetch. Jika masih gagal, sila clear localStorage dan reload.`);
-      // Continue anyway - we will use whatever IDs we have, but log warning
+    // V80 STRATEGY: Try typecast FIRST (like rooming.js fallback but as primary)
+    // This auto-creates option if field setting "Allow adding new options" is ON
+    console.log('=== Trying typecast:true FIRST (primary method) ===');
+    let typecastSuccess = false;
+    let allRecords = [];
+    try{
+      allRecords = (typeof allJemaahRecords!=='undefined' && allJemaahRecords.length>0) ? allJemaahRecords : (window.allJemaahRecords||[]);
+      if(allRecords.length===0 && typeof allJemaahUmrahRecords!=='undefined') allRecords = allJemaahUmrahRecords;
+      if(allRecords.length===0 && window.allJemaahUmrahRecords) allRecords = window.allJemaahUmrahRecords;
+    }catch{}
+    
+    console.log('Records available for typecast:', allRecords.length);
+    if(allRecords.length>0){
+      const first = allRecords[0];
+      const isMulti = targetField.type==='multipleSelects';
+      const originalVal = first.fields[fieldName];
+      console.log('First record:', first.id, 'original', originalVal);
+      try{
+        const typecastPayload = isMulti ? [newOptionName] : newOptionName;
+        const url = `https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${first.id}`;
+        console.log('Typecast PATCH url:', url, 'payload:', typecastPayload);
+        const typecastRes = await fetch(url, {
+          method:'PATCH',
+          headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+          body: JSON.stringify({fields:{[fieldName]: typecastPayload}, typecast:true})
+        });
+        const typecastText = await typecastRes.text();
+        console.log('Typecast response:', typecastRes.status, typecastText.substring(0,800));
+        if(typecastRes.ok){
+          console.log('✅ Typecast SUCCESS - option should be auto-created');
+          typecastSuccess = true;
+          // Revert after 1 sec
+          setTimeout(async ()=>{
+            try{
+              await fetch(url, {
+                method:'PATCH',
+                headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+                body: JSON.stringify({fields:{[fieldName]: originalVal||''}, typecast:true})
+              });
+              console.log('Reverted first record');
+            }catch(e){ console.warn('Revert failed', e); }
+          }, 1000);
+        } else {
+          console.warn('Typecast failed:', typecastText);
+          // If typecast fails due to permissions, try meta
+        }
+      }catch(e){ console.warn('Typecast exception', e); }
     }
 
-    // Same as rooming.js - id+name for existing, name only for new
-    const choicesWithId = existingChoices.map(c=> ({id: c.id, name: c.name}));
-    const newChoices = [...choicesWithId, {name: newOptionName}];
+    if(typecastSuccess){
+      console.log('=== Typecast success, refreshing meta ===');
+      // Wait a bit for Airtable to create option
+      await new Promise(r=> setTimeout(r, 1500));
+      await fetchJemaahMetaOptionsFromMeta();
+      try{ if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid(); }catch{}
+      alert(`'${newOptionName}' telah berjaya ditambahkan ke ${fieldName} via typecast (auto-create).`);
+      return true;
+    }
 
-    console.log('PATCH payload for', fieldName, JSON.stringify({ options: { choices: newChoices } }, null, 2));
-
-    let metaSuccess = false;
+    // If typecast failed, try meta PATCH as fallback (with real IDs)
+    console.log('=== Typecast failed, trying meta PATCH fallback ===');
+    // Filter out truncated IDs - only keep real 17-char IDs
+    const realChoices = existingChoices.filter(c=> c.id && c.id.length===17);
+    const truncatedChoices = existingChoices.filter(c=> c.id && c.id.length!==17);
+    if(truncatedChoices.length>0){
+      console.warn(`⚠️ Found ${truncatedChoices.length} truncated IDs, ignoring them for meta PATCH:`, truncatedChoices.map(c=> c.id));
+    }
+    const choicesWithId = realChoices.map(c=> ({id: c.id, name: c.name}));
+    // If existing is empty or all truncated, just send new choice only
+    const newChoices = choicesWithId.length>0 ? [...choicesWithId, {name: newOptionName}] : [{name: newOptionName}];
+    
+    console.log('Meta PATCH payload (real IDs only):', JSON.stringify({ options: { choices: newChoices } }, null, 2));
+    
     try{
-      const res = await fetch(`https://api.airtable.com/v0/meta/bases/${base}/tables/${tableId}/fields/${targetField.id}`, {
+      const metaUrl = `https://api.airtable.com/v0/meta/bases/${base}/tables/${tableId}/fields/${targetField.id}`;
+      console.log('Meta PATCH url:', metaUrl);
+      const metaRes = await fetch(metaUrl, {
         method:'PATCH',
         headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
         body: JSON.stringify({options:{choices: newChoices}})
       });
-      const text = await res.text();
-      console.log('Meta PATCH response:', res.status, text.substring(0,500));
-      if(res.ok){ 
-        metaSuccess = true; 
-        console.log('✅ Meta PATCH success for', fieldName);
-      } else { 
-        console.warn('Meta PATCH failed:', text);
-        // If 422, try typecast fallback like rooming.js
-        if(res.status===422 || text.toLowerCase().includes('type') || text.toLowerCase().includes('validation')){
-          console.log('⚠️ Trying typecast fallback...');
-          if(typeof allJemaahRecords!=='undefined' && allJemaahRecords.length>0){
-            const first = allJemaahRecords[0];
-            const isMulti = targetField.type==='multipleSelects';
-            try{
-              const typecastRes = await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${first.id}`, {
-                method:'PATCH',
-                headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
-                body: JSON.stringify({fields:{[fieldName]: isMulti ? [newOptionName] : newOptionName}, typecast:true})
-              });
-              const typecastText = await typecastRes.text();
-              console.log('Typecast fallback response:', typecastRes.status, typecastText.substring(0,500));
-              if(typecastRes.ok){
-                console.log('✅ Typecast fallback success');
-                // Revert first record after 800ms
-                setTimeout(async ()=>{
-                  try{
-                    const orig = first.fields[fieldName]||'';
-                    await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${first.id}`, {
-                      method:'PATCH',
-                      headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
-                      body: JSON.stringify({fields:{[fieldName]: orig}, typecast:true})
-                    });
-                  }catch(e){}
-                }, 800);
-                metaSuccess = true;
-              }
-            }catch(e){ console.warn('Typecast fallback exception', e); }
-          }
-        }
+      const metaText = await metaRes.text();
+      console.log('Meta response:', metaRes.status, metaText.substring(0,800));
+      if(metaRes.ok){
+        console.log('✅ Meta PATCH success');
+        await fetchJemaahMetaOptionsFromMeta();
+        try{ if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid(); }catch{}
+        alert(`'${newOptionName}' telah berjaya ditambahkan ke ${fieldName} via meta API.`);
+        return true;
+      } else {
+        console.error('Meta PATCH failed:', metaText);
+        alert(`Gagal menambah via typecast dan meta API.\n\nTypecast gagal - mungkin setting "Allow adding new options" OFF di Airtable field ${fieldName}.\n\nMeta error: ${metaText.substring(0,400)}\n\nSila tambah manual di Airtable: Buka DATA JEMAAH UMRAH > Customize field ${fieldName} > Add option "${newOptionName}"`);
+        return false;
       }
-    }catch(e){ console.warn('Meta exception', e); }
-
-    // Refresh
-    await fetchJemaahMetaOptionsFromMeta();
-    try{ if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid(); }catch(e){}
-
-    if(metaSuccess){
-      alert(`'${newOptionName}' telah berjaya ditambahkan ke ${fieldName}.`);
-      return true;
-    } else {
-      alert(`Gagal menambah via meta API, tapi cuba typecast fallback. Sila refresh dan check Airtable. Jika masih gagal, tambah manual di Airtable.`);
+    }catch(e){
+      console.error('Meta exception', e);
+      alert(`Gagal: ${e.message}`);
       return false;
     }
   }catch(e){
-    console.error('addNewOptionToField error', e);
+    console.error('addNewOptionToField V80 error', e);
     alert(`Gagal menambah "${newOptionName}": ${e.message}`);
     return false;
   }
 }
+
+
+
 
 
 
