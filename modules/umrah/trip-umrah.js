@@ -109,8 +109,8 @@ function renderTripUmrahHTML() {
     const container = document.getElementById('modul-pakej-umrah');
     if (!container) return;
     container.innerHTML = `
-        <div class="flex flex-col lg:flex-row gap-6 min-h-[calc(100vh-140px)] items-stretch">
-            <div class="w-full lg:w-80 bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-4 flex flex-col flex-shrink-0 lg:sticky lg:top-4 self-start max-h-[calc(100vh-100px)] overflow-hidden">
+        <div class="flex flex-col lg:flex-row gap-6 h-[calc(100vh-90px)] overflow-hidden items-stretch">
+            <div class="w-full lg:w-80 bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-4 flex flex-col flex-shrink-0 h-full overflow-hidden">
                 <div class="mb-3">
                     <div id="hijriFilterTabs" class="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide"></div>
                     <div class="mt-3 p-2.5 bg-slate-50 rounded-xl border border-slate-100">
@@ -163,7 +163,7 @@ function renderTripUmrahHTML() {
                     </div>
                 </div>
             </div>
-            <div class="flex-1 flex flex-col space-y-6 overflow-x-hidden" id="tripMainDetailWorkspace">
+            <div class="flex-1 flex flex-col space-y-6 overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin" id="tripMainDetailWorkspace">
                 <div class="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-12 text-center text-slate-400 my-auto">
                     <i class="fa-solid fa-kaaba text-5xl mb-3 text-slate-200"></i>
                     <p class="text-xs font-semibold">Sila pilih mana-mana trip di senarai belah kiri untuk melihat perincian & data jemaah.</p>
@@ -1066,10 +1066,10 @@ function openTripJemaahListModal(){
               <th class="p-3 cursor-pointer hover:text-slate-800 select-none" onclick="sortTripJemaahModalBy('NAME')">NAME <span class="sort-icon-modal" data-field="NAME">↑</span></th>
               <th class="p-3">PICTURE</th>
               <th class="p-3">PASSPORT COPY</th>
-              <th class="p-3 cursor-pointer hover:text-slate-800 select-none" onclick="sortTripJemaahModalBy('PASSPORT NO.')">PASSPORT NO.</th>
-              <th class="p-3">AGE</th>
-              <th class="p-3">GENDER</th>
-              <th class="p-3">NATIONALITY</th>
+              <th class="p-3 cursor-pointer hover:text-slate-800 select-none" onclick="sortTripJemaahModalBy('PASSPORT NO.')">PASSPORT NO. <span class="sort-icon-modal" data-field="PASSPORT NO."></span></th>
+              <th class="p-3 cursor-pointer hover:text-slate-800 select-none" onclick="sortTripJemaahModalBy('AGE')">AGE <span class="sort-icon-modal" data-field="AGE"></span></th>
+              <th class="p-3 cursor-pointer hover:text-slate-800 select-none" onclick="sortTripJemaahModalBy('GENDER')">GENDER <span class="sort-icon-modal" data-field="GENDER"></span></th>
+              <th class="p-3 cursor-pointer hover:text-slate-800 select-none" onclick="sortTripJemaahModalBy('NATIONALITY')">NATIONALITY <span class="sort-icon-modal" data-field="NATIONALITY"></span></th>
             </tr>
           </thead>
           <tbody id="tripJemaahModalTableBody" class="divide-y divide-slate-100 font-medium text-slate-800">
@@ -1148,11 +1148,68 @@ function filterTripJemaahModalTable(q){
   }).join('');
 }
 
-function sortTripJemaahModalBy(field){
-  if(typeof sortJemaahArray==='function'){
-    currentTripJemaahList=sortJemaahArray(currentTripJemaahList, field, 'asc');
-    renderTripJemaahModalTable();
+// V40 FIX: Sorting toggle A-Z/Z-A for modal, including AGE muda-tua/tua-muda
+let tripJemaahModalSortField = null;
+let tripJemaahModalSortDir = 'asc';
+
+function parseAgeToMonths(ageStr){
+  if(!ageStr) return 0;
+  const s = ageStr.toString().toLowerCase();
+  let years = 0, months = 0;
+  const yMatch = s.match(/(\d+)\s*y/);
+  const mMatch = s.match(/(\d+)\s*m/);
+  if(yMatch) years = parseInt(yMatch[1])||0;
+  if(mMatch) months = parseInt(mMatch[1])||0;
+  if(!yMatch && !mMatch){
+    const num = parseFloat(s)||0;
+    years = Math.floor(num);
+    months = Math.round((num - years)*12);
   }
+  return years*12 + months;
+}
+
+function sortJemaahArrayModal(arr, field, dir){
+  const sorted=[...arr].sort((a,b)=>{
+    let av=(a.fields[field]||'').toString();
+    let bv=(b.fields[field]||'').toString();
+    if(field==='AGE'){
+      const an=parseAgeToMonths(av);
+      const bn=parseAgeToMonths(bv);
+      return dir==='asc'?an-bn:bn-an;
+    }
+    av=av.toUpperCase();
+    bv=bv.toUpperCase();
+    if(av<bv) return dir==='asc'?-1:1;
+    if(av>bv) return dir==='asc'?1:-1;
+    return 0;
+  });
+  return sorted;
+}
+
+function sortTripJemaahModalBy(field){
+  if(tripJemaahModalSortField===field){
+    tripJemaahModalSortDir=tripJemaahModalSortDir==='asc'?'desc':'asc';
+  }else{
+    tripJemaahModalSortField=field;
+    tripJemaahModalSortDir='asc';
+  }
+  if(typeof sortJemaahArrayModal==='function'){
+    currentTripJemaahList=sortJemaahArrayModal(currentTripJemaahList, field, tripJemaahModalSortDir);
+  }else if(typeof sortJemaahArray==='function'){
+    currentTripJemaahList=sortJemaahArray(currentTripJemaahList, field, tripJemaahModalSortDir);
+  }
+  renderTripJemaahModalTable();
+  setTimeout(()=>{
+    document.querySelectorAll('#tripJemaahModalTable .sort-icon-modal').forEach(el=>{
+      const f=el.getAttribute('data-field');
+      if(f===tripJemaahModalSortField){
+        el.textContent=tripJemaahModalSortDir==='asc'?'↑':'↓';
+        el.classList.add('text-slate-900');
+      }else{
+        el.textContent='';
+      }
+    });
+  }, 10);
 }
 window.openTripJemaahListModal = openTripJemaahListModal;
 window.closeTripJemaahListModal = closeTripJemaahListModal;
