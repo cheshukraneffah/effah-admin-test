@@ -518,6 +518,40 @@ async function fetchJemaahMetaOptions(){
   return await fetchJemaahMetaOptionsFromMeta();
 }
 
+
+
+
+function buildFallbackFieldOptions(){
+  const fieldsToBuild = ['NATIONALITY','STATUS VISA','BOARD BASIS','INSURAN','PAKEJ'];
+  fieldsToBuild.forEach(fieldName=>{
+    const values = new Set();
+    (allJemaahUmrahRecords||[]).forEach(r=>{
+      const v = r.fields[fieldName];
+      if(!v) return;
+      if(Array.isArray(v)){ v.forEach(x=> values.add(x)); } else { values.add(v); }
+    });
+    if(values.size>0){ jemaahFieldOptions[fieldName] = Array.from(values).map(name=>({ name, id: name })); }
+  });
+}
+async function fetchEjenList(){
+  try{
+    if(typeof AIRTABLE_PAT === 'undefined' || !AIRTABLE_PAT){
+      AIRTABLE_PAT = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat') || '';
+      AIRTABLE_BASE_ID = window.AIRTABLE_BASE_ID || localStorage.getItem('effah_base_id') || '';
+    }
+    if(!AIRTABLE_PAT || !AIRTABLE_BASE_ID) return;
+    let records = []; let offset = '';
+    do{
+      let url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/EJEN%20LIST?pageSize=100`;
+      if(offset) url+=`&offset=${offset}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_PAT}` } });
+      const data = await res.json();
+      if(data.records) records = records.concat(data.records);
+      offset = data.offset || '';
+    }while(offset);
+    ejenListCache = records.map(r=>({ id: r.id, name: r.fields['NAMA EJEN'] || r.fields['NAMA'] || r.fields['NAME'] || 'Unknown', status: r.fields['STATUS']||'', noTelefon: r.fields['NO TELEFON']||'', raw: r }));
+  }catch(e){ console.error(e); }
+}
 async function addNewOptionToField(fieldName, newOptionName){
   try{
     const FULL_BASE_ID = 'appSsn4JyQD4DnYu0';
@@ -651,7 +685,6 @@ async function addNewOptionToField(fieldName, newOptionName){
     return false;
   }
 }
-
 
 
 
