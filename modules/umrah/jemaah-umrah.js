@@ -443,54 +443,86 @@ async function fetchTripMapping() {
 // V51: Fetch field options dari Airtable meta API - direct fetch, tak hardcoded
 async function fetchJemaahMetaOptions(){
   try{
-    console.log('🔄 Fetching fresh schema from GET /v0/meta/bases/'+AIRTABLE_BASE_ID+'/tables');
+    // V77 - Force full base ID, validate length
+    const FULL_BASE_ID = 'appSsn4JyQD4DnYu0';
+    if(typeof AIRTABLE_BASE_ID === 'undefined' || !AIRTABLE_BASE_ID || AIRTABLE_BASE_ID.length!==17){
+      console.warn('⚠️ AIRTABLE_BASE_ID invalid/truncated:', AIRTABLE_BASE_ID, 'len:', (AIRTABLE_BASE_ID||'').length, 'using FULL', FULL_BASE_ID);
+      AIRTABLE_BASE_ID = FULL_BASE_ID;
+      if(typeof window !== 'undefined') window.AIRTABLE_BASE_ID = FULL_BASE_ID;
+      try{ localStorage.setItem('effah_base_id', FULL_BASE_ID); }catch{}
+    }
+    if(AIRTABLE_BASE_ID.length!==17){
+      console.error('❌ Base ID still invalid length:', AIRTABLE_BASE_ID.length, AIRTABLE_BASE_ID);
+      alert('Base ID truncated: '+AIRTABLE_BASE_ID+' len '+AIRTABLE_BASE_ID.length+' expected 17. Clear localStorage and reload.');
+      return;
+    }
+    console.log('🔄 Fetching fresh schema from GET /v0/meta/bases/'+AIRTABLE_BASE_ID+'/tables len:'+AIRTABLE_BASE_ID.length);
     const url = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_PAT}` } });
+    console.log('Fetch tables status:', res.status);
     if(!res.ok){
-      console.error('Failed to fetch tables schema:', await res.text());
+      const errTxt = await res.text();
+      console.error('Failed to fetch tables schema:', res.status, errTxt);
+      // Don't use fallback with truncated IDs
       return;
     }
     const data = await res.json();
     const tables = data.tables || [];
-    // Find DATA JEMAAH UMRAH table
-    const jemaahTable = tables.find(t=> t.name==='DATA JEMAAH UMRAH' || t.name.toUpperCase().includes('JEMAAH'));
+    console.log('Tables fetched:', tables.length, tables.map(t=> t.name));
+    const jemaahTable = tables.find(t=> t.name.trim() === 'DATA JEMAAH UMRAH');
     if(!jemaahTable){
-      console.error('DATA JEMAAH UMRAH table not found in schema, available:', tables.map(t=> t.name));
-      return;
+      console.error('DATA JEMAAH UMRAH table not found, available:', tables.map(t=> t.name));
+      // Try case-insensitive
+      const alt = tables.find(t=> t.name.toUpperCase().includes('JEMAAH'));
+      if(alt){
+        console.log('Using alt table:', alt.name, alt.id);
+      } else {
+        return;
+      }
     }
-    jemaahMetaTableId = jemaahTable.id;
-    console.log('✅ Found table:', jemaahTable.name, 'id:', jemaahTable.id, 'fields:', jemaahTable.fields.length);
+    const tableToUse = jemaahTable || tables.find(t=> t.name.toUpperCase().includes('JEMAAH'));
+    jemaahMetaTableId = tableToUse.id;
+    console.log('✅ Found table:', tableToUse.name, 'id:', tableToUse.id, 'len:', tableToUse.id.length, 'fields:', tableToUse.fields.length);
     
-    // Validate field IDs length - must be 17 chars (fld + 14)
-    jemaahTable.fields.forEach(f=>{
+    if(tableToUse.id.length!==17){
+      console.warn(`⚠️ Table ID invalid length ${tableToUse.id.length}: ${tableToUse.id}`);
+    }
+
+    tableToUse.fields.forEach(f=>{
       if(f.id && f.id.length!==17){
-        console.warn(`⚠️ Field ID ${f.name} has invalid length ${f.id.length}: ${f.id} (expected 17) - might be truncated cache`);
+        console.warn(`⚠️ Field ID ${f.name} invalid len ${f.id.length}: ${f.id} (expected 17)`);
       }
       if(f.options?.choices){
         f.options.choices.forEach(c=>{
           if(c.id && c.id.length!==17){
-            console.warn(`⚠️ Choice ID for ${f.name} -> ${c.name} has invalid length ${c.id.length}: ${c.id} (expected 17)`);
+            console.warn(`⚠️ Choice ID for ${f.name} -> ${c.name} invalid len ${c.id.length}: ${c.id}`);
           }
         });
       }
     });
 
-    // Build lookup
     jemaahMetaFieldsByName = {};
     jemaahFieldOptions = {};
-    jemaahTable.fields.forEach(field=>{
+    tableToUse.fields.forEach(field=>{
       jemaahMetaFieldsByName[field.name] = field;
       if(field.options?.choices){
         jemaahFieldOptions[field.name] = field.options.choices.map(c=> ({ id: c.id, name: c.name, color: c.color }));
       }
     });
     console.log('✅ Loaded', Object.keys(jemaahMetaFieldsByName).length, 'fields with real IDs');
-    console.log('Sample PAKEJ field:', jemaahMetaFieldsByName['PAKEJ'] ? { id: jemaahMetaFieldsByName['PAKEJ'].id, id_len: jemaahMetaFieldsByName['PAKEJ'].id.length, type: jemaahMetaFieldsByName['PAKEJ'].type, choices: jemaahMetaFieldsByName['PAKEJ'].options?.choices?.map(c=> ({id: c.id, id_len: c.id.length, name: c.name})) } : 'not found');
-    console.log('Sample INSURAN field:', jemaahMetaFieldsByName['INSURAN'] ? { id: jemaahMetaFieldsByName['INSURAN'].id, id_len: jemaahMetaFieldsByName['INSURAN'].id.length, type: jemaahMetaFieldsByName['INSURAN'].type, choices: jemaahMetaFieldsByName['INSURAN'].options?.choices?.map(c=> ({id: c.id, id_len: c.id.length, name: c.name})) } : 'not found');
+    const pakej = jemaahMetaFieldsByName['PAKEJ'];
+    if(pakej){
+      console.log('Sample PAKEJ field:', { id: pakej.id, id_len: pakej.id.length, type: pakej.type, choices: (pakej.options?.choices||[]).map(c=> ({id: c.id, id_len: c.id.length, name: c.name})) });
+    }
+    const insuran = jemaahMetaFieldsByName['INSURAN'];
+    if(insuran){
+      console.log('Sample INSURAN field:', { id: insuran.id, id_len: insuran.id.length, type: insuran.type, choices: (insuran.options?.choices||[]).map(c=> ({id: c.id, id_len: c.id.length, name: c.name})) });
+    }
   }catch(e){
     console.error('fetchJemaahMetaOptions error:', e);
   }
 }
+
 
 function buildFallbackFieldOptions(){
   const fieldsToBuild = ['NATIONALITY','STATUS VISA','BOARD BASIS','INSURAN','PAKEJ'];
@@ -525,6 +557,8 @@ async function fetchEjenList(){
 }
 async function addNewOptionToField(fieldName, newOptionName){
   try{
+    const FULL_BASE_ID = 'appSsn4JyQD4DnYu0';
+    if(!AIRTABLE_BASE_ID || AIRTABLE_BASE_ID.length!==17){ AIRTABLE_BASE_ID = FULL_BASE_ID; try{ localStorage.setItem('effah_base_id', FULL_BASE_ID); }catch{} }
     if(!jemaahMetaTableId){ alert('Ralat: ID jadual meta belum dimuatkan.'); return false; }
     let fieldMeta = jemaahMetaFieldsByName[fieldName];
     if(!fieldMeta){ alert('Ralat: Medan '+fieldName+' tidak dijumpai.'); return false; }
@@ -570,6 +604,23 @@ async function addNewOptionToField(fieldName, newOptionName){
     if(existing.some(c=> c.name.toUpperCase()===newOptionName.toUpperCase())){
       alert('Pilihan telah wujud.'); return false;
     }
+
+    // V77 VALIDATION - abort if IDs truncated (15 chars) - source of 422
+    if(fieldMeta.id.length!==17){
+      console.error('❌ Field ID truncated:', fieldMeta.id, 'len', fieldMeta.id.length, 'expected 17');
+      alert(`Field ID untuk ${fieldName} truncated: ${fieldMeta.id} (len ${fieldMeta.id.length}, expected 17). Sila clear localStorage (effah_base_id) dan reload. Real ID mesti 17 chars.`);
+      return false;
+    }
+    const badChoices = existing.filter(c=> c.id && c.id.length!==17);
+    if(badChoices.length>0){
+      console.error('❌ Choice IDs truncated:', badChoices);
+      alert(`Choice IDs untuk ${fieldName} truncated (15 chars bukan 17): ${badChoices.map(c=> c.id+'='+c.name).join(', ')}. Ini punca 422. Sila jalankan curl GET /tables untuk dapat real IDs 17 chars, atau clear cache dan reload.`);
+      // Force re-fetch
+      await fetchJemaahMetaOptions();
+      return false;
+    }
+
+
 
     // Payload ikut contoh working Trip: id+name untuk existing, name sahaja untuk baru, tanpa color/type
     const cleanedExisting = existing.map(c=> ({ id: c.id, name: c.name }));
