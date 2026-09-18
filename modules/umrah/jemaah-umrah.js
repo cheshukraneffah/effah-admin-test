@@ -444,6 +444,126 @@ async function fetchTripMapping() {
 let _jemaahMetaCache = null;
 let _jemaahMetaFetching = false;
 
+
+async function cleanBlankOptions(fieldName, auto=false){
+  try{
+    const base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_base_id')||'appSsn4JyQD4DnYu0';
+    const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
+    if(!base||!pat) return false;
+    console.log(`V85 Cleaning blank for ${fieldName}...`);
+    _jemaahMetaCache = null;
+    await fetchJemaahMetaOptionsFromMeta();
+    if(!_jemaahMetaCache) return false;
+    const targetField = _jemaahMetaCache.fields.find(f=> f.name.toUpperCase()===fieldName.toUpperCase());
+    if(!targetField) return false;
+    const choices = targetField.options?.choices||[];
+    const blankChoices = choices.filter(c=> !c.name || c.name.trim()==='');
+    const realChoices = choices.filter(c=> c.name && c.name.trim()!=='');
+    console.log(`V85 ${fieldName}: total ${choices.length}, real ${realChoices.length}, blank ${blankChoices.length}`, blankChoices.map(c=> c.id));
+    if(blankChoices.length===0){
+      if(!auto) console.log(`No blank in ${fieldName}`);
+      return true;
+    }
+    // V85: Keep real choices - send id+name if id is 17 chars, else name only (to avoid truncated id issue)
+    const realChoicesWithId = realChoices.map(c=> {
+      if(c.id && c.id.length===17) return {id: c.id, name: c.name.trim()};
+      else return {name: c.name.trim()}; // truncated id - send name only, Airtable will keep it
+    });
+    // Remove duplicates by name
+    const seen = new Set();
+    const deduped = [];
+    for(let c of realChoicesWithId){
+      const key = (c.name||'').toUpperCase();
+      if(!key || seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(c);
+    }
+    console.log(`V85 Cleaning ${fieldName}: keeping ${deduped.length} real, removing ${blankChoices.length} blank`, deduped.map(c=> c.name));
+    if(deduped.length===0){
+      console.error(`V85 Cannot clean ${fieldName} - no real choices left`);
+      if(!auto) alert(`Tidak boleh clean ${fieldName} - tiada pilihan real`);
+      return false;
+    }
+    const metaUrl = `https://api.airtable.com/v0/meta/bases/${base}/tables/${_jemaahMetaCache.id}/fields/${targetField.id}`;
+    const res = await fetch(metaUrl, {
+      method:'PATCH',
+      headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+      body: JSON.stringify({options:{choices: deduped}})
+    });
+    const text = await res.text();
+    console.log(`V85 Clean ${fieldName} result:`, res.status, text.substring(0,800));
+    if(res.ok){
+      console.log(`✅ V85 Cleaned ${blankChoices.length} blank from ${fieldName}`);
+      await fetchJemaahMetaOptionsFromMeta();
+      if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+      if(!auto){
+        // Also clean UI immediately
+        if(jemaahFieldOptions[fieldName]){
+          jemaahFieldOptions[fieldName] = jemaahFieldOptions[fieldName].filter(o=> o.name && o.name.trim()!=='');
+        }
+      }
+      return true;
+    } else {
+      console.error(`V85 Failed to clean ${fieldName}:`, text);
+      if(!auto) alert(`Gagal clean ${fieldName}: ${text.substring(0,200)}`);
+      return false;
+    }
+  }catch(e){ console.error('cleanBlankOptions V85 error', e); return false; }
+}
+
+async function cleanAllBlankOptions(){
+  const fieldsToClean = ['NATIONALITY','BOARD BASIS','INSURAN','PAKEJ','STATUS VISA','GENDER','BILIK'];
+  let cleaned = 0;
+  for(let f of fieldsToClean){
+    const ok = await cleanBlankOptions(f, true);
+    if(ok) cleaned++;
+    await new Promise(r=> setTimeout(r, 600));
+  }
+  console.log(`V85 Clean all done: ${cleaned} fields cleaned`);
+  if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+  return cleaned;
+}
+
+// V85 Auto-clean on load - run after meta fetched
+let _autoCleanDone = false;
+async function autoCleanBlankOnLoad(){
+  if(_autoCleanDone) return;
+  _autoCleanDone = true;
+  try{
+    console.log('V85 Auto-clean checking for blank options...');
+    // Wait for meta to be loaded
+    if(!_jemaahMetaCache){
+      await fetchJemaahMetaOptionsFromMeta();
+    }
+    if(!_jemaahMetaCache) return;
+    const fields = _jemaahMetaCache.fields||[];
+    let hasBlank = false;
+    for(let f of fields){
+      if(f.type==='singleSelect' || f.type==='multipleSelects'){
+        const blanks = (f.options?.choices||[]).filter(c=> !c.name || c.name.trim()==='');
+        if(blanks.length>0){
+          console.warn(`V85 Auto-clean: Found ${blanks.length} blank in ${f.name}, cleaning...`);
+          hasBlank = true;
+          await cleanBlankOptions(f.name, true);
+          await new Promise(r=> setTimeout(r, 500));
+        }
+      }
+    }
+    if(hasBlank){
+      console.log('V85 Auto-clean completed');
+      await fetchJemaahMetaOptionsFromMeta();
+      if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+    } else {
+      console.log('V85 Auto-clean: No blank options found');
+    }
+  }catch(e){ console.warn('V85 Auto-clean error', e); }
+}
+
+// Run auto-clean after 2 seconds and again after 5 seconds to catch late loads
+setTimeout(autoCleanBlankOnLoad, 2000);
+setTimeout(autoCleanBlankOnLoad, 5000);
+
+
 async function fetchJemaahMetaOptionsFromMeta(){
   if(_jemaahMetaFetching) return null;
   _jemaahMetaFetching = true;
