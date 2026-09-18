@@ -530,9 +530,57 @@ async function addNewOptionToField(fieldName, newOptionName){
       }
     }
 
-    // V72 FIX - Checklist dari screenshot: pastikan existing dari metadata fresh, bukan cache fallback
-    // Fetch fresh field metadata untuk dapat id yang betul
-    console.log('🔄 Fetching fresh metadata for field:', fieldName, 'id:', fieldMeta.id);
+    // V73 - Sahkan field type ikut analysis screenshot cbd71c & 25a9f1
+    console.log('🔍 Field check for', fieldName, ':', JSON.stringify({ id: fieldMeta.id, name: fieldMeta.name, type: fieldMeta.type }, null, 2));
+    
+    // Jika field type bukan singleSelect/multipleSelects, memang TIDAK BOLEH PATCH pilihan
+    if(fieldMeta.type !== 'singleSelect' && fieldMeta.type !== 'multipleSelects'){
+      const msg = `Field '${fieldName}' type ialah '${fieldMeta.type}', bukan Single/Multiple Select.\n\n` +
+        `Metadata API hanya boleh PATCH pilihan untuk field type singleSelect/multipleSelects, BUKAN lookup/formula/rollup/number.\n\n` +
+        `Kemungkinan: Field INSURAN di DATA JEMAAH UMRAH adalah lookup dari table lain (contoh: PAKEJ UMRAH atau ROOMING LIST) seperti dalam analysis screenshot.\n\n` +
+        `Tindakan: Sila check di Airtable - buka DATA JEMAAH UMRAH table > Customize field type untuk ${fieldName}. Jika type lookup, anda perlu tambah pilihan di SOURCE TABLE, bukan di sini.\n\n` +
+        `Saya akan cuba workaround typecast:true (data API) untuk auto-create option.`;
+      console.warn(msg);
+      alert(msg);
+
+      // Workaround: cuba typecast:true via data API - jika field setting "Allow adding new options" enabled, ini akan auto-create
+      try{
+        // Cari satu record untuk test typecast - guna first record
+        if(typeof allJemaahRecords !== 'undefined' && allJemaahRecords.length > 0){
+          const testRecId = allJemaahRecords[0].id;
+          const testUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/DATA%20JEMAAH%20UMRAH/${testRecId}`;
+          console.log('Trying typecast:true workaround for', fieldName, 'value', newOptionName);
+          const testRes = await fetch(testUrl, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ typecast: true, fields: { [fieldName]: fieldName === 'INSURAN' || fieldName === 'BOARD BASIS' ? [newOptionName] : newOptionName } })
+          });
+          const testText = await testRes.text();
+          console.log('typecast result:', testText);
+          if(testRes.ok){
+            alert(`Workaround berjaya! Pilihan '${newOptionName}' telah ditambah via typecast:true. Sila refresh field options.`);
+            // Revert test record
+            await fetch(testUrl, {
+              method: 'PATCH',
+              headers: { Authorization: `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fields: { [fieldName]: allJemaahRecords[0].fields[fieldName] } })
+            });
+            // Refresh metadata
+            if(typeof fetchJemaahMetaOptions === 'function') await fetchJemaahMetaOptions();
+            if(typeof filterAndRenderJemaahGrid === 'function') filterAndRenderJemaahGrid();
+            return true;
+          } else {
+            console.error('typecast workaround failed:', testText);
+          }
+        }
+      }catch(e){
+        console.error('typecast workaround error:', e);
+      }
+      return false;
+    }
+
+    // Fetch fresh metadata
+    console.log('🔄 Fetching fresh metadata for field:', fieldName);
     try{
       const freshMetaUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${jemaahMetaTableId}/fields/${fieldMeta.id}`;
       const freshRes = await fetch(freshMetaUrl, { headers: { Authorization: `Bearer ${AIRTABLE_PAT}` } });
@@ -541,37 +589,27 @@ async function addNewOptionToField(fieldName, newOptionName){
         if(freshField && freshField.options && freshField.options.choices){
           fieldMeta = freshField;
           jemaahMetaFieldsByName[fieldName] = freshField;
-          console.log('✅ Fresh metadata loaded:', freshField.options.choices.length, 'choices');
+          console.log('✅ Fresh metadata:', freshField.options.choices.length, 'choices, type:', freshField.type);
         }
-      } else {
-        console.warn('Fresh metadata fetch failed, using cached:', await freshRes.text());
       }
-    }catch(e){
-      console.warn('Fresh fetch error, using cached:', e);
-    }
+    }catch(e){ console.warn('Fresh fetch error:', e); }
 
     const existing = fieldMeta.options?.choices || [];
-    console.log('Existing choices from metadata:', existing);
-    
-    // Validasi id ada
     const missingId = existing.filter(c=> !c.id);
     if(missingId.length > 0){
-      console.error('❌ Some existing choices missing id:', missingId);
-      alert(`Ralat: Metadata field '${fieldName}' tidak ada id untuk beberapa pilihan. Sila refresh page dan cuba lagi. Missing: ${missingId.map(c=>c.name).join(', ')}`);
+      console.error('❌ Missing id:', missingId);
+      alert(`Metadata missing id untuk: ${missingId.map(c=>c.name).join(', ')}`);
       return false;
     }
 
     if(existing.some(c=> c.name.toUpperCase() === newOptionName.toUpperCase())){
-      alert('Makluman: Pilihan tersebut telah wujud dalam senarai.'); return false;
+      alert('Makluman: Pilihan telah wujud.'); return false;
     }
 
-    // Format betul ikut contoh dalam screenshot image_370366.png:
-    // { "id": "selBMa6FeV0vFnd5", "name": "JIMAT EKONOMI" }, ..., { "name": "LAIN-LAIN" }
-    // JANGAN buang id, JANGAN tambah color atau property lain
     const cleanedExisting = existing.map(c=> ({ id: c.id, name: c.name }));
     const updatedChoices = [...cleanedExisting, { name: newOptionName }];
 
-    console.log('PATCH payload yang akan dihantar:', JSON.stringify({ options: { choices: updatedChoices } }, null, 2));
+    console.log('PATCH payload (singleSelect/multipleSelects):', JSON.stringify({ options: { choices: updatedChoices } }, null, 2));
 
     const url = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${jemaahMetaTableId}/fields/${fieldMeta.id}`;
     const res = await fetch(url, {
@@ -582,34 +620,65 @@ async function addNewOptionToField(fieldName, newOptionName){
 
     if(!res.ok){
       const errText = await res.text();
-      console.error('Meta API error for field', fieldName, ':', errText);
+      console.error('Meta API error for field', fieldName, 'type', fieldMeta.type, ':', errText);
       let errMsg = errText;
-      try{
-        const errJson = JSON.parse(errText);
-        errMsg = errJson.error?.message || JSON.stringify(errJson.error) || errText;
-      }catch{}
-      alert('Gagal menambah pilihan: ' + errMsg.toString().substring(0,800));
+      try{ const errJson = JSON.parse(errText); errMsg = errJson.error?.message || JSON.stringify(errJson.error) || errText; }catch{}
+      alert('Gagal: ' + errMsg.toString().substring(0,800) + '\n\nJika type lookup/formula, anda TIDAK BOLEH PATCH pilihan di sini. Tambah di source table.');
       return false;
     }
     const updatedField = await res.json();
     jemaahMetaFieldsByName[fieldName] = updatedField;
     jemaahFieldOptions[fieldName] = updatedField.options.choices.map(c=>({ id: c.id, name: c.name, color: c.color }));
-    alert(`Pilihan '${newOptionName}' telah berjaya ditambahkan ke dalam medan ${fieldName}.`);
+    alert(`Pilihan '${newOptionName}' berjaya ditambah ke ${fieldName}.`);
     if(typeof filterAndRenderJemaahGrid === 'function') filterAndRenderJemaahGrid();
     return true;
   }catch(e){ 
     console.error('addNewOptionToField exception:', e);
-    alert('Ralat telah berlaku: '+e.message); 
+    alert('Ralat: '+e.message); 
     return false; 
   }
 }
 
-function handleAddNewOption(fieldName, selectEl){
-  const newVal = prompt(`Tambah option baru untuk ${fieldName}:`);
+
+
+
+function handleAddNewOption(fieldName, selectEl, modalDropdownId){
+  const newVal = prompt(`Sila masukkan pilihan baharu untuk ${fieldName}:`);
   if(!newVal){ if(selectEl) selectEl.value = selectEl.getAttribute('data-prev')||''; return; }
   const trimmed = newVal.trim().toUpperCase();
   if(!trimmed) return;
-  addNewOptionToField(fieldName, trimmed).then(ok=>{ if(ok && selectEl){ setTimeout(()=>{ selectEl.value = trimmed; selectEl.dispatchEvent(new Event('change')); }, 500); } });
+  addNewOptionToField(fieldName, trimmed).then(ok=>{ 
+    if(!ok) return;
+    if(selectEl){ 
+      setTimeout(()=>{ selectEl.value = trimmed; selectEl.dispatchEvent(new Event('change')); }, 500); 
+    }
+    if(modalDropdownId){
+        const options = jemaahFieldOptions[fieldName] || [];
+        if(modalDropdownId==='boardBasisDropdown'){
+            const list = document.getElementById('boardBasisList');
+            if(list){
+                list.innerHTML = options.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="board-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('');
+                document.querySelectorAll('.board-checkbox').forEach(cb=>{ cb.addEventListener('change', updateBoardBasisSelected); });
+            }
+        } else if(modalDropdownId==='insuranDropdown'){
+            const list = document.getElementById('insuranList');
+            if(list){
+                list.innerHTML = options.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="insuran-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('');
+                document.querySelectorAll('.insuran-checkbox').forEach(cb=>{ cb.addEventListener('change', updateInsuranSelected); });
+            }
+        }
+        setTimeout(()=>{
+            document.querySelectorAll(`.board-checkbox, .insuran-checkbox`).forEach(cb=>{
+                if(cb.value===trimmed) cb.checked=true;
+            });
+            if(typeof updateBoardBasisSelected === 'function') updateBoardBasisSelected();
+            if(typeof updateInsuranSelected === 'function') updateInsuranSelected();
+        }, 100);
+    }
+    if(typeof filterAndRenderJemaahGrid === 'function'){
+        setTimeout(()=> filterAndRenderJemaahGrid(), 600);
+    }
+  });
 }
 function renderSingleSelectCell(recId, fieldName, currentValue){
   const options = jemaahFieldOptions[fieldName] || [];
@@ -1086,10 +1155,41 @@ function filterAndRenderJemaahGrid() {
         });
     }
 
+    // V66 FIX: Proper sorting for AGE (muda-tua) - fixes Nur Dini issue
+    function parseAgeToMonthsForSort(ageStr){
+      if(!ageStr) return -1;
+      const s = ageStr.toString().toLowerCase().trim();
+      if(!s || s==='-' || s.toLowerCase()==='tbc') return -1;
+      let years = 0, months = 0;
+      const yMatch = s.match(/(\d+)\s*y/);
+      const mMatch = s.match(/(\d+)\s*m/);
+      if(yMatch) years = parseInt(yMatch[1])||0;
+      if(mMatch) months = parseInt(mMatch[1])||0;
+      if(!yMatch && !mMatch){
+        const num = parseFloat(s)||0;
+        if(num>0){
+          years = Math.floor(num);
+          months = Math.round((num - years)*12);
+        }
+      }
+      return years*12 + months;
+    }
+
     filtered.sort((a, b) => {
         let valA = a.fields[currentSortField] || '';
         let valB = b.fields[currentSortField] || '';
-
+        
+        if(currentSortField === 'AGE'){
+          const monthsA = parseAgeToMonthsForSort(valA);
+          const monthsB = parseAgeToMonthsForSort(valB);
+          if(monthsA===-1 && monthsB===-1) return 0;
+          if(monthsA===-1) return 1;
+          if(monthsB===-1) return -1;
+          if(monthsA < monthsB) return currentSortDir === 'asc' ? -1 : 1;
+          if(monthsA > monthsB) return currentSortDir === 'asc' ? 1 : -1;
+          return 0;
+        }
+        
         if (typeof valA === 'string') valA = valA.toLowerCase();
         if (typeof valB === 'string') valB = valB.toLowerCase();
 
