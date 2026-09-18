@@ -441,266 +441,219 @@ async function fetchTripMapping() {
 }
 
 // V51: Fetch field options dari Airtable meta API - direct fetch, tak hardcoded
-async function fetchJemaahMetaOptions(){
+let _jemaahMetaCache = null;
+let _jemaahMetaFetching = false;
+
+async function fetchJemaahMetaOptionsFromMeta(){
+  if(_jemaahMetaFetching) return null;
+  _jemaahMetaFetching = true;
   try{
-    // V77 - Force full base ID, validate length
     const FULL_BASE_ID = 'appSsn4JyQD4DnYu0';
-    if(typeof AIRTABLE_BASE_ID === 'undefined' || !AIRTABLE_BASE_ID || AIRTABLE_BASE_ID.length!==17){
-      console.warn('⚠️ AIRTABLE_BASE_ID invalid/truncated:', AIRTABLE_BASE_ID, 'len:', (AIRTABLE_BASE_ID||'').length, 'using FULL', FULL_BASE_ID);
-      AIRTABLE_BASE_ID = FULL_BASE_ID;
-      if(typeof window !== 'undefined') window.AIRTABLE_BASE_ID = FULL_BASE_ID;
-      try{ localStorage.setItem('effah_base_id', FULL_BASE_ID); }catch{}
+    let base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id')||FULL_BASE_ID;
+    if(!base || base.length!==17){ base = FULL_BASE_ID; try{ localStorage.setItem('effah_base_id', FULL_BASE_ID); localStorage.setItem('effah_api_base', FULL_BASE_ID); }catch{} }
+    const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
+    if(!base||!pat){ 
+      console.warn('Jemaah: Base atau PAT tiada'); 
+      _jemaahMetaFetching=false; 
+      return null; 
     }
-    if(AIRTABLE_BASE_ID.length!==17){
-      console.error('❌ Base ID still invalid length:', AIRTABLE_BASE_ID.length, AIRTABLE_BASE_ID);
-      alert('Base ID truncated: '+AIRTABLE_BASE_ID+' len '+AIRTABLE_BASE_ID.length+' expected 17. Clear localStorage and reload.');
-      return;
-    }
-    console.log('🔄 Fetching fresh schema from GET /v0/meta/bases/'+AIRTABLE_BASE_ID+'/tables len:'+AIRTABLE_BASE_ID.length);
-    const url = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_PAT}` } });
-    console.log('Fetch tables status:', res.status);
+    console.log('Jemaah V78: Fetching fresh schema from GET /meta/bases/'+base+'/tables');
+    const res = await fetch(`https://api.airtable.com/v0/meta/bases/${base}/tables`, {headers:{Authorization:`Bearer ${pat}`}});
     if(!res.ok){
-      const errTxt = await res.text();
-      console.error('Failed to fetch tables schema:', res.status, errTxt);
-      // Don't use fallback with truncated IDs
-      return;
+      console.warn('Jemaah: Gagal fetch meta', res.status, await res.text().then(t=>t.substring(0,500)));
+      _jemaahMetaFetching=false;
+      return null;
     }
     const data = await res.json();
-    const tables = data.tables || [];
-    console.log('Tables fetched:', tables.length, tables.map(t=> t.name));
-    const jemaahTable = tables.find(t=> t.name.trim() === 'DATA JEMAAH UMRAH');
-    if(!jemaahTable){
-      console.error('DATA JEMAAH UMRAH table not found, available:', tables.map(t=> t.name));
-      // Try case-insensitive
-      const alt = tables.find(t=> t.name.toUpperCase().includes('JEMAAH'));
-      if(alt){
-        console.log('Using alt table:', alt.name, alt.id);
-      } else {
-        return;
-      }
+    const tables = data.tables||[];
+    let targetTable = tables.find(t=> (t.name||'').trim()==='DATA JEMAAH UMRAH');
+    if(!targetTable) targetTable = tables.find(t=> (t.name||'').toUpperCase().includes('DATA JEMAAH UMRAH'));
+    if(!targetTable) targetTable = tables.find(t=> (t.name||'').toUpperCase().includes('JEMAAH'));
+    if(!targetTable){
+      console.warn('Jemaah: Table DATA JEMAAH UMRAH tidak jumpa');
+      _jemaahMetaFetching=false;
+      return null;
     }
-    const tableToUse = jemaahTable || tables.find(t=> t.name.toUpperCase().includes('JEMAAH'));
-    jemaahMetaTableId = tableToUse.id;
-    console.log('✅ Found table:', tableToUse.name, 'id:', tableToUse.id, 'len:', tableToUse.id.length, 'fields:', tableToUse.fields.length);
+    _jemaahMetaCache = targetTable;
+    jemaahMetaTableId = targetTable.id;
+    window._jemaahMetaCache = targetTable;
     
-    if(tableToUse.id.length!==17){
-      console.warn(`⚠️ Table ID invalid length ${tableToUse.id.length}: ${tableToUse.id}`);
-    }
-
-    tableToUse.fields.forEach(f=>{
-      if(f.id && f.id.length!==17){
-        console.warn(`⚠️ Field ID ${f.name} invalid len ${f.id.length}: ${f.id} (expected 17)`);
-      }
+    // Validate ID lengths
+    console.log('✅ Jemaah table found:', targetTable.name, 'id:', targetTable.id, 'len', targetTable.id.length, 'fields', targetTable.fields.length);
+    targetTable.fields.forEach(f=>{
+      if(f.id && f.id.length!==17) console.warn(`⚠️ Field ${f.name} ID len ${f.id.length}: ${f.id}`);
       if(f.options?.choices){
         f.options.choices.forEach(c=>{
-          if(c.id && c.id.length!==17){
-            console.warn(`⚠️ Choice ID for ${f.name} -> ${c.name} invalid len ${c.id.length}: ${c.id}`);
-          }
+          if(c.id && c.id.length!==17) console.warn(`⚠️ Choice ${f.name} -> ${c.name} ID len ${c.id.length}: ${c.id}`);
         });
       }
     });
-
+    
+    // Build lookup like rooming.js
     jemaahMetaFieldsByName = {};
     jemaahFieldOptions = {};
-    tableToUse.fields.forEach(field=>{
+    targetTable.fields.forEach(field=>{
       jemaahMetaFieldsByName[field.name] = field;
       if(field.options?.choices){
         jemaahFieldOptions[field.name] = field.options.choices.map(c=> ({ id: c.id, name: c.name, color: c.color }));
       }
     });
-    console.log('✅ Loaded', Object.keys(jemaahMetaFieldsByName).length, 'fields with real IDs');
-    const pakej = jemaahMetaFieldsByName['PAKEJ'];
-    if(pakej){
-      console.log('Sample PAKEJ field:', { id: pakej.id, id_len: pakej.id.length, type: pakej.type, choices: (pakej.options?.choices||[]).map(c=> ({id: c.id, id_len: c.id.length, name: c.name})) });
-    }
-    const insuran = jemaahMetaFieldsByName['INSURAN'];
-    if(insuran){
-      console.log('Sample INSURAN field:', { id: insuran.id, id_len: insuran.id.length, type: insuran.type, choices: (insuran.options?.choices||[]).map(c=> ({id: c.id, id_len: c.id.length, name: c.name})) });
-    }
+    console.log('✅ Jemaah V78 loaded', Object.keys(jemaahMetaFieldsByName).length, 'fields');
+    const p = jemaahMetaFieldsByName['PAKEJ'];
+    if(p) console.log('Sample PAKEJ:', { id: p.id, id_len: p.id.length, type: p.type, choices: (p.options?.choices||[]).map(c=> ({id: c.id, len: c.id.length, name: c.name})) });
+    const ins = jemaahMetaFieldsByName['INSURAN'];
+    if(ins) console.log('Sample INSURAN:', { id: ins.id, id_len: ins.id.length, type: ins.type, choices: (ins.options?.choices||[]).map(c=> ({id: c.id, len: c.id.length, name: c.name})) });
+    
+    _jemaahMetaFetching=false;
+    return jemaahFieldOptions;
   }catch(e){
-    console.error('fetchJemaahMetaOptions error:', e);
+    console.warn('fetchJemaahMetaOptionsFromMeta error', e);
+    _jemaahMetaFetching=false;
+    return null;
   }
 }
 
+// Override old fetchJemaahMetaOptions to call new one
+async function fetchJemaahMetaOptions(){
+  return await fetchJemaahMetaOptionsFromMeta();
+}
 
-function buildFallbackFieldOptions(){
-  const fieldsToBuild = ['NATIONALITY','STATUS VISA','BOARD BASIS','INSURAN','PAKEJ'];
-  fieldsToBuild.forEach(fieldName=>{
-    const values = new Set();
-    (allJemaahUmrahRecords||[]).forEach(r=>{
-      const v = r.fields[fieldName];
-      if(!v) return;
-      if(Array.isArray(v)){ v.forEach(x=> values.add(x)); } else { values.add(v); }
-    });
-    if(values.size>0){ jemaahFieldOptions[fieldName] = Array.from(values).map(name=>({ name, id: name })); }
-  });
-}
-async function fetchEjenList(){
-  try{
-    if(typeof AIRTABLE_PAT === 'undefined' || !AIRTABLE_PAT){
-      AIRTABLE_PAT = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat') || '';
-      AIRTABLE_BASE_ID = window.AIRTABLE_BASE_ID || localStorage.getItem('effah_base_id') || '';
-    }
-    if(!AIRTABLE_PAT || !AIRTABLE_BASE_ID) return;
-    let records = []; let offset = '';
-    do{
-      let url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/EJEN%20LIST?pageSize=100`;
-      if(offset) url+=`&offset=${offset}`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_PAT}` } });
-      const data = await res.json();
-      if(data.records) records = records.concat(data.records);
-      offset = data.offset || '';
-    }while(offset);
-    ejenListCache = records.map(r=>({ id: r.id, name: r.fields['NAMA EJEN'] || r.fields['NAMA'] || r.fields['NAME'] || 'Unknown', status: r.fields['STATUS']||'', noTelefon: r.fields['NO TELEFON']||'', raw: r }));
-  }catch(e){ console.error(e); }
-}
 async function addNewOptionToField(fieldName, newOptionName){
   try{
     const FULL_BASE_ID = 'appSsn4JyQD4DnYu0';
-    if(!AIRTABLE_BASE_ID || AIRTABLE_BASE_ID.length!==17){ AIRTABLE_BASE_ID = FULL_BASE_ID; try{ localStorage.setItem('effah_base_id', FULL_BASE_ID); }catch{} }
-    if(!jemaahMetaTableId){ alert('Ralat: ID jadual meta belum dimuatkan.'); return false; }
-    let fieldMeta = jemaahMetaFieldsByName[fieldName];
-    if(!fieldMeta){ alert('Ralat: Medan '+fieldName+' tidak dijumpai.'); return false; }
+    let base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id')||FULL_BASE_ID;
+    if(!base || base.length!==17){ base = FULL_BASE_ID; }
+    const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
+    if(!base||!pat){ alert('Konfigurasi Airtable tidak ditemui'); return false; }
 
-    // EJEN & TRIP adalah linked record
-    if(fieldName === 'EJEN' || fieldName === 'TRIP' || fieldMeta.type === 'multipleRecordLinks' || fieldMeta.type === 'singleRecordLink'){
-      const linkedTable = fieldName === 'EJEN' ? 'EJEN LIST' : 'PAKEJ UMRAH';
-      const linkedField = fieldName === 'EJEN' ? 'NAMA EJEN' : 'NAMA PAKEJ';
-      try{
-        const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(linkedTable)}`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: { [linkedField]: newOptionName } })
-        });
-        if(!res.ok){ alert('Gagal tambah di '+linkedTable+': '+await res.text()); return false; }
-        alert(`'${newOptionName}' berjaya ditambah ke ${linkedTable}.`);
-        if(typeof fetchJemaahMetaOptions === 'function') await fetchJemaahMetaOptions();
-        if(typeof filterAndRenderJemaahGrid === 'function') filterAndRenderJemaahGrid();
-        return true;
-      }catch(e){ alert('Ralat linked: '+e.message); return false; }
-    }
-
-    console.log('🔍 Field check:', fieldName, 'type:', fieldMeta.type, 'id:', fieldMeta.id);
-    
-    if(fieldMeta.type !== 'singleSelect' && fieldMeta.type !== 'multipleSelects'){
-      alert(`Field '${fieldName}' type '${fieldMeta.type}' bukan select - tak boleh PATCH choices.`);
+    // Force fresh fetch like rooming.js - clear cache first
+    _jemaahMetaCache = null;
+    await fetchJemaahMetaOptionsFromMeta();
+    if(!_jemaahMetaCache){
+      alert('Tidak dapat mencapai metadata Airtable. Check PAT dan base ID.');
       return false;
     }
-
-    // Fetch fresh metadata untuk dapat id betul
-    try{
-      const freshUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${jemaahMetaTableId}`;
-      const freshRes = await fetch(freshUrl, { headers: { Authorization: `Bearer ${AIRTABLE_PAT}` } });
-      if(freshRes.ok){
-        const tableData = await freshRes.json();
-        const fresh = (tableData.fields||[]).find(f=> f.id===fieldMeta.id || f.name===fieldName);
-        if(fresh && fresh.options?.choices){ fieldMeta = fresh; jemaahMetaFieldsByName[fieldName]=fresh; console.log('✅ Fresh from table:', fresh.options.choices.length); }
-      }
-    }catch(e){ console.warn('Fresh fetch failed', e); }
-
-    const existing = fieldMeta.options?.choices || [];
-    if(existing.some(c=> c.name.toUpperCase()===newOptionName.toUpperCase())){
-      alert('Pilihan telah wujud.'); return false;
-    }
-
-    // V77 VALIDATION - abort if IDs truncated (15 chars) - source of 422
-    if(fieldMeta.id.length!==17){
-      console.error('❌ Field ID truncated:', fieldMeta.id, 'len', fieldMeta.id.length, 'expected 17');
-      alert(`Field ID untuk ${fieldName} truncated: ${fieldMeta.id} (len ${fieldMeta.id.length}, expected 17). Sila clear localStorage (effah_base_id) dan reload. Real ID mesti 17 chars.`);
+    const tableId = _jemaahMetaCache.id;
+    const fields = _jemaahMetaCache.fields||[];
+    const targetField = fields.find(f=> (f.name||'').toUpperCase()===fieldName.toUpperCase());
+    if(!targetField){
+      alert(`Medan ${fieldName} tidak ditemui.`);
       return false;
     }
-    const badChoices = existing.filter(c=> c.id && c.id.length!==17);
-    if(badChoices.length>0){
-      console.error('❌ Choice IDs truncated:', badChoices);
-      alert(`Choice IDs untuk ${fieldName} truncated (15 chars bukan 17): ${badChoices.map(c=> c.id+'='+c.name).join(', ')}. Ini punca 422. Sila jalankan curl GET /tables untuk dapat real IDs 17 chars, atau clear cache dan reload.`);
-      // Force re-fetch
-      await fetchJemaahMetaOptions();
-      return false;
-    }
-
-
-
-    // Payload ikut contoh working Trip: id+name untuk existing, name sahaja untuk baru, tanpa color/type
-    const cleanedExisting = existing.map(c=> ({ id: c.id, name: c.name }));
-    const updatedChoices = [...cleanedExisting, { name: newOptionName }];
-
-    console.log('PATCH payload for', fieldName, JSON.stringify({ options: { choices: updatedChoices } }, null, 2));
-
-    const patchUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${jemaahMetaTableId}`;
-    const patchRes = await fetch(patchUrl, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ options: { choices: updatedChoices } })
-    });
-
-    if(patchRes.ok){
-      const updatedField = await patchRes.json();
-      jemaahMetaFieldsByName[fieldName]=updatedField;
-      jemaahFieldOptions[fieldName]=updatedField.options.choices.map(c=>({ id: c.id, name: c.name, color: c.color }));
-      alert(`'${newOptionName}' berjaya ditambah ke ${fieldName} via metadata API.`);
-      if(typeof filterAndRenderJemaahGrid === 'function') filterAndRenderJemaahGrid();
-      return true;
-    }
-
-    // Jika metadata PATCH gagal dengan 422 type error - cuba fallback typecast:true (macam trip-umrah.js)
-    const errText = await patchRes.text();
-    console.error('Metadata PATCH gagal:', errText);
-    
-    if(errText.toLowerCase().includes('type') || errText.toLowerCase().includes('precision') || patchRes.status===422){
-      console.log('⚠️ Metadata 422, cuba fallback typecast:true untuk', fieldName);
-      try{
-        if(typeof allJemaahRecords !== 'undefined' && allJemaahRecords.length>0){
-          const testRecId = allJemaahRecords[0].id;
-          const originalVal = allJemaahRecords[0].fields[fieldName];
-          const isMulti = fieldMeta.type==='multipleSelects';
-          const testUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/DATA%20JEMAAH%20UMRAH/${testRecId}`;
-          
-          const payload = isMulti ? { typecast: true, fields: { [fieldName]: [...(Array.isArray(originalVal)?originalVal:[]), newOptionName] } } 
-                                  : { typecast: true, fields: { [fieldName]: newOptionName } };
-          
-          console.log('Typecast payload:', JSON.stringify(payload));
-          const typecastRes = await fetch(testUrl, {
-            method: 'PATCH',
-            headers: { Authorization: `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+    if(targetField.type!=='singleSelect' && targetField.type!=='multipleSelects'){
+      // Handle linked record like EJEN, TRIP
+      if(targetField.type==='multipleRecordLinks' || targetField.type==='singleRecordLink' || fieldName==='EJEN' || fieldName==='TRIP'){
+        const linkedTable = fieldName==='EJEN' ? 'EJEN LIST' : 'PAKEJ UMRAH';
+        const linkedField = fieldName==='EJEN' ? 'NAMA EJEN' : 'NAMA PAKEJ';
+        try{
+          const url = `https://api.airtable.com/v0/${base}/${encodeURIComponent(linkedTable)}`;
+          const res = await fetch(url, {
+            method:'POST',
+            headers:{ Authorization: `Bearer ${pat}`, 'Content-Type':'application/json' },
+            body: JSON.stringify({ fields: { [linkedField]: newOptionName } })
           });
-          const typecastText = await typecastRes.text();
-          console.log('Typecast result:', typecastRes.status, typecastText);
-          
-          if(typecastRes.ok){
-            alert(`'${newOptionName}' berjaya ditambah via typecast:true (fallback). Field ${fieldName} setting 'Allow adding new options' mesti ON di Airtable.`);
-            // Revert test record
-            const revertPayload = { fields: { [fieldName]: originalVal } };
-            await fetch(testUrl, {
-              method: 'PATCH',
-              headers: { Authorization: `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify(revertPayload)
-            });
-            if(typeof fetchJemaahMetaOptions === 'function') await fetchJemaahMetaOptions();
-            if(typeof filterAndRenderJemaahGrid === 'function') filterAndRenderJemaahGrid();
-            return true;
-          } else {
-            alert(`Metadata dan typecast kedua-dua gagal.\n\nMetadata error: ${errText.substring(0,400)}\n\nTypecast error: ${typecastText.substring(0,400)}\n\nSila check di Airtable: Field ${fieldName} > Edit field > Pastikan 'Allow adding new options' atau tambah manual di Airtable.`);
-            return false;
+          if(!res.ok){ alert('Gagal tambah di '+linkedTable+': '+await res.text().then(t=>t.substring(0,300))); return false; }
+          alert(`'${newOptionName}' berjaya ditambah ke ${linkedTable}.`);
+          await fetchJemaahMetaOptionsFromMeta();
+          if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+          return true;
+        }catch(e){ alert('Ralat linked: '+e.message); return false; }
+      }
+      alert(`Medan ${fieldName} bukan jenis pilihan (type: ${targetField.type}).`);
+      return false;
+    }
+
+    const existingChoices = (targetField.options && targetField.options.choices) ? targetField.options.choices : [];
+    console.log(`Existing choices for ${fieldName}:`, existingChoices.map(c=> ({id: c.id, len: c.id?.length, name: c.name})));
+
+    if(existingChoices.some(c=> (c.name||'').toUpperCase()===newOptionName.toUpperCase())){
+      alert(`${newOptionName} telah wujud di dalam Airtable.`);
+      return false;
+    }
+
+    // Validate IDs length - must be 17
+    const badIds = existingChoices.filter(c=> c.id && c.id.length!==17);
+    if(badIds.length>0){
+      console.error('❌ Found truncated IDs (15 chars):', badIds);
+      alert(`ID lama truncated dikesan: ${badIds.map(c=> c.id).join(', ')}. Ini punca 422. Code akan cuba guna real IDs dari fresh fetch. Jika masih gagal, sila clear localStorage dan reload.`);
+      // Continue anyway - we will use whatever IDs we have, but log warning
+    }
+
+    // Same as rooming.js - id+name for existing, name only for new
+    const choicesWithId = existingChoices.map(c=> ({id: c.id, name: c.name}));
+    const newChoices = [...choicesWithId, {name: newOptionName}];
+
+    console.log('PATCH payload for', fieldName, JSON.stringify({ options: { choices: newChoices } }, null, 2));
+
+    let metaSuccess = false;
+    try{
+      const res = await fetch(`https://api.airtable.com/v0/meta/bases/${base}/tables/${tableId}/fields/${targetField.id}`, {
+        method:'PATCH',
+        headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+        body: JSON.stringify({options:{choices: newChoices}})
+      });
+      const text = await res.text();
+      console.log('Meta PATCH response:', res.status, text.substring(0,500));
+      if(res.ok){ 
+        metaSuccess = true; 
+        console.log('✅ Meta PATCH success for', fieldName);
+      } else { 
+        console.warn('Meta PATCH failed:', text);
+        // If 422, try typecast fallback like rooming.js
+        if(res.status===422 || text.toLowerCase().includes('type') || text.toLowerCase().includes('validation')){
+          console.log('⚠️ Trying typecast fallback...');
+          if(typeof allJemaahRecords!=='undefined' && allJemaahRecords.length>0){
+            const first = allJemaahRecords[0];
+            const isMulti = targetField.type==='multipleSelects';
+            try{
+              const typecastRes = await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${first.id}`, {
+                method:'PATCH',
+                headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+                body: JSON.stringify({fields:{[fieldName]: isMulti ? [newOptionName] : newOptionName}, typecast:true})
+              });
+              const typecastText = await typecastRes.text();
+              console.log('Typecast fallback response:', typecastRes.status, typecastText.substring(0,500));
+              if(typecastRes.ok){
+                console.log('✅ Typecast fallback success');
+                // Revert first record after 800ms
+                setTimeout(async ()=>{
+                  try{
+                    const orig = first.fields[fieldName]||'';
+                    await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${first.id}`, {
+                      method:'PATCH',
+                      headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+                      body: JSON.stringify({fields:{[fieldName]: orig}, typecast:true})
+                    });
+                  }catch(e){}
+                }, 800);
+                metaSuccess = true;
+              }
+            }catch(e){ console.warn('Typecast fallback exception', e); }
           }
         }
-      }catch(e){
-        console.error('Typecast fallback error:', e);
-        alert(`Metadata gagal dan typecast error: ${e.message}\n\nOriginal: ${errText.substring(0,400)}`);
-        return false;
       }
-    }
+    }catch(e){ console.warn('Meta exception', e); }
 
-    alert('Gagal menambah pilihan: '+errText.substring(0,600));
-    return false;
+    // Refresh
+    await fetchJemaahMetaOptionsFromMeta();
+    try{ if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid(); }catch(e){}
+
+    if(metaSuccess){
+      alert(`'${newOptionName}' telah berjaya ditambahkan ke ${fieldName}.`);
+      return true;
+    } else {
+      alert(`Gagal menambah via meta API, tapi cuba typecast fallback. Sila refresh dan check Airtable. Jika masih gagal, tambah manual di Airtable.`);
+      return false;
+    }
   }catch(e){
-    console.error('addNewOptionToField exception:', e);
-    alert('Ralat: '+e.message);
+    console.error('addNewOptionToField error', e);
+    alert(`Gagal menambah "${newOptionName}": ${e.message}`);
     return false;
   }
 }
+
+
+
 
 
 
