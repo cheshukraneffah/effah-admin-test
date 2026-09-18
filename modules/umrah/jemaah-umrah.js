@@ -514,6 +514,70 @@ async function fetchJemaahMetaOptionsFromMeta(){
 }
 
 // Override old fetchJemaahMetaOptions to call new one
+
+async function cleanBlankOptions(fieldName){
+  try{
+    const base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_base_id')||'appSsn4JyQD4DnYu0';
+    const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
+    if(!base||!pat) return;
+    console.log(`Cleaning blank options for ${fieldName}...`);
+    _jemaahMetaCache = null;
+    await fetchJemaahMetaOptionsFromMeta();
+    if(!_jemaahMetaCache) return;
+    const targetField = _jemaahMetaCache.fields.find(f=> f.name.toUpperCase()===fieldName.toUpperCase());
+    if(!targetField) return;
+    const choices = targetField.options?.choices||[];
+    const blankChoices = choices.filter(c=> !c.name || c.name.trim()==='');
+    const realChoices = choices.filter(c=> c.name && c.name.trim()!=='');
+    console.log(`Found ${blankChoices.length} blank choices in ${fieldName}:`, blankChoices);
+    if(blankChoices.length===0){
+      console.log(`No blank choices in ${fieldName}`);
+      return;
+    }
+    // Keep only real choices with real IDs
+    const realChoicesWithId = realChoices.filter(c=> c.id && c.id.length===17).map(c=> ({id: c.id, name: c.name}));
+    console.log(`Cleaning: keeping ${realChoicesWithId.length} real choices, removing ${blankChoices.length} blank`);
+    const metaUrl = `https://api.airtable.com/v0/meta/bases/${base}/tables/${_jemaahMetaCache.id}/fields/${targetField.id}`;
+    const res = await fetch(metaUrl, {
+      method:'PATCH',
+      headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+      body: JSON.stringify({options:{choices: realChoicesWithId}})
+    });
+    const text = await res.text();
+    console.log(`Clean ${fieldName} result:`, res.status, text.substring(0,500));
+    if(res.ok){
+      console.log(`✅ Cleaned blank options from ${fieldName}`);
+      await fetchJemaahMetaOptionsFromMeta();
+      if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+    }
+  }catch(e){ console.error('cleanBlankOptions error', e); }
+}
+
+async function cleanAllBlankOptions(){
+  const fieldsToClean = ['BOARD BASIS','INSURAN','PAKEJ','NATIONALITY','STATUS VISA','GENDER'];
+  for(let f of fieldsToClean){
+    await cleanBlankOptions(f);
+    await new Promise(r=> setTimeout(r, 800));
+  }
+  alert('Selesai clean blank options. Sila refresh.');
+}
+
+// Auto-clean on load if blank detected
+setTimeout(async ()=>{
+  try{
+    // Check if any field has blank in jemaahFieldOptions
+    for(let fieldName in jemaahFieldOptions){
+      const opts = jemaahFieldOptions[fieldName]||[];
+      const hasBlank = opts.some(o=> !o.name || o.name.trim()==='');
+      if(hasBlank){
+        console.warn(`Blank detected in ${fieldName}, auto-cleaning...`);
+        await cleanBlankOptions(fieldName);
+      }
+    }
+  }catch{}
+}, 3000);
+
+
 async function fetchJemaahMetaOptions(){
   return await fetchJemaahMetaOptionsFromMeta();
 }
@@ -657,10 +721,12 @@ async function addNewOptionToField(fieldName, newOptionName, triggerElement=null
           typecastSuccess = true;
           setTimeout(async ()=>{
             try{
+              // Fix blank option bug: for multi send [] not '', for single send null not ''
+              const revertValue = isMulti ? (Array.isArray(originalVal) ? originalVal : []) : (originalVal || null);
               await fetch(url, {
                 method:'PATCH',
                 headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
-                body: JSON.stringify({fields:{[fieldName]: originalVal||''}, typecast:true})
+                body: JSON.stringify({fields:{[fieldName]: revertValue}, typecast:true})
               });
             }catch(e){}
           }, 1000);
@@ -830,9 +896,10 @@ function renderSingleSelectCell(recId, fieldName, currentValue){
   const safeCurrent = currentValue || '';
   let optsHtml = `<option value="">-- Pilih --</option>`;
   if(options.length>0){
-    options.forEach(opt=>{ const selected = (opt.name === safeCurrent) ? 'selected' : ''; optsHtml += `<option value="${opt.name}" ${selected}>${opt.name}</option>`; });
+    const filteredOpts = options.filter(opt=> opt.name && opt.name.trim()!=='');
+    filteredOpts.forEach(opt=>{ const selected = (opt.name === safeCurrent) ? 'selected' : ''; optsHtml += `<option value="${opt.name}" ${selected}>${opt.name}</option>`; });
   } else {
-    if(safeCurrent){ optsHtml += `<option value="${safeCurrent}" selected>${safeCurrent}</option>`; }
+    if(safeCurrent && safeCurrent.trim()!==''){ optsHtml += `<option value="${safeCurrent}" selected>${safeCurrent}</option>`; }
   }
   optsHtml += `<option value="__ADD_NEW__" style="font-weight:bold; color:#800020;">+ Add new option</option>`;
   return `<select data-prev="${safeCurrent}" data-rec-id="${recId}" onchange="if(this.value==='__ADD_NEW__'){ handleAddNewOption('${fieldName}', this); } else { updateJemaahField('${recId}', '${fieldName}', this.value); }" class="w-full text-xs p-1.5 font-bold rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent">${optsHtml}</select>`;
@@ -846,7 +913,9 @@ function renderMultiSelectCell(recId, fieldName, currentValues){
   } else { pillsHtml = `<span class="text-slate-300 text-[10px]">-</span>`; }
   let optsHtml = '';
   if(options.length>0){
-    options.forEach(opt=>{ const isSelected = currentArr.includes(opt.name); optsHtml += `<label class="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 cursor-pointer text-xs"><input type="checkbox" ${isSelected?'checked':''} onchange="toggleMultiSelectValue('${recId}', '${fieldName}', '${opt.name.replace(/'/g, "\'")}', this.checked)" class="w-3.5 h-3.5 rounded border-slate-300 text-brand-maroon"> <span>${opt.name}</span></label>`; });
+    // Filter out blank options
+    const filteredOpts = options.filter(opt=> opt.name && opt.name.trim()!=='');
+    filteredOpts.forEach(opt=>{ const isSelected = currentArr.includes(opt.name); optsHtml += `<label class="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 cursor-pointer text-xs"><input type="checkbox" ${isSelected?'checked':''} onchange="toggleMultiSelectValue('${recId}', '${fieldName}', '${opt.name.replace(/'/g, "\'")}', this.checked)" class="w-3.5 h-3.5 rounded border-slate-300 text-brand-maroon"> <span>${opt.name}</span></label>`; });
   }
   optsHtml += `<div class="border-t border-slate-200 mt-1 pt-1"><button onclick="handleAddNewMultiOption('${fieldName}', this, '${recId}')" class="w-full text-left px-2 py-1 text-[11px] font-bold text-brand-maroon hover:bg-rose-50 rounded flex items-center gap-1"><span>+ Add new option</span></button></div>`;
   const dropdownId = `ms-dropdown-${recId}-${fieldName.replace(/\s/g,'')}`;
