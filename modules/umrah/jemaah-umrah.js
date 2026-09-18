@@ -443,29 +443,55 @@ async function fetchTripMapping() {
 // V51: Fetch field options dari Airtable meta API - direct fetch, tak hardcoded
 async function fetchJemaahMetaOptions(){
   try{
-    if(typeof AIRTABLE_PAT === 'undefined' || !AIRTABLE_PAT){
-      AIRTABLE_PAT = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat') || '';
-      AIRTABLE_BASE_ID = window.AIRTABLE_BASE_ID || localStorage.getItem('effah_base_id') || '';
-    }
-    if(!AIRTABLE_PAT || !AIRTABLE_BASE_ID) return;
+    console.log('🔄 Fetching fresh schema from GET /v0/meta/bases/'+AIRTABLE_BASE_ID+'/tables');
     const url = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_PAT}` } });
-    if(!res.ok){ buildFallbackFieldOptions(); return; }
+    if(!res.ok){
+      console.error('Failed to fetch tables schema:', await res.text());
+      return;
+    }
     const data = await res.json();
     const tables = data.tables || [];
-    const jemaahTable = tables.find(t=> t.name.trim() === 'DATA JEMAAH UMRAH');
-    if(!jemaahTable){ buildFallbackFieldOptions(); return; }
+    // Find DATA JEMAAH UMRAH table
+    const jemaahTable = tables.find(t=> t.name==='DATA JEMAAH UMRAH' || t.name.toUpperCase().includes('JEMAAH'));
+    if(!jemaahTable){
+      console.error('DATA JEMAAH UMRAH table not found in schema, available:', tables.map(t=> t.name));
+      return;
+    }
     jemaahMetaTableId = jemaahTable.id;
-    jemaahMetaFieldsByName = {};
-    (jemaahTable.fields||[]).forEach(f=>{
-      jemaahMetaFieldsByName[f.name] = f;
-      if(f.options && f.options.choices){
-        jemaahFieldOptions[f.name] = f.options.choices.map(c=>({ id: c.id, name: c.name, color: c.color }));
+    console.log('✅ Found table:', jemaahTable.name, 'id:', jemaahTable.id, 'fields:', jemaahTable.fields.length);
+    
+    // Validate field IDs length - must be 17 chars (fld + 14)
+    jemaahTable.fields.forEach(f=>{
+      if(f.id && f.id.length!==17){
+        console.warn(`⚠️ Field ID ${f.name} has invalid length ${f.id.length}: ${f.id} (expected 17) - might be truncated cache`);
+      }
+      if(f.options?.choices){
+        f.options.choices.forEach(c=>{
+          if(c.id && c.id.length!==17){
+            console.warn(`⚠️ Choice ID for ${f.name} -> ${c.name} has invalid length ${c.id.length}: ${c.id} (expected 17)`);
+          }
+        });
       }
     });
-    if(allJemaahUmrahRecords && allJemaahUmrahRecords.length>0){ filterAndRenderJemaahGrid(); }
-  }catch(e){ console.error(e); buildFallbackFieldOptions(); }
+
+    // Build lookup
+    jemaahMetaFieldsByName = {};
+    jemaahFieldOptions = {};
+    jemaahTable.fields.forEach(field=>{
+      jemaahMetaFieldsByName[field.name] = field;
+      if(field.options?.choices){
+        jemaahFieldOptions[field.name] = field.options.choices.map(c=> ({ id: c.id, name: c.name, color: c.color }));
+      }
+    });
+    console.log('✅ Loaded', Object.keys(jemaahMetaFieldsByName).length, 'fields with real IDs');
+    console.log('Sample PAKEJ field:', jemaahMetaFieldsByName['PAKEJ'] ? { id: jemaahMetaFieldsByName['PAKEJ'].id, id_len: jemaahMetaFieldsByName['PAKEJ'].id.length, type: jemaahMetaFieldsByName['PAKEJ'].type, choices: jemaahMetaFieldsByName['PAKEJ'].options?.choices?.map(c=> ({id: c.id, id_len: c.id.length, name: c.name})) } : 'not found');
+    console.log('Sample INSURAN field:', jemaahMetaFieldsByName['INSURAN'] ? { id: jemaahMetaFieldsByName['INSURAN'].id, id_len: jemaahMetaFieldsByName['INSURAN'].id.length, type: jemaahMetaFieldsByName['INSURAN'].type, choices: jemaahMetaFieldsByName['INSURAN'].options?.choices?.map(c=> ({id: c.id, id_len: c.id.length, name: c.name})) } : 'not found');
+  }catch(e){
+    console.error('fetchJemaahMetaOptions error:', e);
+  }
 }
+
 function buildFallbackFieldOptions(){
   const fieldsToBuild = ['NATIONALITY','STATUS VISA','BOARD BASIS','INSURAN','PAKEJ'];
   fieldsToBuild.forEach(fieldName=>{
@@ -531,11 +557,12 @@ async function addNewOptionToField(fieldName, newOptionName){
 
     // Fetch fresh metadata untuk dapat id betul
     try{
-      const freshUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${jemaahMetaTableId}/fields/${fieldMeta.id}`;
+      const freshUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${jemaahMetaTableId}`;
       const freshRes = await fetch(freshUrl, { headers: { Authorization: `Bearer ${AIRTABLE_PAT}` } });
       if(freshRes.ok){
-        const fresh = await freshRes.json();
-        if(fresh.options?.choices){ fieldMeta = fresh; jemaahMetaFieldsByName[fieldName]=fresh; }
+        const tableData = await freshRes.json();
+        const fresh = (tableData.fields||[]).find(f=> f.id===fieldMeta.id || f.name===fieldName);
+        if(fresh && fresh.options?.choices){ fieldMeta = fresh; jemaahMetaFieldsByName[fieldName]=fresh; console.log('✅ Fresh from table:', fresh.options.choices.length); }
       }
     }catch(e){ console.warn('Fresh fetch failed', e); }
 
@@ -550,7 +577,7 @@ async function addNewOptionToField(fieldName, newOptionName){
 
     console.log('PATCH payload for', fieldName, JSON.stringify({ options: { choices: updatedChoices } }, null, 2));
 
-    const patchUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${jemaahMetaTableId}/fields/${fieldMeta.id}`;
+    const patchUrl = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${jemaahMetaTableId}`;
     const patchRes = await fetch(patchUrl, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' },
