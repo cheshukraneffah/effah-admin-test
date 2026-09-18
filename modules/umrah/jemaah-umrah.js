@@ -484,63 +484,27 @@ async function fetchEjenList(){
 }
 async function addNewOptionToField(fieldName, newOptionName){
   try{
-    if(!jemaahMetaTableId){ alert('Ralat: ID jadual meta belum dimuatkan. Sila muat semula halaman.'); return false; }
+    if(!jemaahMetaTableId){ alert('Meta table ID belum load'); return false; }
     const fieldMeta = jemaahMetaFieldsByName[fieldName];
-    if(!fieldMeta){ alert('Ralat: Medan ' + fieldName + ' tidak dijumpai dalam pangkalan data.'); return false; }
+    if(!fieldMeta){ alert('Field '+fieldName+' tak jumpa'); return false; }
     const existingChoices = (fieldMeta.options && fieldMeta.options.choices) ? fieldMeta.options.choices : [];
-    if(existingChoices.some(c=> c.name.toUpperCase() === newOptionName.toUpperCase())){ alert('Makluman: Pilihan tersebut telah wujud dalam senarai.'); return false; }
+    if(existingChoices.some(c=> c.name.toUpperCase() === newOptionName.toUpperCase())){ alert('Option sudah wujud'); return false; }
     const updatedChoices = [...existingChoices, { name: newOptionName }];
     const url = `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables/${jemaahMetaTableId}/fields/${fieldMeta.id}`;
     const res = await fetch(url, { method: 'PATCH', headers: { Authorization: `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ options: { ...fieldMeta.options, choices: updatedChoices } }) });
-    if(!res.ok){ const txt = await res.text(); alert('Gagal melaksanakan operasi: '+txt); return false; }
+    if(!res.ok){ const txt = await res.text(); alert('Gagal: '+txt); return false; }
     const updatedField = await res.json();
     jemaahMetaFieldsByName[fieldName] = updatedField;
     jemaahFieldOptions[fieldName] = updatedField.options.choices.map(c=>({ id: c.id, name: c.name, color: c.color }));
-    alert(`Pilihan '${newOptionName}' telah berjaya ditambahkan ke dalam medan ${fieldName}.`); 
-    if(typeof filterAndRenderJemaahGrid === 'function') filterAndRenderJemaahGrid(); 
-    return true;
-  }catch(e){ alert('Ralat telah berlaku: '+e.message); return false; }
+    alert(`Option '${newOptionName}' ditambah ke ${fieldName}`); filterAndRenderJemaahGrid(); return true;
+  }catch(e){ alert('Error: '+e.message); return false; }
 }
-function handleAddNewOption(fieldName, selectEl, modalDropdownId){
-  const newVal = prompt(`Sila masukkan pilihan baharu untuk ${fieldName}:`);
+function handleAddNewOption(fieldName, selectEl){
+  const newVal = prompt(`Tambah option baru untuk ${fieldName}:`);
   if(!newVal){ if(selectEl) selectEl.value = selectEl.getAttribute('data-prev')||''; return; }
   const trimmed = newVal.trim().toUpperCase();
   if(!trimmed) return;
-  addNewOptionToField(fieldName, trimmed).then(ok=>{ 
-    if(!ok) return;
-    if(selectEl){ 
-      setTimeout(()=>{ selectEl.value = trimmed; selectEl.dispatchEvent(new Event('change')); }, 500); 
-    }
-    // V62: Refresh modal multi-checkbox lists if adding from modal
-    if(modalDropdownId){
-        const options = jemaahFieldOptions[fieldName] || [];
-        if(modalDropdownId==='boardBasisDropdown'){
-            const list = document.getElementById('boardBasisList');
-            if(list){
-                list.innerHTML = options.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="board-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('');
-                document.querySelectorAll('.board-checkbox').forEach(cb=>{ cb.addEventListener('change', updateBoardBasisSelected); });
-            }
-        } else if(modalDropdownId==='insuranDropdown'){
-            const list = document.getElementById('insuranList');
-            if(list){
-                list.innerHTML = options.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="insuran-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('');
-                document.querySelectorAll('.insuran-checkbox').forEach(cb=>{ cb.addEventListener('change', updateInsuranSelected); });
-            }
-        }
-        // Auto-check the newly added option
-        setTimeout(()=>{
-            document.querySelectorAll(`.board-checkbox, .insuran-checkbox`).forEach(cb=>{
-                if(cb.value===trimmed) cb.checked=true;
-            });
-            updateBoardBasisSelected();
-            updateInsuranSelected();
-        }, 100);
-    }
-    // Refresh table if not in modal
-    if(typeof filterAndRenderJemaahGrid === 'function'){
-        setTimeout(()=> filterAndRenderJemaahGrid(), 600);
-    }
-  });
+  addNewOptionToField(fieldName, trimmed).then(ok=>{ if(ok && selectEl){ setTimeout(()=>{ selectEl.value = trimmed; selectEl.dispatchEvent(new Event('change')); }, 500); } });
 }
 function renderSingleSelectCell(recId, fieldName, currentValue){
   const options = jemaahFieldOptions[fieldName] || [];
@@ -2024,233 +1988,68 @@ function openAddJemaahModal() {
         return `<option value="${t.id}" ${selected}>${title}</option>`;
     }).join('');
 
-    function buildSelectWithAddNew(fieldName, placeholder, isMulti=false){
-        const options = jemaahFieldOptions[fieldName] || [];
-        let html = '';
-        if(!isMulti){
-            html += `<option value="">${placeholder}</option>`;
-            if(options.length>0){
-                options.forEach(opt=>{
-                    html += `<option value="${opt.name}">${opt.name}</option>`;
-                });
-            } else {
-                // Fallback hardcoded if Airtable not loaded yet
-                if(fieldName==='GENDER'){
-                    html += '<option value="MALE">MALE</option><option value="FEMALE">FEMALE</option>';
-                }
-            }
-            html += `<option value="__ADD_NEW__" style="font-weight:bold;color:#800020;">+ Add new option</option>`;
-        } else {
-            if(options.length>0){
-                options.forEach(opt=>{
-                    html += `<option value="${opt.name}">${opt.name}</option>`;
-                });
-            }
-        }
-        return html;
-    }
-
-    // Build ejen multi-select options with checkboxes
-    const ejenMultiHtml = (()=> {
-        let html = '';
-        if(ejenListCache && ejenListCache.length>0){
-            ejenListCache.forEach(e=>{
-                html += `<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${e.id}" class="ejen-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon focus:ring-brand-maroon"><span class="text-xs font-bold text-slate-700">${e.name}</span><span class="text-[10px] text-slate-400 ml-auto">${e.status||'AKTIF'}</span></label>`;
-            });
-        } else {
-            html = '<div class="p-3 text-xs text-slate-400">Tiada data ejen. Sila refresh.</div>';
-        }
-        return html;
-    })();
-
-    // Board Basis multi
-    const boardBasisOptions = jemaahFieldOptions['BOARD BASIS'] || [];
-    const boardBasisMultiHtml = boardBasisOptions.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="board-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('') || '<div class="p-3 text-xs text-slate-400">Tiada pilihan. Tambah baru.</div>';
-
-    // Insuran multi
-    const insuranOptions = jemaahFieldOptions['INSURAN'] || [];
-    const insuranMultiHtml = insuranOptions.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="insuran-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('') || '<div class="p-3 text-xs text-slate-400">Tiada pilihan. Tambah baru.</div>';
-
     container.innerHTML = `
-        <form id="addModalForm" class="space-y-3 max-h-[70vh] overflow-y-auto pr-2 scrollbar-thin">
+        <form id="addModalForm" class="space-y-4">
             
-            <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                <h4 class="font-bold text-[11px] text-slate-600 uppercase tracking-wider mb-3 flex items-center"><i class="fa-solid fa-user mr-1.5"></i> Maklumat Peribadi</h4>
-                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
-                    <label class="font-bold text-slate-500 uppercase text-[11px]">NAME *</label>
-                    <div class="sm:col-span-2">
-                        <input type="text" name="NAME" required placeholder="CONTOH: AHMAD BIN ABDULLAH" class="w-full p-2.5 font-bold text-sm text-slate-900 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none uppercase">
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
-                    <label class="font-bold text-slate-500 uppercase text-[11px]">IC NO.</label>
-                    <div class="sm:col-span-2">
-                        <input type="text" name="IC NO." placeholder="900101015555" class="w-full p-2.5 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
-                    <label class="font-bold text-slate-500 uppercase text-[11px]">GENDER</label>
-                    <div class="sm:col-span-2">
-                        <select name="GENDER" data-field="GENDER" onchange="if(this.value==='__ADD_NEW__'){ handleAddNewOption('GENDER', this); }" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
-                            ${buildSelectWithAddNew('GENDER', '-- Pilih Jantina --')}
-                        </select>
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
-                    <label class="font-bold text-slate-500 uppercase text-[11px]">DOB (FOREIGNER)</label>
-                    <div class="sm:col-span-2">
-                        <input type="date" name="DOB (FOREIGNER)" class="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
-                        <p class="text-[10px] text-slate-400 mt-1">Untuk jemaah warga asing sahaja</p>
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2">
-                    <label class="font-bold text-slate-500 uppercase text-[11px]">NATIONALITY</label>
-                    <div class="sm:col-span-2">
-                        <select name="NATIONALITY" data-field="NATIONALITY" onchange="if(this.value==='__ADD_NEW__'){ handleAddNewOption('NATIONALITY', this); }" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
-                            ${buildSelectWithAddNew('NATIONALITY', '-- Pilih Warganegara --')}
-                        </select>
-                    </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2">
+                <label class="font-bold text-slate-500 uppercase">NAME *</label>
+                <div class="sm:col-span-2">
+                    <input type="text" name="NAME" required placeholder="Contoh: AHMAD BIN ABDULLAH" class="w-full p-2.5 font-bold text-sm text-slate-900 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none uppercase">
                 </div>
             </div>
 
-            <div class="bg-sky-50/50 rounded-xl p-3 border border-sky-100">
-                <h4 class="font-bold text-[11px] text-sky-700 uppercase tracking-wider mb-3 flex items-center"><i class="fa-solid fa-passport mr-1.5"></i> Dokumen Perjalanan</h4>
-                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
-                    <label class="font-bold text-slate-500 uppercase text-[11px]">PASSPORT NO.</label>
-                    <div class="sm:col-span-2">
-                        <input type="text" name="PASSPORT NO." placeholder="A12345678" class="w-full p-2.5 font-mono font-bold uppercase border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
-                    <div>
-                        <label class="font-bold text-slate-500 uppercase text-[11px] block mb-1">DATE OF ISSUE</label>
-                        <input type="date" name="DATE OF ISSUE" class="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
-                    </div>
-                    <div>
-                        <label class="font-bold text-slate-500 uppercase text-[11px] block mb-1">DATE OF EXPIRE</label>
-                        <input type="date" name="DATE OF EXPIRE" class="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
-                    <label class="font-bold text-slate-500 uppercase text-[11px]">STATUS VISA</label>
-                    <div class="sm:col-span-2">
-                        <select name="STATUS VISA" data-field="STATUS VISA" onchange="if(this.value==='__ADD_NEW__'){ handleAddNewOption('STATUS VISA', this); }" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
-                            ${buildSelectWithAddNew('STATUS VISA', '-- Pilih Status Visa --')}
-                        </select>
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2">
-                    <label class="font-bold text-slate-500 uppercase text-[11px]">FIT TICKET</label>
-                    <div class="sm:col-span-2">
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" name="FIT TICKET" class="w-4 h-4 rounded border-slate-300 text-brand-maroon focus:ring-brand-maroon">
-                            <span class="text-xs font-bold text-slate-600">Tiket FIT</span>
-                        </label>
-                    </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 border-t border-slate-100 pt-3">
+                <label class="font-bold text-slate-500 uppercase">IC NO.</label>
+                <div class="sm:col-span-2">
+                    <input type="text" name="IC NO." placeholder="900101015555" class="w-full p-2.5 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
                 </div>
             </div>
 
-            <div class="bg-amber-50/50 rounded-xl p-3 border border-amber-100">
-                <h4 class="font-bold text-[11px] text-amber-700 uppercase tracking-wider mb-3 flex items-center"><i class="fa-solid fa-kaaba mr-1.5"></i> Maklumat Trip & Pakej</h4>
-                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
-                    <label class="font-bold text-slate-500 uppercase text-[11px]">TRIP</label>
-                    <div class="sm:col-span-2">
-                        <select name="TRIP" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
-                            <option value="">-- TBC / Tanpa Trip --</option>
-                            ${tripOptionsHtml}
-                        </select>
-                    </div>
-                </div>
-                
-                <div class="grid grid-cols-1 sm:grid-cols-3 items-start gap-2 mb-3">
-                    <label class="font-bold text-slate-500 uppercase text-[11px] pt-2">BOARD BASIS</label>
-                    <div class="sm:col-span-2">
-                        <div class="relative">
-                            <button type="button" onclick="toggleModalMultiDropdown('boardBasisDropdown')" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl bg-white text-left flex items-center justify-between hover:bg-slate-50">
-                                <span id="boardBasisLabel" class="text-xs text-slate-500">-- Pilih Board Basis --</span>
-                                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
-                            </button>
-                            <div id="boardBasisDropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-300 rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto">
-                                <div id="boardBasisList">
-                                    ${boardBasisMultiHtml}
-                                </div>
-                                <div class="p-2 border-t border-slate-100">
-                                    <button type="button" onclick="handleAddNewOption('BOARD BASIS', null, 'boardBasisDropdown')" class="text-[11px] font-bold text-brand-maroon hover:text-rose-900">+ Add option</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div id="boardBasisSelected" class="flex flex-wrap gap-1 mt-2"></div>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
-                    <label class="font-bold text-slate-500 uppercase text-[11px]">PAKEJ</label>
-                    <div class="sm:col-span-2">
-                        <select name="PAKEJ" data-field="PAKEJ" onchange="if(this.value==='__ADD_NEW__'){ handleAddNewOption('PAKEJ', this); }" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
-                            ${buildSelectWithAddNew('PAKEJ', '-- Pilih Pakej --')}
-                        </select>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-3 items-start gap-2 mb-3">
-                    <label class="font-bold text-slate-500 uppercase text-[11px] pt-2">INSURAN</label>
-                    <div class="sm:col-span-2">
-                        <div class="relative">
-                            <button type="button" onclick="toggleModalMultiDropdown('insuranDropdown')" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl bg-white text-left flex items-center justify-between hover:bg-slate-50">
-                                <span id="insuranLabel" class="text-xs text-slate-500">-- Pilih Insuran --</span>
-                                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
-                            </button>
-                            <div id="insuranDropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-300 rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto">
-                                <div id="insuranList">
-                                    ${insuranMultiHtml}
-                                </div>
-                                <div class="p-2 border-t border-slate-100">
-                                    <button type="button" onclick="handleAddNewOption('INSURAN', null, 'insuranDropdown')" class="text-[11px] font-bold text-brand-maroon hover:text-rose-900">+ Add option</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div id="insuranSelected" class="flex flex-wrap gap-1 mt-2"></div>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
-                    <div>
-                        <label class="font-bold text-slate-500 uppercase text-[11px] block mb-1">TRAIN</label>
-                        <label class="flex items-center gap-2 cursor-pointer border border-slate-300 rounded-xl p-2.5 bg-white hover:bg-slate-50">
-                            <input type="checkbox" name="TRAIN" class="w-4 h-4 rounded border-slate-300 text-brand-maroon focus:ring-brand-maroon">
-                            <span class="text-xs font-bold">Kereta Api</span>
-                        </label>
-                    </div>
-                    <div class="sm:col-span-1">
-                        <label class="font-bold text-slate-500 uppercase text-[11px] block mb-1">EJEN (Boleh pilih lebih satu)</label>
-                        <div class="relative">
-                            <button type="button" onclick="toggleModalMultiDropdown('ejenDropdown')" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl bg-white text-left flex items-center justify-between hover:bg-slate-50">
-                                <span id="ejenLabel" class="text-xs text-slate-500">-- Pilih Ejen --</span>
-                                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
-                            </button>
-                            <div id="ejenDropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-300 rounded-xl shadow-lg z-50 max-h-64 overflow-hidden flex flex-col">
-                                <div class="p-2 border-b border-slate-100">
-                                    <div class="relative">
-                                        <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400 text-[10px]"></i>
-                                        <input type="text" id="ejenSearchModal" onkeyup="filterEjenModal(this.value)" placeholder="Search ejen..." class="w-full text-xs pl-7 pr-3 py-1.5 border border-slate-300 rounded-lg bg-slate-50 focus:bg-white focus:outline-none">
-                                    </div>
-                                </div>
-                                <div id="ejenListModal" class="overflow-y-auto flex-1">
-                                    ${ejenMultiHtml}
-                                </div>
-                            </div>
-                        </div>
-                        <div id="ejenSelected" class="flex flex-wrap gap-1 mt-2"></div>
-                    </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 border-t border-slate-100 pt-3">
+                <label class="font-bold text-slate-500 uppercase">PASSPORT NO.</label>
+                <div class="sm:col-span-2">
+                    <input type="text" name="PASSPORT NO." placeholder="A12345678" class="w-full p-2.5 font-mono font-bold uppercase border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
                 </div>
             </div>
 
-            <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                <div class="grid grid-cols-1 sm:grid-cols-3 items-start gap-2">
-                    <label class="font-bold text-slate-500 uppercase text-[11px]">NOTES</label>
-                    <div class="sm:col-span-2">
-                        <textarea name="NOTES" rows="3" placeholder="Catatan tambahan..." class="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none text-sm"></textarea>
-                    </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 border-t border-slate-100 pt-3">
+                <label class="font-bold text-slate-500 uppercase">GENDER</label>
+                <div class="sm:col-span-2">
+                    <select name="GENDER" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+                        <option value="">-- Pilih --</option>
+                        <option value="MALE">MALE</option>
+                        <option value="FEMALE">FEMALE</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 border-t border-slate-100 pt-3">
+                <label class="font-bold text-slate-500 uppercase">STATUS VISA</label>
+                <div class="sm:col-span-2">
+                    <select name="STATUS VISA" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+                        <option value="">-- Pilih --</option>
+                        <option value="TOURIST">TOURIST</option>
+                        <option value="TOURIST (VALID)">TOURIST (VALID)</option>
+                        <option value="UMRAH">UMRAH</option>
+                        <option value="UMRAH (VALID)">UMRAH (VALID)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 border-t border-slate-100 pt-3">
+                <label class="font-bold text-slate-500 uppercase">TRIP</label>
+                <div class="sm:col-span-2">
+                    <select name="TRIP" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+                        <option value="">-- TBC / Tanpa Trip --</option>
+                        ${tripOptionsHtml}
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 border-t border-slate-100 pt-3">
+                <label class="font-bold text-slate-500 uppercase">NOTES</label>
+                <div class="sm:col-span-2">
+                    <textarea name="Notes" rows="2" class="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none"></textarea>
                 </div>
             </div>
 
@@ -2258,181 +2057,30 @@ function openAddJemaahModal() {
     `;
 
     if (modal) modal.classList.remove('hidden');
-
-    // Attach listeners for multi-select checkboxes
-    setTimeout(()=>{
-        document.querySelectorAll('.board-checkbox').forEach(cb=>{
-            cb.addEventListener('change', updateBoardBasisSelected);
-        });
-        document.querySelectorAll('.insuran-checkbox').forEach(cb=>{
-            cb.addEventListener('change', updateInsuranSelected);
-        });
-        document.querySelectorAll('.ejen-checkbox').forEach(cb=>{
-            cb.addEventListener('change', updateEjenSelected);
-        });
-    }, 100);
-}
-
-// Helper functions for modal multi-dropdowns
-function toggleModalMultiDropdown(dropdownId){
-    const dd = document.getElementById(dropdownId);
-    if(!dd) return;
-    // Close other dropdowns
-    ['boardBasisDropdown','insuranDropdown','ejenDropdown'].forEach(id=>{
-        if(id!==dropdownId){
-            const other = document.getElementById(id);
-            if(other) other.classList.add('hidden');
-        }
-    });
-    dd.classList.toggle('hidden');
-}
-
-function updateBoardBasisSelected(){
-    const checked = Array.from(document.querySelectorAll('.board-checkbox:checked')).map(cb=>cb.value);
-    const label = document.getElementById('boardBasisLabel');
-    const container = document.getElementById('boardBasisSelected');
-    if(label){
-        label.textContent = checked.length>0 ? checked.join(', ') : '-- Pilih Board Basis --';
-        label.className = checked.length>0 ? 'text-xs font-bold text-slate-900' : 'text-xs text-slate-500';
-    }
-    if(container){
-        container.innerHTML = checked.map(v=>`<span class="inline-flex items-center gap-1 bg-sky-100 text-sky-700 text-[10px] font-bold px-2 py-1 rounded-full">${v} <button type="button" onclick="uncheckBoardBasis('${v}')" class="ml-1 hover:text-sky-900">x</button></span>`).join('');
-    }
-}
-
-function uncheckBoardBasis(val){
-    document.querySelectorAll('.board-checkbox').forEach(cb=>{ if(cb.value===val) cb.checked=false; });
-    updateBoardBasisSelected();
-}
-
-function updateInsuranSelected(){
-    const checked = Array.from(document.querySelectorAll('.insuran-checkbox:checked')).map(cb=>cb.value);
-    const label = document.getElementById('insuranLabel');
-    const container = document.getElementById('insuranSelected');
-    if(label){
-        label.textContent = checked.length>0 ? checked.join(', ') : '-- Pilih Insuran --';
-        label.className = checked.length>0 ? 'text-xs font-bold text-slate-900' : 'text-xs text-slate-500';
-    }
-    if(container){
-        container.innerHTML = checked.map(v=>`<span class="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded-full">${v} <button type="button" onclick="uncheckInsuran('${v}')" class="ml-1 hover:text-emerald-900">x</button></span>`).join('');
-    }
-}
-
-function uncheckInsuran(val){
-    document.querySelectorAll('.insuran-checkbox').forEach(cb=>{ if(cb.value===val) cb.checked=false; });
-    updateInsuranSelected();
-}
-
-function updateEjenSelected(){
-    const checked = Array.from(document.querySelectorAll('.ejen-checkbox:checked'));
-    const label = document.getElementById('ejenLabel');
-    const container = document.getElementById('ejenSelected');
-    const names = checked.map(cb=>{
-        const labelEl = cb.parentElement.querySelector('span.font-bold');
-        return labelEl ? labelEl.textContent : cb.value;
-    });
-    if(label){
-        label.textContent = names.length>0 ? names.join(', ') : '-- Pilih Ejen --';
-        label.className = names.length>0 ? 'text-xs font-bold text-slate-900 truncate' : 'text-xs text-slate-500';
-    }
-    if(container){
-        container.innerHTML = checked.map(cb=>{
-            const labelEl = cb.parentElement.querySelector('span.font-bold');
-            const name = labelEl ? labelEl.textContent : cb.value;
-            return `<span class="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-1 rounded-full">${name} <button type="button" onclick="uncheckEjen('${cb.value}')" class="ml-1 hover:text-amber-900">x</button></span>`;
-        }).join('');
-    }
-}
-
-function uncheckEjen(val){
-    document.querySelectorAll('.ejen-checkbox').forEach(cb=>{ if(cb.value===val) cb.checked=false; });
-    updateEjenSelected();
-}
-
-function filterEjenModal(query){
-    const q = query.toLowerCase();
-    document.querySelectorAll('#ejenListModal label').forEach(lbl=>{
-        const text = lbl.textContent.toLowerCase();
-        if(text.includes(q)) lbl.classList.remove('hidden');
-        else lbl.classList.add('hidden');
-    });
-}
-  if (modal) modal.classList.remove('hidden');
 }
 
 async function createNewJemaahFromModal() {
     const form = document.getElementById('addModalForm');
     if (!form) return;
 
-    const nameEl = form.querySelector('[name="NAME"]');
-    const nameVal = nameEl ? nameEl.value.trim() : '';
+    const formData = new FormData(form);
+    const nameVal = formData.get('NAME');
+
     if (!nameVal) {
-        alert("Maklumat Tidak Lengkap: Sila masukkan nama jemaah. Medan Nama adalah wajib diisi.");
+        alert("Sila masukkan NAMA Jemaah!");
         return;
     }
 
     let payloadFields = {};
-    
-    // NAME and PASSPORT uppercase
-    payloadFields['NAME'] = nameVal.toUpperCase();
-    
-    const icEl = form.querySelector('[name="IC NO."]');
-    if(icEl && icEl.value.trim()) payloadFields['IC NO.'] = icEl.value.trim();
-    
-    const passportEl = form.querySelector('[name="PASSPORT NO."]');
-    if(passportEl && passportEl.value.trim()) payloadFields['PASSPORT NO.'] = passportEl.value.trim().toUpperCase();
-    
-    // Single selects with Add new option handling
-    const singleFields = ['GENDER', 'NATIONALITY', 'STATUS VISA', 'PAKEJ'];
-    singleFields.forEach(fn=>{
-        const el = form.querySelector(`[name="${fn}"]`);
-        if(el && el.value && el.value!=='__ADD_NEW__' && el.value!==''){
-            payloadFields[fn] = el.value;
+    formData.forEach((val, key) => {
+        if (key === 'NAME' || key === 'PASSPORT NO.') {
+            payloadFields[key] = val ? val.toUpperCase().trim() : null;
+        } else if (key === 'TRIP') {
+            payloadFields[key] = val ? [val] : null;
+        } else {
+            payloadFields[key] = val === '' ? null : val;
         }
     });
-    
-    // Date fields
-    ['DOB (FOREIGNER)', 'DATE OF ISSUE', 'DATE OF EXPIRE'].forEach(fn=>{
-        const el = form.querySelector(`[name="${fn}"]`);
-        if(el && el.value) payloadFields[fn] = el.value;
-    });
-    
-    // Multi-select via checkboxes - BOARD BASIS
-    const boardChecked = Array.from(document.querySelectorAll('.board-checkbox:checked')).map(cb=>cb.value).filter(v=>v);
-    if(boardChecked.length>0){
-        payloadFields['BOARD BASIS'] = boardChecked;
-    }
-    
-    // Multi-select via checkboxes - INSURAN
-    const insuranChecked = Array.from(document.querySelectorAll('.insuran-checkbox:checked')).map(cb=>cb.value).filter(v=>v);
-    if(insuranChecked.length>0){
-        payloadFields['INSURAN'] = insuranChecked;
-    }
-    
-    // Checkboxes
-    const fitEl = form.querySelector('[name="FIT TICKET"]');
-    if(fitEl) payloadFields['FIT TICKET'] = fitEl.checked;
-    
-    const trainEl = form.querySelector('[name="TRAIN"]');
-    if(trainEl) payloadFields['TRAIN'] = trainEl.checked;
-    
-    // TRIP - single link
-    const tripEl = form.querySelector('[name="TRIP"]');
-    if(tripEl && tripEl.value){
-        payloadFields['TRIP'] = [tripEl.value];
-    }
-    
-    // EJEN - multi link (now supports multiple)
-    const ejenChecked = Array.from(document.querySelectorAll('.ejen-checkbox:checked')).map(cb=>cb.value).filter(v=>v);
-    if(ejenChecked.length>0){
-        payloadFields['EJEN'] = ejenChecked;
-    }
-    
-    // NOTES
-    const notesEl = form.querySelector('[name="NOTES"]');
-    if(notesEl && notesEl.value.trim()){
-        payloadFields['NOTES'] = notesEl.value.trim();
-    }
 
     const saveBtn = document.getElementById('modalSaveBtn');
     if (saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Menambah...';
@@ -2453,15 +2101,11 @@ async function createNewJemaahFromModal() {
             allJemaahUmrahRecords.unshift(newRecord);
             filterAndRenderJemaahGrid();
             closeExpandModal();
-            console.log('Berjaya menambah jemaah baharu:', newRecord.id);
         } else {
-            const errText = await response.text();
-            console.error('Gagal menambah jemaah:', errText);
-            alert("Gagal menambah jemaah baharu. Sila pastikan semua maklumat wajib telah diisi dengan betul dan cuba semula. Ralat: " + errText.substring(0,300));
+            alert("Gagal menambah jemaah baharu.");
         }
     } catch (e) {
-        console.error("Ralat semasa menambah jemaah:", e);
-        alert("Ralat sistem semasa menambah jemaah baharu: " + e.message + ". Sila periksa sambungan internet dan cuba semula.");
+        console.error("Error creating jemaah:", e);
     } finally {
         if (saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-plus mr-1"></i> Tambah Jemaah';
     }
