@@ -552,7 +552,9 @@ async function fetchEjenList(){
     ejenListCache = records.map(r=>({ id: r.id, name: r.fields['NAMA EJEN'] || r.fields['NAMA'] || r.fields['NAME'] || 'Unknown', status: r.fields['STATUS']||'', noTelefon: r.fields['NO TELEFON']||'', raw: r }));
   }catch(e){ console.error(e); }
 }
-async function addNewOptionToField(fieldName, newOptionName){
+async function addNewOptionToField(fieldName, newOptionName, triggerElement=null, recordId=null){
+  let loadingBtn = null;
+  let originalBtnHTML = '';
   try{
     const FULL_BASE_ID = 'appSsn4JyQD4DnYu0';
     let base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id')||FULL_BASE_ID;
@@ -560,27 +562,41 @@ async function addNewOptionToField(fieldName, newOptionName){
     const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
     if(!base||!pat){ alert('Konfigurasi Airtable tidak ditemui'); return false; }
 
-    console.log(`\n=== V80 addNewOptionToField ${fieldName} -> ${newOptionName} ===`);
-    console.log('Base:', base, 'len', base.length, 'PAT len', pat?.length);
+    // Show loading spinner in dropdown/button if triggerElement provided
+    if(triggerElement){
+      loadingBtn = triggerElement;
+      originalBtnHTML = loadingBtn.innerHTML;
+      loadingBtn.disabled = true;
+      loadingBtn.innerHTML = '<span class="inline-flex items-center gap-1"><svg class="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Menambah...</span>';
+      loadingBtn.classList.add('opacity-70','cursor-wait');
+    } else {
+      // Try to find the + Add new option button in DOM
+      const addBtns = document.querySelectorAll('[data-field-add="'+fieldName+'"], button:has(+ Add new), .add-new-option-btn');
+      if(addBtns.length>0){
+        loadingBtn = addBtns[addBtns.length-1];
+        originalBtnHTML = loadingBtn.innerHTML;
+        loadingBtn.disabled = true;
+        loadingBtn.innerHTML = '<span class="inline-flex items-center gap-1"><svg class="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Menambah...</span>';
+      }
+    }
 
-    // Force fresh fetch
+    console.log(`\n=== V81 addNewOptionToField ${fieldName} -> ${newOptionName} ===`);
+
     _jemaahMetaCache = null;
     await fetchJemaahMetaOptionsFromMeta();
     if(!_jemaahMetaCache){
+      if(loadingBtn){ loadingBtn.innerHTML = originalBtnHTML; loadingBtn.disabled = false; loadingBtn.classList.remove('opacity-70','cursor-wait'); }
       alert('Tidak dapat mencapai metadata Airtable.');
       return false;
     }
     const tableId = _jemaahMetaCache.id;
     const fields = _jemaahMetaCache.fields||[];
-    console.log('Table:', _jemaahMetaCache.name, 'id', tableId, 'fields', fields.length);
-    console.log('Available fields:', fields.map(f=> `${f.name}(${f.type})`).join(', '));
-
     const targetField = fields.find(f=> (f.name||'').toUpperCase()===fieldName.toUpperCase());
     if(!targetField){
-      alert(`Medan ${fieldName} tidak ditemui. Available: ${fields.map(f=> f.name).join(', ')}`);
+      if(loadingBtn){ loadingBtn.innerHTML = originalBtnHTML; loadingBtn.disabled = false; }
+      alert(`Medan ${fieldName} tidak ditemui.`);
       return false;
     }
-    console.log(`Target field ${fieldName}:`, { id: targetField.id, id_len: targetField.id.length, type: targetField.type, choices_len: targetField.options?.choices?.length||0, choices: (targetField.options?.choices||[]).map(c=> ({id: c.id, len: c.id?.length, name: c.name})) });
 
     if(targetField.type!=='singleSelect' && targetField.type!=='multipleSelects'){
       if(targetField.type==='multipleRecordLinks' || targetField.type==='singleRecordLink' || fieldName==='EJEN' || fieldName==='TRIP'){
@@ -589,28 +605,32 @@ async function addNewOptionToField(fieldName, newOptionName){
         try{
           const url = `https://api.airtable.com/v0/${base}/${encodeURIComponent(linkedTable)}`;
           const res = await fetch(url, { method:'POST', headers:{ Authorization: `Bearer ${pat}`, 'Content-Type':'application/json' }, body: JSON.stringify({ fields: { [linkedField]: newOptionName } }) });
-          if(!res.ok){ const t=await res.text(); alert('Gagal tambah di '+linkedTable+': '+t.substring(0,300)); return false; }
-          alert(`'${newOptionName}' berjaya ditambah ke ${linkedTable}.`);
+          if(loadingBtn){ loadingBtn.innerHTML = originalBtnHTML; loadingBtn.disabled = false; loadingBtn.classList.remove('opacity-70','cursor-wait'); }
+          if(!res.ok){ const t=await res.text(); alert('Gagal tambah di '+linkedTable); return false; }
           await fetchJemaahMetaOptionsFromMeta();
           if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+          // Simple alert
+          alert(`'${newOptionName}' berjaya ditambahkan.`);
           return true;
-        }catch(e){ alert('Ralat linked: '+e.message); return false; }
+        }catch(e){ 
+          if(loadingBtn){ loadingBtn.innerHTML = originalBtnHTML; loadingBtn.disabled = false; }
+          alert('Ralat: '+e.message); return false; 
+        }
       }
-      alert(`Medan ${fieldName} bukan jenis pilihan (type: ${targetField.type}).`);
+      if(loadingBtn){ loadingBtn.innerHTML = originalBtnHTML; loadingBtn.disabled = false; }
+      alert(`Medan ${fieldName} bukan jenis pilihan.`);
       return false;
     }
 
     const existingChoices = (targetField.options && targetField.options.choices) ? targetField.options.choices : [];
-    console.log(`Existing choices for ${fieldName}:`, existingChoices.length, existingChoices.map(c=> `${c.name}(${c.id?.length})`));
-
     if(existingChoices.some(c=> (c.name||'').toUpperCase()===newOptionName.toUpperCase())){
-      alert(`${newOptionName} telah wujud di dalam Airtable.`);
+      if(loadingBtn){ loadingBtn.innerHTML = originalBtnHTML; loadingBtn.disabled = false; loadingBtn.classList.remove('opacity-70','cursor-wait'); }
+      alert(`'${newOptionName}' telah wujud.`);
       return false;
     }
 
-    // V80 STRATEGY: Try typecast FIRST (like rooming.js fallback but as primary)
-    // This auto-creates option if field setting "Allow adding new options" is ON
-    console.log('=== Trying typecast:true FIRST (primary method) ===');
+    // Try typecast FIRST
+    console.log('Trying typecast:true...');
     let typecastSuccess = false;
     let allRecords = [];
     try{
@@ -619,27 +639,22 @@ async function addNewOptionToField(fieldName, newOptionName){
       if(allRecords.length===0 && window.allJemaahUmrahRecords) allRecords = window.allJemaahUmrahRecords;
     }catch{}
     
-    console.log('Records available for typecast:', allRecords.length);
     if(allRecords.length>0){
       const first = allRecords[0];
       const isMulti = targetField.type==='multipleSelects';
       const originalVal = first.fields[fieldName];
-      console.log('First record:', first.id, 'original', originalVal);
       try{
         const typecastPayload = isMulti ? [newOptionName] : newOptionName;
         const url = `https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${first.id}`;
-        console.log('Typecast PATCH url:', url, 'payload:', typecastPayload);
         const typecastRes = await fetch(url, {
           method:'PATCH',
           headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
           body: JSON.stringify({fields:{[fieldName]: typecastPayload}, typecast:true})
         });
         const typecastText = await typecastRes.text();
-        console.log('Typecast response:', typecastRes.status, typecastText.substring(0,800));
+        console.log('Typecast response:', typecastRes.status);
         if(typecastRes.ok){
-          console.log('✅ Typecast SUCCESS - option should be auto-created');
           typecastSuccess = true;
-          // Revert after 1 sec
           setTimeout(async ()=>{
             try{
               await fetch(url, {
@@ -647,72 +662,120 @@ async function addNewOptionToField(fieldName, newOptionName){
                 headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
                 body: JSON.stringify({fields:{[fieldName]: originalVal||''}, typecast:true})
               });
-              console.log('Reverted first record');
-            }catch(e){ console.warn('Revert failed', e); }
+            }catch(e){}
           }, 1000);
-        } else {
-          console.warn('Typecast failed:', typecastText);
-          // If typecast fails due to permissions, try meta
         }
       }catch(e){ console.warn('Typecast exception', e); }
     }
 
     if(typecastSuccess){
-      console.log('=== Typecast success, refreshing meta ===');
-      // Wait a bit for Airtable to create option
-      await new Promise(r=> setTimeout(r, 1500));
+      await new Promise(r=> setTimeout(r, 1200));
       await fetchJemaahMetaOptionsFromMeta();
-      try{ if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid(); }catch{}
-      alert(`'${newOptionName}' telah berjaya ditambahkan ke ${fieldName} via typecast (auto-create).`);
+      
+      // Auto-select new option
+      try{
+        // If recordId provided, update that specific record
+        if(recordId){
+          const isMulti = targetField.type==='multipleSelects';
+          const rec = allRecords.find(r=> r.id===recordId);
+          if(rec){
+            if(isMulti){
+              const existing = rec.fields[fieldName];
+              rec.fields[fieldName] = Array.isArray(existing) && existing.length>0 ? [...new Set([...existing, newOptionName])] : [newOptionName];
+            } else {
+              rec.fields[fieldName] = newOptionName;
+            }
+            // Persist to Airtable
+            try{
+              await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${recordId}`, {
+                method:'PATCH',
+                headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+                body: JSON.stringify({fields:{[fieldName]: rec.fields[fieldName]}, typecast:true})
+              });
+            }catch{}
+          }
+        }
+        if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+        // Also try to update select element directly if exists
+        const selects = document.querySelectorAll(`select[data-field="${fieldName}"], [data-field-select="${fieldName}"]`);
+        selects.forEach(sel=>{
+          if(sel.tagName==='SELECT'){
+            // Add new option if not exists
+            if(!Array.from(sel.options).some(o=> o.value.toUpperCase()===newOptionName.toUpperCase())){
+              const opt = document.createElement('option');
+              opt.value = newOptionName;
+              opt.textContent = newOptionName;
+              sel.appendChild(opt);
+            }
+            // Auto-select
+            if(targetField.type==='singleSelect'){
+              sel.value = newOptionName;
+            } else {
+              // For multi-select, add to selected
+              const values = Array.from(sel.selectedOptions).map(o=> o.value);
+              if(!values.includes(newOptionName)){
+                Array.from(sel.options).forEach(o=> { if(o.value===newOptionName) o.selected = true; });
+              }
+            }
+            sel.dispatchEvent(new Event('change', {bubbles:true}));
+          }
+        });
+      }catch(e){ console.warn('Auto-select failed', e); }
+
+      if(loadingBtn){ loadingBtn.innerHTML = originalBtnHTML; loadingBtn.disabled = false; loadingBtn.classList.remove('opacity-70','cursor-wait'); }
+      // Simple success alert - no typecast explanation
+      alert(`'${newOptionName}' berjaya ditambahkan.`);
       return true;
     }
 
-    // If typecast failed, try meta PATCH as fallback (with real IDs)
-    console.log('=== Typecast failed, trying meta PATCH fallback ===');
-    // Filter out truncated IDs - only keep real 17-char IDs
+    // Fallback meta PATCH
     const realChoices = existingChoices.filter(c=> c.id && c.id.length===17);
-    const truncatedChoices = existingChoices.filter(c=> c.id && c.id.length!==17);
-    if(truncatedChoices.length>0){
-      console.warn(`⚠️ Found ${truncatedChoices.length} truncated IDs, ignoring them for meta PATCH:`, truncatedChoices.map(c=> c.id));
-    }
     const choicesWithId = realChoices.map(c=> ({id: c.id, name: c.name}));
-    // If existing is empty or all truncated, just send new choice only
     const newChoices = choicesWithId.length>0 ? [...choicesWithId, {name: newOptionName}] : [{name: newOptionName}];
-    
-    console.log('Meta PATCH payload (real IDs only):', JSON.stringify({ options: { choices: newChoices } }, null, 2));
     
     try{
       const metaUrl = `https://api.airtable.com/v0/meta/bases/${base}/tables/${tableId}/fields/${targetField.id}`;
-      console.log('Meta PATCH url:', metaUrl);
       const metaRes = await fetch(metaUrl, {
         method:'PATCH',
         headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
         body: JSON.stringify({options:{choices: newChoices}})
       });
       const metaText = await metaRes.text();
-      console.log('Meta response:', metaRes.status, metaText.substring(0,800));
+      if(loadingBtn){ loadingBtn.innerHTML = originalBtnHTML; loadingBtn.disabled = false; loadingBtn.classList.remove('opacity-70','cursor-wait'); }
       if(metaRes.ok){
-        console.log('✅ Meta PATCH success');
         await fetchJemaahMetaOptionsFromMeta();
         try{ if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid(); }catch{}
-        alert(`'${newOptionName}' telah berjaya ditambahkan ke ${fieldName} via meta API.`);
+        alert(`'${newOptionName}' berjaya ditambahkan.`);
         return true;
       } else {
-        console.error('Meta PATCH failed:', metaText);
-        alert(`Gagal menambah via typecast dan meta API.\n\nTypecast gagal - mungkin setting "Allow adding new options" OFF di Airtable field ${fieldName}.\n\nMeta error: ${metaText.substring(0,400)}\n\nSila tambah manual di Airtable: Buka DATA JEMAAH UMRAH > Customize field ${fieldName} > Add option "${newOptionName}"`);
+        alert(`Gagal menambah '${newOptionName}'. Sila tambah manual di Airtable.`);
         return false;
       }
     }catch(e){
-      console.error('Meta exception', e);
+      if(loadingBtn){ loadingBtn.innerHTML = originalBtnHTML; loadingBtn.disabled = false; loadingBtn.classList.remove('opacity-70','cursor-wait'); }
       alert(`Gagal: ${e.message}`);
       return false;
     }
   }catch(e){
-    console.error('addNewOptionToField V80 error', e);
-    alert(`Gagal menambah "${newOptionName}": ${e.message}`);
+    console.error('addNewOptionToField V81 error', e);
+    try{ if(loadingBtn){ loadingBtn.innerHTML = originalBtnHTML; loadingBtn.disabled = false; } }catch{}
+    alert(`Gagal menambah "${newOptionName}".`);
     return false;
   }
 }
+
+// Helper to handle + Add new option click with loading and auto-select
+function handleAddNewOptionClick(fieldName, recordId=null, btnElement=null){
+  const raw = prompt(`Tambah pilihan baharu untuk ${fieldName}:`);
+  if(!raw) return;
+  const trimmed = raw.trim().toUpperCase();
+  if(!trimmed) return;
+  // Call with button element for loading
+  addNewOptionToField(fieldName, trimmed, btnElement, recordId);
+}
+
+
+
 
 
 
@@ -772,7 +835,7 @@ function renderSingleSelectCell(recId, fieldName, currentValue){
     if(safeCurrent){ optsHtml += `<option value="${safeCurrent}" selected>${safeCurrent}</option>`; }
   }
   optsHtml += `<option value="__ADD_NEW__" style="font-weight:bold; color:#800020;">+ Add new option</option>`;
-  return `<select data-prev="${safeCurrent}" onchange="if(this.value==='__ADD_NEW__'){ handleAddNewOption('${fieldName}', this); } else { updateJemaahField('${recId}', '${fieldName}', this.value); }" class="w-full text-xs p-1.5 font-bold rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent">${optsHtml}</select>`;
+  return `<select data-prev="${safeCurrent}" data-rec-id="${recId}" onchange="if(this.value==='__ADD_NEW__'){ handleAddNewOption('${fieldName}', this); } else { updateJemaahField('${recId}', '${fieldName}', this.value); }" class="w-full text-xs p-1.5 font-bold rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent">${optsHtml}</select>`;
 }
 function renderMultiSelectCell(recId, fieldName, currentValues){
   const options = jemaahFieldOptions[fieldName] || [];
@@ -785,7 +848,7 @@ function renderMultiSelectCell(recId, fieldName, currentValues){
   if(options.length>0){
     options.forEach(opt=>{ const isSelected = currentArr.includes(opt.name); optsHtml += `<label class="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 cursor-pointer text-xs"><input type="checkbox" ${isSelected?'checked':''} onchange="toggleMultiSelectValue('${recId}', '${fieldName}', '${opt.name.replace(/'/g, "\'")}', this.checked)" class="w-3.5 h-3.5 rounded border-slate-300 text-brand-maroon"> <span>${opt.name}</span></label>`; });
   }
-  optsHtml += `<div class="border-t border-slate-200 mt-1 pt-1"><button onclick="handleAddNewMultiOption('${fieldName}')" class="w-full text-left px-2 py-1 text-[11px] font-bold text-brand-maroon hover:bg-rose-50 rounded">+ Add option</button></div>`;
+  optsHtml += `<div class="border-t border-slate-200 mt-1 pt-1"><button onclick="handleAddNewMultiOption('${fieldName}', this, '${recId}')" class="w-full text-left px-2 py-1 text-[11px] font-bold text-brand-maroon hover:bg-rose-50 rounded flex items-center gap-1"><span>+ Add new option</span></button></div>`;
   const dropdownId = `ms-dropdown-${recId}-${fieldName.replace(/\s/g,'')}`;
   return `<div class="relative cell-dropdown-wrapper"><div class="flex flex-wrap items-center gap-1 p-1 min-h-[28px] border border-transparent hover:border-slate-300 rounded-lg cursor-pointer" onclick="event.stopPropagation(); toggleCellDropdown('${dropdownId}')">${pillsHtml}<i class="fa-solid fa-chevron-down text-[10px] text-slate-400 ml-auto"></i></div><div id="${dropdownId}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-200 z-50 max-h-64 overflow-y-auto p-1">${optsHtml}</div></div>`;
 }
@@ -797,7 +860,59 @@ function toggleMultiSelectValue(recId, fieldName, value, isChecked){
   updateJemaahField(recId, fieldName, arr); rec.fields[fieldName] = arr; filterAndRenderJemaahGrid();
 }
 function removeMultiSelectValue(recId, fieldName, value){ toggleMultiSelectValue(recId, fieldName, value, false); }
-function handleAddNewMultiOption(fieldName){ const newVal = prompt(`Tambah option baru untuk ${fieldName}:`); if(!newVal) return; const trimmed = newVal.trim().toUpperCase(); if(!trimmed) return; addNewOptionToField(fieldName, trimmed); }
+function handleAddNewMultiOption(fieldName, btnEl=null, recId=null){
+  const newVal = prompt(`Tambah pilihan baharu untuk ${fieldName}:`);
+  if(!newVal) return; 
+  const trimmed = newVal.trim().toUpperCase(); 
+  if(!trimmed) return;
+  
+  // Show loading in button if provided
+  let originalBtnHTML = '';
+  let loadingBtn = btnEl;
+  if(!loadingBtn){
+    // Try to find the button that was clicked - use event target if available
+    try{
+      const active = document.activeElement;
+      if(active && active.textContent && active.textContent.includes('Add option')){
+        loadingBtn = active;
+      }
+    }catch{}
+  }
+  if(loadingBtn){
+    originalBtnHTML = loadingBtn.innerHTML;
+    loadingBtn.disabled = true;
+    loadingBtn.innerHTML = '<span class="inline-flex items-center gap-1"><svg class="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Menambah...</span>';
+    loadingBtn.classList.add('opacity-70');
+  }
+  
+  // Try to get recId from context
+  if(!recId){
+    try{
+      const wrapper = loadingBtn?.closest('.cell-dropdown-wrapper');
+      if(wrapper){
+        const idAttr = wrapper.closest('tr')?.getAttribute('data-rec-id');
+        if(idAttr) recId = idAttr;
+      }
+    }catch{}
+  }
+  
+  addNewOptionToField(fieldName, trimmed, loadingBtn, recId).then(ok=>{
+    if(loadingBtn){
+      loadingBtn.innerHTML = originalBtnHTML;
+      loadingBtn.disabled = false;
+      loadingBtn.classList.remove('opacity-70');
+    }
+    if(ok && recId){
+      // Auto-select for multi-select - add to existing
+      try{
+        const isBoard = fieldName==='BOARD BASIS';
+        const isInsuran = fieldName==='INSURAN';
+        // The auto-select is handled inside addNewOptionToField, but also trigger grid refresh
+        setTimeout(()=>{ if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid(); }, 500);
+      }catch{}
+    }
+  });
+}
 function renderEjenCell(recId, currentEjenIds){
   const ids = Array.isArray(currentEjenIds) ? currentEjenIds : (currentEjenIds ? [currentEjenIds] : []);
   let pillsHtml = '';
