@@ -2900,13 +2900,25 @@ function openAddJemaahModal() {
         return html;
     })();
 
-    // V89: Board Basis multi - filter blank
+    // V91: Board Basis multi - filter blank + Add option
     const boardBasisOptions = (jemaahFieldOptions['BOARD BASIS'] || []).filter(o=> o.name && o.name.trim()!=='');
-    const boardBasisMultiHtml = boardBasisOptions.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="board-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('') || '<div class="p-3 text-xs text-slate-400">Tiada pilihan. Tambah baru.</div>';
+    let boardBasisMultiHtml = '';
+    if(boardBasisOptions.length>0){
+      boardBasisMultiHtml = boardBasisOptions.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="board-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('');
+    } else {
+      boardBasisMultiHtml = '<div class="p-3 text-xs text-slate-400">Tiada pilihan. Tambah baru.</div>';
+    }
+    boardBasisMultiHtml += `<div class="border-t border-slate-200 mt-1"><button type="button" onclick="handleAddNewMultiOption('BOARD BASIS', this)" class="w-full text-left px-3 py-2 text-[11px] font-bold text-brand-maroon hover:bg-rose-50">+ Add option</button></div>`;
 
-    // V89: Insuran multi - filter blank
+    // V91: Insuran multi - filter blank + Add option
     const insuranOptions = (jemaahFieldOptions['INSURAN'] || []).filter(o=> o.name && o.name.trim()!=='');
-    const insuranMultiHtml = insuranOptions.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="insuran-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('') || '<div class="p-3 text-xs text-slate-400">Tiada pilihan. Tambah baru.</div>';
+    let insuranMultiHtml = '';
+    if(insuranOptions.length>0){
+      insuranMultiHtml = insuranOptions.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="insuran-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('');
+    } else {
+      insuranMultiHtml = '<div class="p-3 text-xs text-slate-400">Tiada pilihan. Tambah baru.</div>';
+    }
+    insuranMultiHtml += `<div class="border-t border-slate-200 mt-1"><button type="button" onclick="handleAddNewMultiOption('INSURAN', this)" class="w-full text-left px-3 py-2 text-[11px] font-bold text-brand-maroon hover:bg-rose-50">+ Add option</button></div>`;
 
     container.innerHTML = `
         <form id="addModalForm" class="space-y-3 max-h-[70vh] overflow-y-auto pr-2 scrollbar-thin">
@@ -2975,14 +2987,14 @@ function openAddJemaahModal() {
                 <div class="grid grid-cols-1 sm:grid-cols-3 items-start gap-2 mb-3">
                     <label class="font-bold text-slate-500 uppercase text-[11px] mt-2"><i class="fa-solid fa-file-image mr-1"></i> PASSPORT COPY</label>
                     <div class="sm:col-span-2">
-                        <div id="addModalDropzone-PASSPORT COPY" class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50 hover:bg-white hover:border-brand-maroon transition cursor-pointer group">
-                            <input type="file" id="addModalFileInput-PASSPORT COPY" accept="image/*,.pdf" class="hidden" multiple>
+                        <div id="addModalDropzone-PASSPORT_COPY" class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50 hover:bg-white hover:border-brand-maroon transition cursor-pointer group">
+                            <input type="file" id="addModalFileInput-PASSPORT_COPY" accept="image/*,.pdf" class="hidden" multiple>
                             <div class="flex flex-col items-center gap-2">
                                 <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-400 group-hover:text-brand-maroon"></i>
                                 <span class="text-[11px] font-bold text-slate-600">Drag & drop passport copy atau klik</span>
                                 <span class="text-[10px] text-slate-400">JPG, PNG, PDF max 10MB</span>
                             </div>
-                            <div id="addModalPreview-PASSPORT COPY" class="mt-3 flex flex-wrap gap-2 justify-center"></div>
+                            <div id="addModalPreview-PASSPORT_COPY" class="mt-3 flex flex-wrap gap-2 justify-center"></div>
                         </div>
                     </div>
                 </div>
@@ -3317,7 +3329,7 @@ async function createNewJemaahFromModal() {
             
             // V90: Handle PICTURE and PASSPORT COPY uploads if any
             const pictureDropzone = document.getElementById('addModalDropzone-PICTURE');
-            const passportDropzone = document.getElementById('addModalDropzone-PASSPORT COPY');
+            const passportDropzone = document.getElementById('addModalDropzone-PASSPORT_COPY');
             const hasPicture = pictureDropzone && pictureDropzone._files && pictureDropzone._files.length>0;
             const hasPassport = passportDropzone && passportDropzone._files && passportDropzone._files.length>0;
             
