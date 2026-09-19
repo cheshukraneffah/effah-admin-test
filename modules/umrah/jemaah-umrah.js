@@ -2964,11 +2964,11 @@ function openAddJemaahModal() {
                     <label class="font-bold text-slate-500 uppercase text-[11px] mt-2"><i class="fa-solid fa-image mr-1"></i> PICTURE</label>
                     <div class="sm:col-span-2">
                         <div id="addModalDropzone-PICTURE" class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50 hover:bg-white hover:border-brand-maroon transition cursor-pointer group">
-                            <input type="file" id="addModalFileInput-PICTURE" accept="image/*" class="hidden" multiple>
+                            <input type="file" id="addModalFileInput-PICTURE" accept="image/*,.pdf,application/pdf" class="hidden" multiple>
                             <div class="flex flex-col items-center gap-2">
                                 <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-400 group-hover:text-brand-maroon"></i>
-                                <span class="text-[11px] font-bold text-slate-600">Drag & drop gambar atau klik untuk pilih</span>
-                                <span class="text-[10px] text-slate-400">JPG, PNG max 5MB</span>
+                                <span class="text-[11px] font-bold text-slate-600">Drag & drop gambar/PDF atau klik untuk pilih</span>
+                                <span class="text-[10px] text-slate-400">JPG, PNG, PDF max 10MB</span>
                             </div>
                             <div id="addModalPreview-PICTURE" class="mt-3 flex flex-wrap gap-2 justify-center"></div>
                         </div>
@@ -3328,10 +3328,15 @@ async function createNewJemaahFromModal() {
             const newRecId = newRecord.id;
             
             // V90: Handle PICTURE and PASSPORT COPY uploads if any
-            const pictureDropzone = document.getElementById('addModalDropzone-PICTURE');
-            const passportDropzone = document.getElementById('addModalDropzone-PASSPORT_COPY');
-            const hasPicture = pictureDropzone && pictureDropzone._files && pictureDropzone._files.length>0;
-            const hasPassport = passportDropzone && passportDropzone._files && passportDropzone._files.length>0;
+            let pictureDropzone = document.getElementById('addModalDropzone-PICTURE');
+            let passportDropzone = document.getElementById('addModalDropzone-PASSPORT_COPY');
+            // Fallback to old IDs with space if needed
+            if(!passportDropzone) passportDropzone = document.getElementById('addModalDropzone-PASSPORT COPY');
+            // Also check for _files on dropzone
+            const picFiles = (pictureDropzone && pictureDropzone._files) ? pictureDropzone._files : [];
+            const passFiles = (passportDropzone && passportDropzone._files) ? passportDropzone._files : [];
+            const hasPicture = picFiles.length>0;
+            const hasPassport = passFiles.length>0;
             
             if(hasPicture || hasPassport){
               if(saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Uploading files...';
@@ -3348,7 +3353,7 @@ async function createNewJemaahFromModal() {
                   formData.append("upload_preset", uploadPreset);
                   const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, { method: "POST", body: formData });
                   const cloudData = await cloudRes.json();
-                  if(!cloudRes.ok || !cloudData.secure_url) throw new Error("Cloudinary upload failed");
+                  if(!cloudRes.ok || !cloudData.secure_url) throw new Error("Cloudinary upload failed: " + JSON.stringify(cloudData));
                   return { url: cloudData.secure_url, filename: file.name };
                 });
                 return await Promise.all(uploadPromises);
@@ -3358,12 +3363,12 @@ async function createNewJemaahFromModal() {
                 let attachmentsToUpdate = {};
                 
                 if(hasPicture){
-                  const picFiles = await uploadField('PICTURE', pictureDropzone._files);
-                  if(picFiles.length>0) attachmentsToUpdate['PICTURE'] = picFiles;
+                  const uploadedPicFiles = await uploadField('PICTURE', picFiles);
+                  if(uploadedPicFiles.length>0) attachmentsToUpdate['PICTURE'] = uploadedPicFiles;
                 }
                 if(hasPassport){
-                  const passFiles = await uploadField('PASSPORT COPY', passportDropzone._files);
-                  if(passFiles.length>0) attachmentsToUpdate['PASSPORT COPY'] = passFiles;
+                  const uploadedPassFiles = await uploadField('PASSPORT COPY', passFiles);
+                  if(uploadedPassFiles.length>0) attachmentsToUpdate['PASSPORT COPY'] = uploadedPassFiles;
                 }
                 
                 if(Object.keys(attachmentsToUpdate).length>0){
