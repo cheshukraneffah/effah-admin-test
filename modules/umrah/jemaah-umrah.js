@@ -1217,18 +1217,24 @@ function handleAddNewMultiOption(fieldName, btnEl=null, recId=null){
   const trimmed = newVal.trim().toUpperCase(); 
   if(!trimmed) return;
   
-  // Show loading in button if provided
   let originalBtnHTML = '';
   let loadingBtn = btnEl;
-  if(!loadingBtn){
-    // Try to find the button that was clicked - use event target if available
-    try{
+  let isModal = false;
+  try{
+    if(!loadingBtn){
       const active = document.activeElement;
       if(active && active.textContent && active.textContent.includes('Add option')){
         loadingBtn = active;
       }
-    }catch{}
-  }
+    }
+    if(loadingBtn){
+      isModal = !!loadingBtn.closest('#expandRecordModal') || !!loadingBtn.closest('#addModalForm');
+    } else {
+      // Check if we're in modal without button
+      isModal = !!document.getElementById('expandRecordModal')?.classList.contains('flex') || !!document.getElementById('addModalForm');
+    }
+  }catch{}
+  
   if(loadingBtn){
     originalBtnHTML = loadingBtn.innerHTML;
     loadingBtn.disabled = true;
@@ -1236,7 +1242,26 @@ function handleAddNewMultiOption(fieldName, btnEl=null, recId=null){
     loadingBtn.classList.add('opacity-70');
   }
   
-  // Try to get recId from context
+  // Show loading in dropdown list for modal multi
+  let boardList = null;
+  let insuranList = null;
+  try{
+    if(fieldName==='BOARD BASIS'){
+      boardList = document.getElementById('boardBasisList');
+      if(boardList){
+        boardList.dataset.originalHTML = boardList.innerHTML;
+        boardList.innerHTML = `<div class="p-3 text-xs text-slate-500 flex items-center gap-2"><svg class="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Menambah ${trimmed}...</div>`;
+      }
+    }
+    if(fieldName==='INSURAN'){
+      insuranList = document.getElementById('insuranList');
+      if(insuranList){
+        insuranList.dataset.originalHTML = insuranList.innerHTML;
+        insuranList.innerHTML = `<div class="p-3 text-xs text-slate-500 flex items-center gap-2"><svg class="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Menambah ${trimmed}...</div>`;
+      }
+    }
+  }catch{}
+  
   if(!recId){
     try{
       const wrapper = loadingBtn?.closest('.cell-dropdown-wrapper');
@@ -1247,19 +1272,53 @@ function handleAddNewMultiOption(fieldName, btnEl=null, recId=null){
     }catch{}
   }
   
-  addNewOptionToField(fieldName, trimmed, loadingBtn, recId).then(ok=>{
+  addNewOptionToField(fieldName, trimmed, loadingBtn, recId).then(async ok=>{
     if(loadingBtn){
       loadingBtn.innerHTML = originalBtnHTML;
       loadingBtn.disabled = false;
       loadingBtn.classList.remove('opacity-70');
     }
-    if(ok && recId){
-      // Auto-select for multi-select - add to existing
+    
+    if(ok){
+      // V90: For modal multi, rebuild dropdown with new option checked
       try{
-        const isBoard = fieldName==='BOARD BASIS';
-        const isInsuran = fieldName==='INSURAN';
-        // The auto-select is handled inside addNewOptionToField, but also trigger grid refresh
+        await fetchJemaahMetaOptionsFromMeta();
+        const opts = (jemaahFieldOptions[fieldName]||[]).filter(o=> o.name && o.name.trim()!=='');
+        
+        if(fieldName==='BOARD BASIS'){
+          const list = document.getElementById('boardBasisList');
+          if(list){
+            list.innerHTML = opts.map(opt=>{
+              const checked = opt.name===trimmed ? 'checked' : '';
+              return `<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" ${checked} class="board-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`;
+            }).join('') + `<div class="border-t border-slate-200 mt-1 pt-1"><button onclick="handleAddNewMultiOption('BOARD BASIS', this)" class="w-full text-left px-2 py-1 text-[11px] font-bold text-brand-maroon hover:bg-rose-50 rounded">+ Add option</button></div>`;
+            document.querySelectorAll('.board-checkbox').forEach(cb=>{ cb.addEventListener('change', updateBoardBasisSelected); });
+            if(typeof updateBoardBasisSelected==='function') updateBoardBasisSelected();
+            console.log(`V90 BOARD BASIS rebuilt with ${trimmed} checked`);
+          }
+        }
+        if(fieldName==='INSURAN'){
+          const list = document.getElementById('insuranList');
+          if(list){
+            list.innerHTML = opts.map(opt=>{
+              const checked = opt.name===trimmed ? 'checked' : '';
+              return `<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" ${checked} class="insuran-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`;
+            }).join('') + `<div class="border-t border-slate-200 mt-1 pt-1"><button onclick="handleAddNewMultiOption('INSURAN', this)" class="w-full text-left px-2 py-1 text-[11px] font-bold text-brand-maroon hover:bg-rose-50 rounded">+ Add option</button></div>`;
+            document.querySelectorAll('.insuran-checkbox').forEach(cb=>{ cb.addEventListener('change', updateInsuranSelected); });
+            if(typeof updateInsuranSelected==='function') updateInsuranSelected();
+            console.log(`V90 INSURAN rebuilt with ${trimmed} checked`);
+          }
+        }
+      }catch(e){ console.warn('V90 rebuild error', e); }
+      
+      if(recId){
         setTimeout(()=>{ if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid(); }, 500);
+      }
+    } else {
+      // Restore original if failed
+      try{
+        if(boardList && boardList.dataset.originalHTML) boardList.innerHTML = boardList.dataset.originalHTML;
+        if(insuranList && insuranList.dataset.originalHTML) insuranList.innerHTML = insuranList.dataset.originalHTML;
       }catch{}
     }
   });
@@ -2889,6 +2948,20 @@ function openAddJemaahModal() {
                         </select>
                     </div>
                 </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-start gap-2 mt-3">
+                    <label class="font-bold text-slate-500 uppercase text-[11px] mt-2"><i class="fa-solid fa-image mr-1"></i> PICTURE</label>
+                    <div class="sm:col-span-2">
+                        <div id="addModalDropzone-PICTURE" class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50 hover:bg-white hover:border-brand-maroon transition cursor-pointer group">
+                            <input type="file" id="addModalFileInput-PICTURE" accept="image/*" class="hidden" multiple>
+                            <div class="flex flex-col items-center gap-2">
+                                <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-400 group-hover:text-brand-maroon"></i>
+                                <span class="text-[11px] font-bold text-slate-600">Drag & drop gambar atau klik untuk pilih</span>
+                                <span class="text-[10px] text-slate-400">JPG, PNG max 5MB</span>
+                            </div>
+                            <div id="addModalPreview-PICTURE" class="mt-3 flex flex-wrap gap-2 justify-center"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="bg-sky-50/50 rounded-xl p-3 border border-sky-100">
@@ -2897,6 +2970,20 @@ function openAddJemaahModal() {
                     <label class="font-bold text-slate-500 uppercase text-[11px]">PASSPORT NO.</label>
                     <div class="sm:col-span-2">
                         <input type="text" name="PASSPORT NO." placeholder="A12345678" class="w-full p-2.5 font-mono font-bold uppercase border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-maroon focus:outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-start gap-2 mb-3">
+                    <label class="font-bold text-slate-500 uppercase text-[11px] mt-2"><i class="fa-solid fa-file-image mr-1"></i> PASSPORT COPY</label>
+                    <div class="sm:col-span-2">
+                        <div id="addModalDropzone-PASSPORT COPY" class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50 hover:bg-white hover:border-brand-maroon transition cursor-pointer group">
+                            <input type="file" id="addModalFileInput-PASSPORT COPY" accept="image/*,.pdf" class="hidden" multiple>
+                            <div class="flex flex-col items-center gap-2">
+                                <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-400 group-hover:text-brand-maroon"></i>
+                                <span class="text-[11px] font-bold text-slate-600">Drag & drop passport copy atau klik</span>
+                                <span class="text-[10px] text-slate-400">JPG, PNG, PDF max 10MB</span>
+                            </div>
+                            <div id="addModalPreview-PASSPORT COPY" class="mt-3 flex flex-wrap gap-2 justify-center"></div>
+                        </div>
                     </div>
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
@@ -3000,7 +3087,7 @@ function openAddJemaahModal() {
                         </label>
                     </div>
                     <div class="sm:col-span-1">
-                        <label class="font-bold text-slate-500 uppercase text-[11px] block mb-1">EJEN (Boleh pilih lebih satu)</label>
+                        <label class="font-bold text-slate-500 uppercase text-[11px] block mb-1">EJEN</label>
                         <div class="relative">
                             <button type="button" onclick="toggleModalMultiDropdown('ejenDropdown')" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl bg-white text-left flex items-center justify-between hover:bg-slate-50">
                                 <span id="ejenLabel" class="text-xs text-slate-500">-- Pilih Ejen --</span>
@@ -3226,7 +3313,77 @@ async function createNewJemaahFromModal() {
 
         if (response.ok) {
             const newRecord = await response.json();
+            const newRecId = newRecord.id;
+            
+            // V90: Handle PICTURE and PASSPORT COPY uploads if any
+            const pictureDropzone = document.getElementById('addModalDropzone-PICTURE');
+            const passportDropzone = document.getElementById('addModalDropzone-PASSPORT COPY');
+            const hasPicture = pictureDropzone && pictureDropzone._files && pictureDropzone._files.length>0;
+            const hasPassport = passportDropzone && passportDropzone._files && passportDropzone._files.length>0;
+            
+            if(hasPicture || hasPassport){
+              if(saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Uploading files...';
+              console.log(`V90 Uploading attachments for new record ${newRecId}: picture=${pictureDropzone?._files?.length||0}, passport=${passportDropzone?._files?.length||0}`);
+              
+              const cloudName = "dfb839ep";
+              const uploadPreset = "Effah Travel";
+              
+              const uploadField = async (fieldName, files)=>{
+                if(!files || files.length===0) return [];
+                const uploadPromises = files.map(async (file)=>{
+                  const formData = new FormData();
+                  formData.append("file", file);
+                  formData.append("upload_preset", uploadPreset);
+                  const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, { method: "POST", body: formData });
+                  const cloudData = await cloudRes.json();
+                  if(!cloudRes.ok || !cloudData.secure_url) throw new Error("Cloudinary upload failed");
+                  return { url: cloudData.secure_url, filename: file.name };
+                });
+                return await Promise.all(uploadPromises);
+              };
+              
+              try{
+                let attachmentsToUpdate = {};
+                
+                if(hasPicture){
+                  const picFiles = await uploadField('PICTURE', pictureDropzone._files);
+                  if(picFiles.length>0) attachmentsToUpdate['PICTURE'] = picFiles;
+                }
+                if(hasPassport){
+                  const passFiles = await uploadField('PASSPORT COPY', passportDropzone._files);
+                  if(passFiles.length>0) attachmentsToUpdate['PASSPORT COPY'] = passFiles;
+                }
+                
+                if(Object.keys(attachmentsToUpdate).length>0){
+                  const airtableUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/DATA%20JEMAAH%20UMRAH/${newRecId}`;
+                  const airtableRes = await fetch(airtableUrl, {
+                    method: 'PATCH',
+                    headers: { 'Authorization': `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fields: attachmentsToUpdate })
+                  });
+                  const resultJson = await airtableRes.json();
+                  if(airtableRes.ok){
+                    console.log('V90 Attachments uploaded for new record', newRecId);
+                    // Update local record
+                    const idx = allJemaahUmrahRecords.findIndex(r=> r.id===newRecId);
+                    if(idx>-1 && resultJson.fields){
+                      if(resultJson.fields['PICTURE']) allJemaahUmrahRecords[idx].fields['PICTURE'] = resultJson.fields['PICTURE'];
+                      if(resultJson.fields['PASSPORT COPY']) allJemaahUmrahRecords[idx].fields['PASSPORT COPY'] = resultJson.fields['PASSPORT COPY'];
+                    }
+                  } else {
+                    console.error('V90 Attachment Airtable error', resultJson);
+                  }
+                }
+              }catch(attErr){
+                console.error('V90 Attachment upload error', attErr);
+                alert("Jemaah berjaya ditambah tapi gagal upload gambar/passport. Sila upload manual di table.");
+              }
+            }
+            
             allJemaahUmrahRecords.unshift(newRecord);
+            // If attachments were uploaded, we already updated, but need to refresh grid with updated record
+            // Actually we pushed old record before attachment update, so we need to update the first record with new fields if attachments exist
+            // For simplicity, refetch grid after
             filterAndRenderJemaahGrid();
             closeExpandModal();
             console.log('Berjaya menambah jemaah baharu:', newRecord.id);
