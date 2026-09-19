@@ -756,25 +756,22 @@ async function addNewOptionToField(fieldName, newOptionName, triggerElement=null
     const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
     if(!base||!pat){ alert('Konfigurasi Airtable tidak ditemui'); return false; }
 
-    // Show loading spinner in dropdown/button if triggerElement provided
     if(triggerElement){
       loadingBtn = triggerElement;
       originalBtnHTML = loadingBtn.innerHTML;
       loadingBtn.disabled = true;
       loadingBtn.innerHTML = '<span class="inline-flex items-center gap-1"><svg class="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Menambah...</span>';
       loadingBtn.classList.add('opacity-70','cursor-wait');
-    } else {
-      // Try to find the + Add new option button in DOM
-      const addBtns = document.querySelectorAll('[data-field-add="'+fieldName+'"], button:has(+ Add new), .add-new-option-btn');
-      if(addBtns.length>0){
-        loadingBtn = addBtns[addBtns.length-1];
-        originalBtnHTML = loadingBtn.innerHTML;
-        loadingBtn.disabled = true;
-        loadingBtn.innerHTML = '<span class="inline-flex items-center gap-1"><svg class="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Menambah...</span>';
-      }
     }
 
-    console.log(`\n=== V81 addNewOptionToField ${fieldName} -> ${newOptionName} ===`);
+    console.log(`\n=== V88 addNewOptionToField ${fieldName} -> ${newOptionName} ===`);
+
+    if(!newOptionName || newOptionName.trim()===''){
+      console.error('Blank name, abort');
+      alert('Nama pilihan tidak boleh kosong.');
+      return false;
+    }
+    newOptionName = newOptionName.trim().toUpperCase();
 
     _jemaahMetaCache = null;
     await fetchJemaahMetaOptionsFromMeta();
@@ -803,7 +800,6 @@ async function addNewOptionToField(fieldName, newOptionName, triggerElement=null
           if(!res.ok){ const t=await res.text(); alert('Gagal tambah di '+linkedTable); return false; }
           await fetchJemaahMetaOptionsFromMeta();
           if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
-          // Simple alert
           alert(`'${newOptionName}' berjaya ditambahkan.`);
           return true;
         }catch(e){ 
@@ -817,14 +813,14 @@ async function addNewOptionToField(fieldName, newOptionName, triggerElement=null
     }
 
     const existingChoices = (targetField.options && targetField.options.choices) ? targetField.options.choices : [];
-    if(existingChoices.some(c=> (c.name||'').toUpperCase()===newOptionName.toUpperCase())){
+    const existingNonBlank = existingChoices.filter(c=> c.name && c.name.trim()!=='');
+    if(existingNonBlank.some(c=> (c.name||'').toUpperCase()===newOptionName.toUpperCase())){
       if(loadingBtn){ loadingBtn.innerHTML = originalBtnHTML; loadingBtn.disabled = false; loadingBtn.classList.remove('opacity-70','cursor-wait'); }
       alert(`'${newOptionName}' telah wujud.`);
       return false;
     }
 
-    // Try typecast FIRST
-    console.log('Trying typecast:true...');
+    console.log('Trying typecast:true FIRST...');
     let typecastSuccess = false;
     let allRecords = [];
     try{
@@ -846,13 +842,12 @@ async function addNewOptionToField(fieldName, newOptionName, triggerElement=null
           body: JSON.stringify({fields:{[fieldName]: typecastPayload}, typecast:true})
         });
         const typecastText = await typecastRes.text();
-        console.log('Typecast response:', typecastRes.status);
+        console.log('Typecast response:', typecastRes.status, typecastText.substring(0,500));
         if(typecastRes.ok){
           typecastSuccess = true;
           setTimeout(async ()=>{
             try{
-              // Fix blank option bug: for multi send [] not '', for single send null not ''
-              const revertValue = isMulti ? (Array.isArray(originalVal) ? originalVal : []) : (originalVal || null);
+              const revertValue = isMulti ? (Array.isArray(originalVal) ? originalVal.filter(v=> v && v.trim()!=='') : []) : (originalVal || null);
               await fetch(url, {
                 method:'PATCH',
                 headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
@@ -868,66 +863,53 @@ async function addNewOptionToField(fieldName, newOptionName, triggerElement=null
       await new Promise(r=> setTimeout(r, 1200));
       await fetchJemaahMetaOptionsFromMeta();
       
-      // Auto-select new option
       try{
-        // If recordId provided, update that specific record
         if(recordId){
           const isMulti = targetField.type==='multipleSelects';
           const rec = allRecords.find(r=> r.id===recordId);
           if(rec){
             if(isMulti){
-              const existing = rec.fields[fieldName];
-              rec.fields[fieldName] = Array.isArray(existing) && existing.length>0 ? [...new Set([...existing, newOptionName])] : [newOptionName];
+              let arr = Array.isArray(rec.fields[fieldName]) ? [...rec.fields[fieldName]] : (rec.fields[fieldName] ? [rec.fields[fieldName]] : []);
+              arr = arr.filter(v=> v && v.trim()!=='');
+              if(!arr.includes(newOptionName)) arr.push(newOptionName);
+              arr = [...new Set(arr)].filter(v=> v && v.trim()!=='');
+              rec.fields[fieldName] = arr;
             } else {
               rec.fields[fieldName] = newOptionName;
             }
-            // Persist to Airtable
             try{
-              await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${recordId}`, {
+              const payload = isMulti ? rec.fields[fieldName] : newOptionName;
+              console.log(`V88 Auto-select PATCH ${recordId} ${fieldName}=`, payload);
+              const res = await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${recordId}`, {
                 method:'PATCH',
                 headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
-                body: JSON.stringify({fields:{[fieldName]: rec.fields[fieldName]}, typecast:true})
+                body: JSON.stringify({fields:{[fieldName]: payload}, typecast:true})
               });
-            }catch{}
+              const t = await res.text();
+              console.log(`V88 Auto-select result ${res.status}`, t.substring(0,500));
+            }catch(e){ console.warn('V88 auto-select error', e); }
           }
         }
-        if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
-        // Also try to update select element directly if exists
-        const selects = document.querySelectorAll(`select[data-field="${fieldName}"], [data-field-select="${fieldName}"]`);
-        selects.forEach(sel=>{
-          if(sel.tagName==='SELECT'){
-            // Add new option if not exists
-            if(!Array.from(sel.options).some(o=> o.value.toUpperCase()===newOptionName.toUpperCase())){
-              const opt = document.createElement('option');
-              opt.value = newOptionName;
-              opt.textContent = newOptionName;
-              sel.appendChild(opt);
-            }
-            // Auto-select
-            if(targetField.type==='singleSelect'){
-              sel.value = newOptionName;
-            } else {
-              // For multi-select, add to selected
-              const values = Array.from(sel.selectedOptions).map(o=> o.value);
-              if(!values.includes(newOptionName)){
-                Array.from(sel.options).forEach(o=> { if(o.value===newOptionName) o.selected = true; });
-              }
-            }
-            sel.dispatchEvent(new Event('change', {bubbles:true}));
-          }
-        });
-      }catch(e){ console.warn('Auto-select failed', e); }
+      }catch(e){ console.warn('V88 auto-select outer', e); }
 
       if(loadingBtn){ loadingBtn.innerHTML = originalBtnHTML; loadingBtn.disabled = false; loadingBtn.classList.remove('opacity-70','cursor-wait'); }
-      // Simple success alert - no typecast explanation
       alert(`'${newOptionName}' berjaya ditambahkan.`);
+      if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
       return true;
     }
 
-    // Fallback meta PATCH
-    const realChoices = existingChoices.filter(c=> c.id && c.id.length===17);
-    const choicesWithId = realChoices.map(c=> ({id: c.id, name: c.name}));
-    const newChoices = choicesWithId.length>0 ? [...choicesWithId, {name: newOptionName}] : [{name: newOptionName}];
+    // Fallback meta PATCH - never send blank
+    const realChoices = existingChoices.filter(c=> c.name && c.name.trim()!=='' && c.id);
+    const dedupMap = new Map();
+    for(let c of realChoices){
+      const k = c.name.trim().toUpperCase();
+      if(!k) continue;
+      if(!dedupMap.has(k)) dedupMap.set(k, {id: c.id, name: c.name.trim()});
+    }
+    const choicesWithId = Array.from(dedupMap.values()).map(c=> c.id && c.id.length===17 ? {id: c.id, name: c.name} : {name: c.name});
+    const newChoices = [...choicesWithId, {name: newOptionName}];
+    
+    console.log('Meta PATCH payload (no blank):', newChoices.length);
     
     try{
       const metaUrl = `https://api.airtable.com/v0/meta/bases/${base}/tables/${tableId}/fields/${targetField.id}`;
@@ -937,10 +919,31 @@ async function addNewOptionToField(fieldName, newOptionName, triggerElement=null
         body: JSON.stringify({options:{choices: newChoices}})
       });
       const metaText = await metaRes.text();
+      console.log('Meta result:', metaRes.status, metaText.substring(0,500));
       if(loadingBtn){ loadingBtn.innerHTML = originalBtnHTML; loadingBtn.disabled = false; loadingBtn.classList.remove('opacity-70','cursor-wait'); }
       if(metaRes.ok){
         await fetchJemaahMetaOptionsFromMeta();
-        try{ if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid(); }catch{}
+        if(recordId){
+          try{
+            const rec = allRecords.find(r=> r.id===recordId);
+            if(rec){
+              if(targetField.type==='multipleSelects'){
+                let arr = Array.isArray(rec.fields[fieldName]) ? [...rec.fields[fieldName]] : [];
+                arr = arr.filter(v=> v && v.trim()!=='');
+                if(!arr.includes(newOptionName)) arr.push(newOptionName);
+                rec.fields[fieldName] = arr;
+              } else {
+                rec.fields[fieldName] = newOptionName;
+              }
+              await fetch(`https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH/${recordId}`, {
+                method:'PATCH',
+                headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
+                body: JSON.stringify({fields:{[fieldName]: rec.fields[fieldName]}, typecast:true})
+              });
+            }
+          }catch{}
+        }
+        if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
         alert(`'${newOptionName}' berjaya ditambahkan.`);
         return true;
       } else {
@@ -953,12 +956,13 @@ async function addNewOptionToField(fieldName, newOptionName, triggerElement=null
       return false;
     }
   }catch(e){
-    console.error('addNewOptionToField V81 error', e);
+    console.error('V88 error', e);
     try{ if(loadingBtn){ loadingBtn.innerHTML = originalBtnHTML; loadingBtn.disabled = false; } }catch{}
     alert(`Gagal menambah "${newOptionName}".`);
     return false;
   }
 }
+
 
 // Helper to handle + Add new option click with loading and auto-select
 function handleAddNewOptionClick(fieldName, recordId=null, btnElement=null){
@@ -988,39 +992,91 @@ function handleAddNewOption(fieldName, selectEl, modalDropdownId){
   if(!newVal){ if(selectEl) selectEl.value = selectEl.getAttribute('data-prev')||''; return; }
   const trimmed = newVal.trim().toUpperCase();
   if(!trimmed) return;
-  addNewOptionToField(fieldName, trimmed).then(ok=>{ 
-    if(!ok) return;
-    if(selectEl){ 
-      setTimeout(()=>{ selectEl.value = trimmed; selectEl.dispatchEvent(new Event('change')); }, 500); 
-    }
-    if(modalDropdownId){
-        const options = jemaahFieldOptions[fieldName] || [];
-        if(modalDropdownId==='boardBasisDropdown'){
-            const list = document.getElementById('boardBasisList');
-            if(list){
-                list.innerHTML = options.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="board-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('');
-                document.querySelectorAll('.board-checkbox').forEach(cb=>{ cb.addEventListener('change', updateBoardBasisSelected); });
-            }
-        } else if(modalDropdownId==='insuranDropdown'){
-            const list = document.getElementById('insuranList');
-            if(list){
-                list.innerHTML = options.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="insuran-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('');
-                document.querySelectorAll('.insuran-checkbox').forEach(cb=>{ cb.addEventListener('change', updateInsuranSelected); });
-            }
+  
+  let originalHTML = '';
+  let originalValue = '';
+  let recId = null;
+  let cellEl = null;
+  
+  if(selectEl){
+    originalValue = selectEl.value;
+    originalHTML = selectEl.innerHTML;
+    cellEl = selectEl.closest('td');
+    recId = selectEl.getAttribute('data-rec-id') || (selectEl.dataset ? selectEl.dataset.recId : null);
+    if(!recId){
+      try{
+        const tr = selectEl.closest('tr');
+        if(tr) recId = tr.getAttribute('data-rec-id') || tr.getAttribute('data-id');
+        if(!recId){
+          const oc = selectEl.getAttribute('onchange')||'';
+          const m2 = oc.match(/updateJemaahField\('([^']+)'/);
+          if(m2) recId = m2[1];
         }
+      }catch{}
+    }
+    console.log(`V88 handleAddNewOption ${fieldName} recId=${recId} trimmed=${trimmed}`);
+    if(recId){
+      try{ localStorage.setItem('effah_pending_autoselect', JSON.stringify({recId, fieldName, value: trimmed, ts: Date.now()})); }catch{}
+    }
+    if(cellEl){
+      cellEl.dataset.originalHTML = cellEl.innerHTML;
+      cellEl.innerHTML = `<div class="w-full text-xs p-2 font-bold rounded-lg border border-slate-300 bg-white flex items-center justify-center gap-2 text-slate-600"><svg class="animate-spin h-4 w-4 text-slate-500" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Sedang diproses...</span></div>`;
+    } else {
+      selectEl.disabled = true;
+      selectEl.innerHTML = `<option selected>⏳ Menambah ${trimmed}...</option>`;
+      selectEl.classList.add('opacity-70');
+    }
+  }
+  
+  addNewOptionToField(fieldName, trimmed, selectEl, recId).then(ok=>{ 
+    console.log(`V88 add result ${fieldName} ${trimmed} ok=${ok} recId=${recId}`);
+    const currentCell = cellEl || (selectEl ? selectEl.closest('td') : null);
+    if(!ok){
+      if(currentCell && currentCell.dataset.originalHTML) currentCell.innerHTML = currentCell.dataset.originalHTML;
+      else if(selectEl){ selectEl.disabled=false; selectEl.classList.remove('opacity-70'); selectEl.innerHTML=originalHTML; selectEl.value=selectEl.getAttribute('data-prev')||originalValue; }
+      try{ localStorage.removeItem('effah_pending_autoselect'); }catch{}
+      return;
+    }
+    if(currentCell){
+      currentCell.innerHTML = `<div class="w-full text-xs p-2 font-bold rounded-lg border border-slate-300 bg-white flex items-center justify-center gap-2 text-emerald-600"><svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Menyimpan ${trimmed}...</span></div>`;
+    }
+    setTimeout(()=>{
+      if(typeof filterAndRenderJemaahGrid==='function'){
+        filterAndRenderJemaahGrid();
         setTimeout(()=>{
-            document.querySelectorAll(`.board-checkbox, .insuran-checkbox`).forEach(cb=>{
-                if(cb.value===trimmed) cb.checked=true;
-            });
-            if(typeof updateBoardBasisSelected === 'function') updateBoardBasisSelected();
-            if(typeof updateInsuranSelected === 'function') updateInsuranSelected();
-        }, 100);
-    }
-    if(typeof filterAndRenderJemaahGrid === 'function'){
-        setTimeout(()=> filterAndRenderJemaahGrid(), 600);
-    }
+          try{
+            const allRecs = window.allJemaahUmrahRecords||window.allJemaahRecords||[];
+            const rec = allRecs.find(r=> r.id===recId);
+            if(rec && rec.fields[fieldName]!==trimmed){
+              rec.fields[fieldName]=trimmed;
+              filterAndRenderJemaahGrid();
+            }
+          }catch{}
+          setTimeout(()=>{ try{ localStorage.removeItem('effah_pending_autoselect'); }catch{} }, 2500);
+        }, 400);
+      }
+    }, 600);
   });
+  
+  if(modalDropdownId){
+    const options = jemaahFieldOptions[fieldName] || [];
+    const filtered = options.filter(o=> o.name && o.name.trim()!=='');
+    if(modalDropdownId==='boardBasisDropdown'){
+      const list = document.getElementById('boardBasisList');
+      if(list){
+        list.innerHTML = filtered.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="board-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('');
+        document.querySelectorAll('.board-checkbox').forEach(cb=>{ cb.addEventListener('change', updateBoardBasisSelected); });
+      }
+    } else if(modalDropdownId==='insuranDropdown'){
+      const list = document.getElementById('insuranList');
+      if(list){
+        list.innerHTML = filtered.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="insuran-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('');
+        document.querySelectorAll('.insuran-checkbox').forEach(cb=>{ cb.addEventListener('change', updateInsuranSelected); });
+      }
+    }
+  }
 }
+
 function renderSingleSelectCell(recId, fieldName, currentValue){
   const options = jemaahFieldOptions[fieldName] || [];
   let safeCurrent = currentValue || '';
