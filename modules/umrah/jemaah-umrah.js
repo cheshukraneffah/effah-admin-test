@@ -997,13 +997,15 @@ function handleAddNewOption(fieldName, selectEl, modalDropdownId){
   let originalValue = '';
   let recId = null;
   let cellEl = null;
+  let isModal = false;
   
   if(selectEl){
     originalValue = selectEl.value;
     originalHTML = selectEl.innerHTML;
-    cellEl = selectEl.closest('td');
+    cellEl = selectEl.closest('td') || selectEl.closest('div.sm\\:col-span-2') || selectEl.parentElement;
+    isModal = !!selectEl.closest('#expandRecordModal') || !!selectEl.closest('#addModalForm');
     recId = selectEl.getAttribute('data-rec-id') || (selectEl.dataset ? selectEl.dataset.recId : null);
-    if(!recId){
+    if(!recId && !isModal){
       try{
         const tr = selectEl.closest('tr');
         if(tr) recId = tr.getAttribute('data-rec-id') || tr.getAttribute('data-id');
@@ -1014,13 +1016,20 @@ function handleAddNewOption(fieldName, selectEl, modalDropdownId){
         }
       }catch{}
     }
-    console.log(`V88 handleAddNewOption ${fieldName} recId=${recId} trimmed=${trimmed}`);
-    if(recId){
+    console.log(`V89 handleAddNewOption ${fieldName} recId=${recId} isModal=${isModal} trimmed=${trimmed}`);
+    if(recId && !isModal){
       try{ localStorage.setItem('effah_pending_autoselect', JSON.stringify({recId, fieldName, value: trimmed, ts: Date.now()})); }catch{}
     }
-    if(cellEl){
+    
+    // V89: Loading UI like Group box "Sedang diproses..."
+    if(cellEl && !isModal){
       cellEl.dataset.originalHTML = cellEl.innerHTML;
       cellEl.innerHTML = `<div class="w-full text-xs p-2 font-bold rounded-lg border border-slate-300 bg-white flex items-center justify-center gap-2 text-slate-600"><svg class="animate-spin h-4 w-4 text-slate-500" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Sedang diproses...</span></div>`;
+    } else if(isModal){
+      // For modal, show loading in select itself
+      selectEl.disabled = true;
+      selectEl.innerHTML = `<option selected>⏳ Menambah ${trimmed}...</option>`;
+      selectEl.classList.add('opacity-70');
     } else {
       selectEl.disabled = true;
       selectEl.innerHTML = `<option selected>⏳ Menambah ${trimmed}...</option>`;
@@ -1029,65 +1038,117 @@ function handleAddNewOption(fieldName, selectEl, modalDropdownId){
   }
   
   addNewOptionToField(fieldName, trimmed, selectEl, recId).then(ok=>{ 
-    console.log(`V88 add result ${fieldName} ${trimmed} ok=${ok} recId=${recId}`);
-    const currentCell = cellEl || (selectEl ? selectEl.closest('td') : null);
+    console.log(`V89 add result ${fieldName} ${trimmed} ok=${ok} recId=${recId} isModal=${isModal}`);
+    const currentCell = cellEl || (selectEl ? selectEl.closest('td') || selectEl.closest('div.sm\\:col-span-2') || selectEl.parentElement : null);
+    
     if(!ok){
       if(currentCell && currentCell.dataset.originalHTML) currentCell.innerHTML = currentCell.dataset.originalHTML;
       else if(selectEl){ selectEl.disabled=false; selectEl.classList.remove('opacity-70'); selectEl.innerHTML=originalHTML; selectEl.value=selectEl.getAttribute('data-prev')||originalValue; }
       try{ localStorage.removeItem('effah_pending_autoselect'); }catch{}
       return;
     }
-    if(currentCell){
-      currentCell.innerHTML = `<div class="w-full text-xs p-2 font-bold rounded-lg border border-slate-300 bg-white flex items-center justify-center gap-2 text-emerald-600"><svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Menyimpan ${trimmed}...</span></div>`;
-    }
-    setTimeout(()=>{
-      if(typeof filterAndRenderJemaahGrid==='function'){
-        filterAndRenderJemaahGrid();
-        setTimeout(()=>{
-          try{
-            const allRecs = window.allJemaahUmrahRecords||window.allJemaahRecords||[];
-            const rec = allRecs.find(r=> r.id===recId);
-            if(rec && rec.fields[fieldName]!==trimmed){
-              rec.fields[fieldName]=trimmed;
-              filterAndRenderJemaahGrid();
-            }
-          }catch{}
-          setTimeout(()=>{ try{ localStorage.removeItem('effah_pending_autoselect'); }catch{} }, 2500);
-        }, 400);
+    
+    // Success
+    if(isModal){
+      // V89: For modal, rebuild select options with new value selected
+      setTimeout(async ()=>{
+        await fetchJemaahMetaOptionsFromMeta();
+        const opts = (jemaahFieldOptions[fieldName]||[]).filter(o=> o.name && o.name.trim()!=='');
+        if(selectEl){
+          let html = `<option value="">${selectEl.querySelector('option[value=""]') ? selectEl.querySelector('option[value=""]').textContent : '-- Pilih --'}</option>`;
+          opts.forEach(opt=>{
+            const sel = opt.name===trimmed ? 'selected' : '';
+            html += `<option value="${opt.name}" ${sel}>${opt.name}</option>`;
+          });
+          if(fieldName!=='GENDER'){
+            html += `<option value="__ADD_NEW__" style="font-weight:bold;color:#800020;">+ Add new option</option>`;
+          }
+          selectEl.innerHTML = html;
+          selectEl.disabled = false;
+          selectEl.classList.remove('opacity-70');
+          selectEl.value = trimmed;
+          selectEl.setAttribute('data-prev', trimmed);
+          console.log(`V89 Modal ${fieldName} set to ${trimmed}`);
+        }
+        // For BOARD BASIS and INSURAN multi in modal, update checkbox lists
+        if(fieldName==='BOARD BASIS'){
+          const list = document.getElementById('boardBasisList');
+          if(list){
+            const filtered = opts;
+            list.innerHTML = filtered.map(opt=>{
+              const checked = opt.name===trimmed ? 'checked' : '';
+              return `<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" ${checked} class="board-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`;
+            }).join('');
+            document.querySelectorAll('.board-checkbox').forEach(cb=>{ cb.addEventListener('change', updateBoardBasisSelected); });
+            if(typeof updateBoardBasisSelected==='function') updateBoardBasisSelected();
+          }
+        }
+        if(fieldName==='INSURAN'){
+          const list = document.getElementById('insuranList');
+          if(list){
+            const filtered = opts;
+            list.innerHTML = filtered.map(opt=>{
+              const checked = opt.name===trimmed ? 'checked' : '';
+              return `<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" ${checked} class="insuran-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`;
+            }).join('');
+            document.querySelectorAll('.insuran-checkbox').forEach(cb=>{ cb.addEventListener('change', updateInsuranSelected); });
+            if(typeof updateInsuranSelected==='function') updateInsuranSelected();
+          }
+        }
+      }, 800);
+    } else {
+      // Table case - keep loading until grid refresh
+      if(currentCell){
+        currentCell.innerHTML = `<div class="w-full text-xs p-2 font-bold rounded-lg border border-slate-300 bg-white flex items-center justify-center gap-2 text-emerald-600"><svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Menyimpan ${trimmed}...</span></div>`;
       }
-    }, 600);
+      setTimeout(()=>{
+        if(typeof filterAndRenderJemaahGrid==='function'){
+          filterAndRenderJemaahGrid();
+          setTimeout(()=>{
+            try{
+              const allRecs = window.allJemaahUmrahRecords||window.allJemaahRecords||[];
+              const rec = allRecs.find(r=> r.id===recId);
+              if(rec && rec.fields[fieldName]!==trimmed){
+                rec.fields[fieldName]=trimmed;
+                filterAndRenderJemaahGrid();
+              }
+            }catch{}
+            setTimeout(()=>{ try{ localStorage.removeItem('effah_pending_autoselect'); }catch{} }, 2500);
+          }, 400);
+        }
+      }, 600);
+    }
   });
   
   if(modalDropdownId){
+    // For modal multi dropdowns called via + Add option button in dropdown
     const options = jemaahFieldOptions[fieldName] || [];
     const filtered = options.filter(o=> o.name && o.name.trim()!=='');
     if(modalDropdownId==='boardBasisDropdown'){
       const list = document.getElementById('boardBasisList');
       if(list){
-        list.innerHTML = filtered.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="board-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('');
-        document.querySelectorAll('.board-checkbox').forEach(cb=>{ cb.addEventListener('change', updateBoardBasisSelected); });
+        // Will be updated after add, but show loading now
+        list.innerHTML = `<div class="p-3 text-xs text-slate-500 flex items-center gap-2"><svg class="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Menambah ${trimmed}...</div>` + list.innerHTML;
       }
     } else if(modalDropdownId==='insuranDropdown'){
       const list = document.getElementById('insuranList');
       if(list){
-        list.innerHTML = filtered.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="insuran-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('');
-        document.querySelectorAll('.insuran-checkbox').forEach(cb=>{ cb.addEventListener('change', updateInsuranSelected); });
+        list.innerHTML = `<div class="p-3 text-xs text-slate-500 flex items-center gap-2"><svg class="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Menambah ${trimmed}...</div>` + list.innerHTML;
       }
     }
   }
 }
 
+
 function renderSingleSelectCell(recId, fieldName, currentValue){
   const options = jemaahFieldOptions[fieldName] || [];
   let safeCurrent = currentValue || '';
   
-  // V87: Check pending autoselect from localStorage
   try{
     const pendingRaw = localStorage.getItem('effah_pending_autoselect');
     if(pendingRaw){
       const pending = JSON.parse(pendingRaw);
       if(pending.recId===recId && pending.fieldName===fieldName && Date.now() - pending.ts < 10000){
-        console.log(`V87 Pending autoselect applying for ${recId} ${fieldName}=${pending.value}`);
         safeCurrent = pending.value;
       }
     }
@@ -1096,7 +1157,6 @@ function renderSingleSelectCell(recId, fieldName, currentValue){
   let optsHtml = `<option value="">-- Pilih --</option>`;
   if(options.length>0){
     const filteredOpts = options.filter(opt=> opt.name && opt.name.trim()!=='');
-    // Ensure pending value is in options even if not yet in fieldOptions
     let allOpts = [...filteredOpts];
     if(safeCurrent && safeCurrent.trim()!=='' && !allOpts.some(o=> o.name===safeCurrent)){
       allOpts.push({name: safeCurrent});
@@ -1104,8 +1164,15 @@ function renderSingleSelectCell(recId, fieldName, currentValue){
     allOpts.forEach(opt=>{ const selected = (opt.name === safeCurrent) ? 'selected' : ''; optsHtml += `<option value="${opt.name}" ${selected}>${opt.name}</option>`; });
   } else {
     if(safeCurrent && safeCurrent.trim()!==''){ optsHtml += `<option value="${safeCurrent}" selected>${safeCurrent}</option>`; }
+    // Fallback for GENDER
+    if(fieldName==='GENDER' && !safeCurrent){
+      optsHtml += `<option value="MALE">MALE</option><option value="FEMALE">FEMALE</option>`;
+    }
   }
-  optsHtml += `<option value="__ADD_NEW__" style="font-weight:bold; color:#800020;">+ Add new option</option>`;
+  // V89: No + Add new option for GENDER in table too
+  if(fieldName!=='GENDER'){
+    optsHtml += `<option value="__ADD_NEW__" style="font-weight:bold; color:#800020;">+ Add new option</option>`;
+  }
   return `<select data-prev="${safeCurrent}" data-rec-id="${recId}" onchange="if(this.value==='__ADD_NEW__'){ handleAddNewOption('${fieldName}', this); } else { updateJemaahField('${recId}', '${fieldName}', this.value); }" class="w-full text-xs p-1.5 font-bold rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent">${optsHtml}</select>`;
 }
 
@@ -1257,6 +1324,46 @@ async function fetchJemaahUmrahData(isManualClick = false) {
     const icon = document.getElementById('iconRefreshJemaah');
     if (icon) icon.classList.add('fa-spin');
 
+    // V89: Dim right table 50% and make not clickable when refresh clicked
+    let loadingOverlay = null;
+    let rightContainer = null;
+    if(isManualClick){
+      try{
+        // Find right container (flex-1 with table)
+        rightContainer = document.querySelector('.flex-1.flex.flex-col.space-y-3.min-w-0');
+        if(!rightContainer){
+          // Fallback: find by main grid table parent
+          const gridTable = document.getElementById('mainJemaahGridTable');
+          if(gridTable) rightContainer = gridTable.closest('.flex-1');
+        }
+        if(rightContainer){
+          rightContainer.style.position = 'relative';
+          loadingOverlay = document.createElement('div');
+          loadingOverlay.id = 'jemaahTableLoadingOverlay';
+          loadingOverlay.className = 'absolute inset-0 bg-white/60 backdrop-blur-[0.5px] flex flex-col items-center justify-center z-40 rounded-2xl';
+          loadingOverlay.style.pointerEvents = 'auto';
+          loadingOverlay.innerHTML = `
+            <div class="bg-white border border-slate-300 shadow-lg rounded-2xl px-6 py-4 flex flex-col items-center gap-3">
+              <svg class="animate-spin h-8 w-8 text-brand-maroon" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span class="text-xs font-bold text-slate-700">Memuat semula data jemaah...</span>
+              <span class="text-[10px] text-slate-500">Sila tunggu sebentar</span>
+            </div>
+          `;
+          rightContainer.appendChild(loadingOverlay);
+          // Also dim the table itself
+          const tableEl = document.getElementById('mainJemaahGridTable');
+          if(tableEl){
+            tableEl.style.opacity = '0.5';
+            tableEl.style.pointerEvents = 'none';
+          }
+        }
+      }catch(e){ console.warn('V89 overlay error', e); }
+    }
+
+
     const cachedData = localStorage.getItem('cache_jemaah_records');
     if (cachedData && allJemaahUmrahRecords.length === 0) {
         try {
@@ -1303,6 +1410,22 @@ async function fetchJemaahUmrahData(isManualClick = false) {
         console.error("Background sync error:", err);
     } finally {
         if (icon) icon.classList.remove('fa-spin');
+        // V89: Remove loading overlay and restore table
+        try{
+          const overlay = document.getElementById('jemaahTableLoadingOverlay');
+          if(overlay) overlay.remove();
+          const tableEl = document.getElementById('mainJemaahGridTable');
+          if(tableEl){
+            tableEl.style.opacity = '1';
+            tableEl.style.pointerEvents = 'auto';
+          }
+          const rc = document.querySelector('.flex-1.flex.flex-col.space-y-3.min-w-0');
+          if(rc && rc.contains){
+            // Ensure no leftover overlay
+            const leftover = rc.querySelector('#jemaahTableLoadingOverlay');
+            if(leftover) leftover.remove();
+          }
+        }catch{}
     }
 }
 
@@ -2680,19 +2803,24 @@ function openAddJemaahModal() {
         if(!isMulti){
             html += `<option value="">${placeholder}</option>`;
             if(options.length>0){
-                options.forEach(opt=>{
+                // Filter blank
+                const filtered = options.filter(o=> o.name && o.name.trim()!=='');
+                filtered.forEach(opt=>{
                     html += `<option value="${opt.name}">${opt.name}</option>`;
                 });
             } else {
-                // Fallback hardcoded if Airtable not loaded yet
                 if(fieldName==='GENDER'){
                     html += '<option value="MALE">MALE</option><option value="FEMALE">FEMALE</option>';
                 }
             }
-            html += `<option value="__ADD_NEW__" style="font-weight:bold;color:#800020;">+ Add new option</option>`;
+            // V89: No + Add new option for GENDER
+            if(fieldName!=='GENDER'){
+                html += `<option value="__ADD_NEW__" style="font-weight:bold;color:#800020;">+ Add new option</option>`;
+            }
         } else {
             if(options.length>0){
-                options.forEach(opt=>{
+                const filtered = options.filter(o=> o.name && o.name.trim()!=='');
+                filtered.forEach(opt=>{
                     html += `<option value="${opt.name}">${opt.name}</option>`;
                 });
             }
@@ -2713,12 +2841,12 @@ function openAddJemaahModal() {
         return html;
     })();
 
-    // Board Basis multi
-    const boardBasisOptions = jemaahFieldOptions['BOARD BASIS'] || [];
+    // V89: Board Basis multi - filter blank
+    const boardBasisOptions = (jemaahFieldOptions['BOARD BASIS'] || []).filter(o=> o.name && o.name.trim()!=='');
     const boardBasisMultiHtml = boardBasisOptions.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="board-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('') || '<div class="p-3 text-xs text-slate-400">Tiada pilihan. Tambah baru.</div>';
 
-    // Insuran multi
-    const insuranOptions = jemaahFieldOptions['INSURAN'] || [];
+    // V89: Insuran multi - filter blank
+    const insuranOptions = (jemaahFieldOptions['INSURAN'] || []).filter(o=> o.name && o.name.trim()!=='');
     const insuranMultiHtml = insuranOptions.map(opt=>`<label class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"><input type="checkbox" value="${opt.name}" class="insuran-checkbox w-4 h-4 rounded border-slate-300 text-brand-maroon"><span class="text-xs font-bold">${opt.name}</span></label>`).join('') || '<div class="p-3 text-xs text-slate-400">Tiada pilihan. Tambah baru.</div>';
 
     container.innerHTML = `
@@ -2868,7 +2996,7 @@ function openAddJemaahModal() {
                         <label class="font-bold text-slate-500 uppercase text-[11px] block mb-1">TRAIN</label>
                         <label class="flex items-center gap-2 cursor-pointer border border-slate-300 rounded-xl p-2.5 bg-white hover:bg-slate-50">
                             <input type="checkbox" name="TRAIN" class="w-4 h-4 rounded border-slate-300 text-brand-maroon focus:ring-brand-maroon">
-                            <span class="text-xs font-bold">Kereta Api</span>
+                            <span class="text-xs font-bold">Speed Train</span>
                         </label>
                     </div>
                     <div class="sm:col-span-1">
