@@ -445,130 +445,119 @@ let _jemaahMetaCache = null;
 let _jemaahMetaFetching = false;
 
 
+
 async function cleanBlankOptions(fieldName, auto=false){
   try{
     const base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_base_id')||'appSsn4JyQD4DnYu0';
     const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
-    if(!base||!pat) return false;
-    console.log(`V85 Cleaning blank for ${fieldName}...`);
-    _jemaahMetaCache = null;
-    await fetchJemaahMetaOptionsFromMeta();
-    if(!_jemaahMetaCache) return false;
-    const targetField = _jemaahMetaCache.fields.find(f=> f.name.toUpperCase()===fieldName.toUpperCase());
-    if(!targetField) return false;
+    if(!base||!pat){ console.warn('No base/pat for clean'); return false; }
+    console.log(`V87 Cleaning blank for ${fieldName}...`);
+    
+    // Force fresh fetch directly from API (not cache)
+    const resTables = await fetch(`https://api.airtable.com/v0/meta/bases/${base}/tables`, {headers:{Authorization:`Bearer ${pat}`}});
+    if(!resTables.ok){
+      console.error('Failed to fetch tables for clean', resTables.status);
+      return false;
+    }
+    const data = await resTables.json();
+    const tables = data.tables||[];
+    const targetTable = tables.find(t=> t.name.trim()==='DATA JEMAAH UMRAH') || tables.find(t=> t.name.toUpperCase().includes('DATA JEMAAH UMRAH')) || tables.find(t=> t.name.toUpperCase().includes('JEMAAH'));
+    if(!targetTable){ console.error('Table not found for clean'); return false; }
+    
+    const targetField = targetTable.fields.find(f=> f.name.toUpperCase()===fieldName.toUpperCase());
+    if(!targetField){ console.error(`Field ${fieldName} not found`); return false; }
+    
     const choices = targetField.options?.choices||[];
     const blankChoices = choices.filter(c=> !c.name || c.name.trim()==='');
     const realChoices = choices.filter(c=> c.name && c.name.trim()!=='');
-    console.log(`V85 ${fieldName}: total ${choices.length}, real ${realChoices.length}, blank ${blankChoices.length}`, blankChoices.map(c=> c.id));
+    
+    console.log(`V87 ${fieldName}: total ${choices.length}, real ${realChoices.length}, blank ${blankChoices.length}`);
+    console.log(`Real:`, realChoices.map(c=> `${c.name}(${c.id?.length})`));
+    console.log(`Blank:`, blankChoices.map(c=> `${c.id} len ${c.id?.length}`));
+    
     if(blankChoices.length===0){
       if(!auto) console.log(`No blank in ${fieldName}`);
       return true;
     }
-    // V85: Keep real choices - send id+name if id is 17 chars, else name only (to avoid truncated id issue)
-    const realChoicesWithId = realChoices.map(c=> {
-      if(c.id && c.id.length===17) return {id: c.id, name: c.name.trim()};
-      else return {name: c.name.trim()}; // truncated id - send name only, Airtable will keep it
-    });
-    // Remove duplicates by name
-    const seen = new Set();
-    const deduped = [];
-    for(let c of realChoicesWithId){
-      const key = (c.name||'').toUpperCase();
-      if(!key || seen.has(key)) continue;
-      seen.add(key);
-      deduped.push(c);
+    
+    // V87: Keep ALL real choices, send id+name if id exists (any length), but ensure name trimmed and not blank
+    // This will remove blank by not including it
+    const dedupedMap = new Map();
+    for(let c of realChoices){
+      const key = c.name.trim().toUpperCase();
+      if(!key) continue;
+      if(!dedupedMap.has(key)){
+        // Keep id if exists, even if 15 chars - Airtable will accept id+name for existing
+        if(c.id){
+          dedupedMap.set(key, {id: c.id, name: c.name.trim()});
+        } else {
+          dedupedMap.set(key, {name: c.name.trim()});
+        }
+      }
     }
-    console.log(`V85 Cleaning ${fieldName}: keeping ${deduped.length} real, removing ${blankChoices.length} blank`, deduped.map(c=> c.name));
+    const deduped = Array.from(dedupedMap.values());
+    console.log(`V87 Cleaning ${fieldName}: keeping ${deduped.length} real, removing ${blankChoices.length} blank`);
+    console.log('Payload:', JSON.stringify({options:{choices: deduped}}, null, 2).substring(0,1000));
+    
     if(deduped.length===0){
-      console.error(`V85 Cannot clean ${fieldName} - no real choices left`);
-      if(!auto) alert(`Tidak boleh clean ${fieldName} - tiada pilihan real`);
+      console.error(`V87 Cannot clean ${fieldName} - no real choices`);
       return false;
     }
-    const metaUrl = `https://api.airtable.com/v0/meta/bases/${base}/tables/${_jemaahMetaCache.id}/fields/${targetField.id}`;
+    
+    const metaUrl = `https://api.airtable.com/v0/meta/bases/${base}/tables/${targetTable.id}/fields/${targetField.id}`;
     const res = await fetch(metaUrl, {
       method:'PATCH',
       headers:{Authorization:`Bearer ${pat}`,'Content-Type':'application/json'},
       body: JSON.stringify({options:{choices: deduped}})
     });
     const text = await res.text();
-    console.log(`V85 Clean ${fieldName} result:`, res.status, text.substring(0,800));
+    console.log(`V87 Clean ${fieldName} result: ${res.status}`, text.substring(0,800));
+    
     if(res.ok){
-      console.log(`✅ V85 Cleaned ${blankChoices.length} blank from ${fieldName}`);
+      console.log(`✅ V87 Cleaned ${blankChoices.length} blank from ${fieldName}`);
+      // Update local caches
+      _jemaahMetaCache = null;
       await fetchJemaahMetaOptionsFromMeta();
       if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
-      if(!auto){
-        // Also clean UI immediately
-        if(jemaahFieldOptions[fieldName]){
-          jemaahFieldOptions[fieldName] = jemaahFieldOptions[fieldName].filter(o=> o.name && o.name.trim()!=='');
-        }
-      }
       return true;
     } else {
-      console.error(`V85 Failed to clean ${fieldName}:`, text);
-      if(!auto) alert(`Gagal clean ${fieldName}: ${text.substring(0,200)}`);
+      console.error(`V87 Failed clean ${fieldName}:`, text);
+      if(!auto) alert(`Gagal clean ${fieldName}: ${text.substring(0,300)}`);
       return false;
     }
-  }catch(e){ console.error('cleanBlankOptions V85 error', e); return false; }
+  }catch(e){ console.error('V87 clean error', e); return false; }
 }
 
 async function cleanAllBlankOptions(){
-  const fieldsToClean = ['NATIONALITY','BOARD BASIS','INSURAN','PAKEJ','STATUS VISA','GENDER','BILIK'];
-  let cleaned = 0;
-  for(let f of fieldsToClean){
-    const ok = await cleanBlankOptions(f, true);
-    if(ok) cleaned++;
-    await new Promise(r=> setTimeout(r, 600));
+  const fields = ['NATIONALITY','BOARD BASIS','INSURAN','PAKEJ','STATUS VISA','GENDER'];
+  for(let f of fields){
+    await cleanBlankOptions(f, true);
+    await new Promise(r=> setTimeout(r, 700));
   }
-  console.log(`V85 Clean all done: ${cleaned} fields cleaned`);
-  if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
-  return cleaned;
+  alert('Selesai clean semua blank. Refresh Airtable.');
 }
 
-// V85 Auto-clean on load - run after meta fetched
+// V87 Auto-clean on load - more aggressive
 let _autoCleanDone = false;
 async function autoCleanBlankOnLoad(){
   if(_autoCleanDone) return;
   _autoCleanDone = true;
   try{
-    console.log('V85 Auto-clean checking for blank options...');
-    // Wait for meta to be loaded
-    if(!_jemaahMetaCache){
-      await fetchJemaahMetaOptionsFromMeta();
+    console.log('V87 Auto-clean start...');
+    const fieldsToCheck = ['NATIONALITY','BOARD BASIS','INSURAN','PAKEJ','STATUS VISA'];
+    for(let fname of fieldsToCheck){
+      await cleanBlankOptions(fname, true);
+      await new Promise(r=> setTimeout(r, 600));
     }
-    if(!_jemaahMetaCache) return;
-    const fields = _jemaahMetaCache.fields||[];
-    let hasBlank = false;
-    for(let f of fields){
-      if(f.type==='singleSelect' || f.type==='multipleSelects'){
-        const blanks = (f.options?.choices||[]).filter(c=> !c.name || c.name.trim()==='');
-        if(blanks.length>0){
-          console.warn(`V85 Auto-clean: Found ${blanks.length} blank in ${f.name}, cleaning...`);
-          hasBlank = true;
-          await cleanBlankOptions(f.name, true);
-          await new Promise(r=> setTimeout(r, 500));
-        }
-      }
-    }
-    if(hasBlank){
-      console.log('V85 Auto-clean completed');
-      await fetchJemaahMetaOptionsFromMeta();
-      if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
-    } else {
-      console.log('V85 Auto-clean: No blank options found');
-    }
-  }catch(e){ console.warn('V85 Auto-clean error', e); }
+    console.log('V87 Auto-clean done');
+  }catch(e){ console.warn('V87 auto-clean error', e); }
 }
+setTimeout(autoCleanBlankOnLoad, 2000);
+setTimeout(autoCleanBlankOnLoad, 6000);
 
-// V86: Run auto-clean more aggressively for NATIONALITY which still has blank
-setTimeout(autoCleanBlankOnLoad, 1500);
-setTimeout(autoCleanBlankOnLoad, 3500);
-setTimeout(autoCleanBlankOnLoad, 7000);
-// Also specifically clean NATIONALITY on load
-setTimeout(async ()=>{
-  console.log('V86 Specific clean for NATIONALITY...');
-  await cleanBlankOptions('NATIONALITY', true);
-}, 2500);
-
+// Manual clean button helper - call from console
+window.cleanNationalityBlank = async ()=>{ return await cleanBlankOptions('NATIONALITY', false); };
+window.cleanAllBlank = cleanAllBlankOptions;
 
 
 async function fetchJemaahMetaOptionsFromMeta(){
@@ -1034,17 +1023,37 @@ function handleAddNewOption(fieldName, selectEl, modalDropdownId){
 }
 function renderSingleSelectCell(recId, fieldName, currentValue){
   const options = jemaahFieldOptions[fieldName] || [];
-  const safeCurrent = currentValue || '';
+  let safeCurrent = currentValue || '';
+  
+  // V87: Check pending autoselect from localStorage
+  try{
+    const pendingRaw = localStorage.getItem('effah_pending_autoselect');
+    if(pendingRaw){
+      const pending = JSON.parse(pendingRaw);
+      if(pending.recId===recId && pending.fieldName===fieldName && Date.now() - pending.ts < 10000){
+        console.log(`V87 Pending autoselect applying for ${recId} ${fieldName}=${pending.value}`);
+        safeCurrent = pending.value;
+      }
+    }
+  }catch{}
+  
   let optsHtml = `<option value="">-- Pilih --</option>`;
   if(options.length>0){
     const filteredOpts = options.filter(opt=> opt.name && opt.name.trim()!=='');
-    filteredOpts.forEach(opt=>{ const selected = (opt.name === safeCurrent) ? 'selected' : ''; optsHtml += `<option value="${opt.name}" ${selected}>${opt.name}</option>`; });
+    // Ensure pending value is in options even if not yet in fieldOptions
+    let allOpts = [...filteredOpts];
+    if(safeCurrent && safeCurrent.trim()!=='' && !allOpts.some(o=> o.name===safeCurrent)){
+      allOpts.push({name: safeCurrent});
+    }
+    allOpts.forEach(opt=>{ const selected = (opt.name === safeCurrent) ? 'selected' : ''; optsHtml += `<option value="${opt.name}" ${selected}>${opt.name}</option>`; });
   } else {
     if(safeCurrent && safeCurrent.trim()!==''){ optsHtml += `<option value="${safeCurrent}" selected>${safeCurrent}</option>`; }
   }
   optsHtml += `<option value="__ADD_NEW__" style="font-weight:bold; color:#800020;">+ Add new option</option>`;
   return `<select data-prev="${safeCurrent}" data-rec-id="${recId}" onchange="if(this.value==='__ADD_NEW__'){ handleAddNewOption('${fieldName}', this); } else { updateJemaahField('${recId}', '${fieldName}', this.value); }" class="w-full text-xs p-1.5 font-bold rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent">${optsHtml}</select>`;
 }
+
+
 function renderMultiSelectCell(recId, fieldName, currentValues){
   const options = jemaahFieldOptions[fieldName] || [];
   const currentArr = Array.isArray(currentValues) ? currentValues : (currentValues ? [currentValues] : []);
