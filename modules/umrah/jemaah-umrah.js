@@ -3130,7 +3130,7 @@ function openAddJemaahModal() {
 
     if (modal) modal.classList.remove('hidden');
 
-    // Attach listeners for multi-select checkboxes
+    // Attach listeners for multi-select checkboxes + dropzones (V100: call setup here, not just page load)
     setTimeout(()=>{
         document.querySelectorAll('.board-checkbox').forEach(cb=>{
             cb.addEventListener('change', updateBoardBasisSelected);
@@ -3141,7 +3141,21 @@ function openAddJemaahModal() {
         document.querySelectorAll('.ejen-checkbox').forEach(cb=>{
             cb.addEventListener('change', updateEjenSelected);
         });
-    }, 100);
+        // V100: Setup dropzones for PICTURE and PASSPORT COPY - same as detail modal's setupDropZones
+        if(typeof setupAddModalDropzones === 'function'){
+            setupAddModalDropzones();
+            console.log('V100 setupAddModalDropzones called after openAddJemaahModal');
+        }
+        if(typeof window.setupAddModalDropzones === 'function'){
+            window.setupAddModalDropzones();
+        }
+    }, 150);
+    
+    // Also call again after 500ms to ensure DOM ready
+    setTimeout(()=>{
+        if(typeof setupAddModalDropzones === 'function') setupAddModalDropzones();
+        if(typeof window.setupAddModalDropzones === 'function') window.setupAddModalDropzones();
+    }, 500);
 }
 
 // Helper functions for modal multi-dropdowns
@@ -3328,7 +3342,7 @@ async function createNewJemaahFromModal() {
             const passFiles = (passportDropzone && passportDropzone._files) ? passportDropzone._files : [];
             const hasPicture = picFiles.length>0;
             const hasPassport = passFiles.length>0;
-            console.log(`V98 Create check - picture files: ${picFiles.length}, passport files: ${passFiles.length}`);
+            console.log(`V100 Create check - picture files: ${picFiles.length}, passport files: ${passFiles.length}`, picFiles, passFiles);
             
             if(hasPicture || hasPassport){
               if(saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Uploading files...';
