@@ -2963,14 +2963,14 @@ function openAddJemaahModal() {
                 <div class="grid grid-cols-1 sm:grid-cols-3 items-start gap-2 mt-3">
                     <label class="font-bold text-slate-500 uppercase text-[11px] mt-2"><i class="fa-solid fa-image mr-1"></i> PICTURE</label>
                     <div class="sm:col-span-2">
-                        <div id="addModalDropzone-PICTURE" class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50 hover:bg-white hover:border-brand-maroon transition cursor-pointer group">
-                            <input type="file" id="addModalFileInput-PICTURE" accept="image/*,.pdf,application/pdf" class="hidden" multiple>
-                            <div class="flex flex-col items-center gap-2">
+                        <div id="addModalDropzone-PICTURE" class="relative border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50 hover:bg-white hover:border-brand-maroon transition group">
+                            <input type="file" id="addModalFileInput-PICTURE" accept="image/*,.pdf,application/pdf" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                            <div class="flex flex-col items-center gap-2 pointer-events-none">
                                 <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-400 group-hover:text-brand-maroon"></i>
                                 <span class="text-[11px] font-bold text-slate-600">Drag & drop gambar/PDF atau klik untuk pilih</span>
                                 <span class="text-[10px] text-slate-400">JPG, PNG, PDF max 10MB</span>
                             </div>
-                            <div id="addModalPreview-PICTURE" class="mt-3 flex flex-wrap gap-2 justify-center"></div>
+                            <div id="addModalPreview-PICTURE" class="relative z-20 mt-3 flex flex-wrap gap-2 justify-center"></div>
                         </div>
                     </div>
                 </div>
@@ -2987,14 +2987,14 @@ function openAddJemaahModal() {
                 <div class="grid grid-cols-1 sm:grid-cols-3 items-start gap-2 mb-3">
                     <label class="font-bold text-slate-500 uppercase text-[11px] mt-2"><i class="fa-solid fa-file-image mr-1"></i> PASSPORT COPY</label>
                     <div class="sm:col-span-2">
-                        <div id="addModalDropzone-PASSPORT_COPY" class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50 hover:bg-white hover:border-brand-maroon transition cursor-pointer group">
-                            <input type="file" id="addModalFileInput-PASSPORT_COPY" accept="image/*,.pdf" class="hidden" multiple>
-                            <div class="flex flex-col items-center gap-2">
+                        <div id="addModalDropzone-PASSPORT_COPY" class="relative border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50 hover:bg-white hover:border-brand-maroon transition group">
+                            <input type="file" id="addModalFileInput-PASSPORT_COPY" accept="image/*,.pdf,application/pdf" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                            <div class="flex flex-col items-center gap-2 pointer-events-none">
                                 <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-400 group-hover:text-brand-maroon"></i>
                                 <span class="text-[11px] font-bold text-slate-600">Drag & drop passport copy atau klik</span>
                                 <span class="text-[10px] text-slate-400">JPG, PNG, PDF max 10MB</span>
                             </div>
-                            <div id="addModalPreview-PASSPORT_COPY" class="mt-3 flex flex-wrap gap-2 justify-center"></div>
+                            <div id="addModalPreview-PASSPORT_COPY" class="relative z-20 mt-3 flex flex-wrap gap-2 justify-center"></div>
                         </div>
                     </div>
                 </div>
@@ -3047,12 +3047,9 @@ function openAddJemaahModal() {
                                 <span id="boardBasisLabel" class="text-xs text-slate-500">-- Pilih Board Basis --</span>
                                 <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
                             </button>
-                            <div id="boardBasisDropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-300 rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto">
+                            <div id="boardBasisDropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-300 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto">
                                 <div id="boardBasisList">
                                     ${boardBasisMultiHtml}
-                                </div>
-                                <div class="p-2 border-t border-slate-100">
-                                    <button type="button" onclick="handleAddNewOption('BOARD BASIS', null, 'boardBasisDropdown')" class="text-[11px] font-bold text-brand-maroon hover:text-rose-900">+ Add option</button>
                                 </div>
                             </div>
                         </div>
@@ -3077,12 +3074,9 @@ function openAddJemaahModal() {
                                 <span id="insuranLabel" class="text-xs text-slate-500">-- Pilih Insuran --</span>
                                 <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
                             </button>
-                            <div id="insuranDropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-300 rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto">
+                            <div id="insuranDropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-300 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto">
                                 <div id="insuranList">
                                     ${insuranMultiHtml}
-                                </div>
-                                <div class="p-2 border-t border-slate-100">
-                                    <button type="button" onclick="handleAddNewOption('INSURAN', null, 'insuranDropdown')" class="text-[11px] font-bold text-brand-maroon hover:text-rose-900">+ Add option</button>
                                 </div>
                             </div>
                         </div>
