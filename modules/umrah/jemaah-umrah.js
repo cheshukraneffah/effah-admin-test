@@ -3334,34 +3334,18 @@ async function createNewJemaahFromModal() {
               if(saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Uploading files...';
               console.log(`V90 Uploading attachments for new record ${newRecId}: picture=${pictureDropzone?._files?.length||0}, passport=${passportDropzone?._files?.length||0}`);
               
-              const cloudName = "dfb839ep";
-              const uploadPreset = "Effah Travel";
-              
-              const uploadField = async (fieldName, files)=>{
-                if(!files || files.length===0) return [];
-                const uploadPromises = files.map(async (file)=>{
-                  const formData = new FormData();
-                  formData.append("file", file);
-                  formData.append("upload_preset", uploadPreset);
-                  const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, { method: "POST", body: formData });
-                  const cloudData = await cloudRes.json();
-                  if(!cloudRes.ok || !cloudData.secure_url) throw new Error("Cloudinary upload failed: " + JSON.stringify(cloudData));
-                  return { url: cloudData.secure_url, filename: file.name };
-                });
-                return await Promise.all(uploadPromises);
-              };
-              
+              // V99: Files already uploaded to Cloudinary in handleAddModalFileSelect/handleAddModalDrop - use directly
               try{
                 let attachmentsToUpdate = {};
                 
                 if(hasPicture){
-                  const uploadedPicFiles = await uploadField('PICTURE', picFiles);
-                  if(uploadedPicFiles.length>0) attachmentsToUpdate['PICTURE'] = uploadedPicFiles;
+                  // picFiles already contains {url, filename} from Cloudinary
+                  if(picFiles.length>0) attachmentsToUpdate['PICTURE'] = picFiles;
                 }
                 if(hasPassport){
-                  const uploadedPassFiles = await uploadField('PASSPORT COPY', passFiles);
-                  if(uploadedPassFiles.length>0) attachmentsToUpdate['PASSPORT COPY'] = uploadedPassFiles;
+                  if(passFiles.length>0) attachmentsToUpdate['PASSPORT COPY'] = passFiles;
                 }
+                console.log('V99 Attachments to save:', attachmentsToUpdate);
                 
                 if(Object.keys(attachmentsToUpdate).length>0){
                   const airtableUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/DATA%20JEMAAH%20UMRAH/${newRecId}`;
