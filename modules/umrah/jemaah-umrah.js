@@ -619,7 +619,7 @@ async function fetchJemaahMetaOptionsFromMeta(){
         jemaahFieldOptions[field.name] = filtered.map(c=> ({ id: c.id, name: c.name, color: c.color }));
       }
     });
-    console.log('✅ Jemaah V97 loaded', Object.keys(jemaahMetaFieldsByName).length, 'fields');
+    console.log('✅ Jemaah V78 loaded', Object.keys(jemaahMetaFieldsByName).length, 'fields');
     const p = jemaahMetaFieldsByName['PAKEJ'];
     if(p) console.log('Sample PAKEJ:', { id: p.id, id_len: p.id.length, type: p.type, choices: (p.options?.choices||[]).map(c=> ({id: c.id, len: c.id.length, name: c.name})) });
     const ins = jemaahMetaFieldsByName['INSURAN'];
@@ -2963,14 +2963,14 @@ function openAddJemaahModal() {
                 <div class="grid grid-cols-1 sm:grid-cols-3 items-start gap-2 mt-3">
                     <label class="font-bold text-slate-500 uppercase text-[11px] mt-2"><i class="fa-solid fa-image mr-1"></i> PICTURE</label>
                     <div class="sm:col-span-2">
-                        <div id="addModalDropzone-PICTURE" class="space-y-2">
-                            <div id="addModalFileList-PICTURE" class="space-y-1"></div>
-                            <div id="addModalDropArea-PICTURE" class="border-2 border-dashed border-slate-300 hover:border-brand-maroon rounded-2xl p-4 text-center cursor-pointer bg-slate-50 hover:bg-rose-50/30 transition group">
-                                <i class="fa-solid fa-cloud-arrow-up text-xl text-slate-400 group-hover:text-brand-maroon mb-1"></i>
-                                <p class="font-semibold text-slate-600 text-xs">Drop files here or click to browse (Multiple supported)</p>
-                                <p class="text-[10px] text-slate-400">PDF, JPG, PNG (Max 10MB per file)</p>
-                                <input type="file" id="addModalFileInput-PICTURE" multiple class="hidden" accept="image/*,application/pdf,.pdf" onchange="handleAddModalFileSelect(this, 'PICTURE')">
+                        <div id="addModalDropzone-PICTURE" class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50 hover:bg-white hover:border-brand-maroon transition cursor-pointer group">
+                            <input type="file" id="addModalFileInput-PICTURE" accept="image/*,.pdf,application/pdf" class="hidden" multiple>
+                            <div class="flex flex-col items-center gap-2">
+                                <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-400 group-hover:text-brand-maroon"></i>
+                                <span class="text-[11px] font-bold text-slate-600">Drag & drop gambar/PDF atau klik untuk pilih</span>
+                                <span class="text-[10px] text-slate-400">JPG, PNG, PDF max 10MB</span>
                             </div>
+                            <div id="addModalPreview-PICTURE" class="mt-3 flex flex-wrap gap-2 justify-center"></div>
                         </div>
                     </div>
                 </div>
@@ -2987,14 +2987,14 @@ function openAddJemaahModal() {
                 <div class="grid grid-cols-1 sm:grid-cols-3 items-start gap-2 mb-3">
                     <label class="font-bold text-slate-500 uppercase text-[11px] mt-2"><i class="fa-solid fa-file-image mr-1"></i> PASSPORT COPY</label>
                     <div class="sm:col-span-2">
-                        <div id="addModalDropzone-PASSPORT_COPY" class="space-y-2">
-                            <div id="addModalFileList-PASSPORT_COPY" class="space-y-1"></div>
-                            <div id="addModalDropArea-PASSPORT_COPY" class="border-2 border-dashed border-slate-300 hover:border-brand-maroon rounded-2xl p-4 text-center cursor-pointer bg-slate-50 hover:bg-rose-50/30 transition group">
-                                <i class="fa-solid fa-cloud-arrow-up text-xl text-slate-400 group-hover:text-brand-maroon mb-1"></i>
-                                <p class="font-semibold text-slate-600 text-xs">Drop files here or click to browse (Multiple supported)</p>
-                                <p class="text-[10px] text-slate-400">PDF, JPG, PNG (Max 10MB per file)</p>
-                                <input type="file" id="addModalFileInput-PASSPORT_COPY" multiple class="hidden" accept="image/*,application/pdf,.pdf" onchange="handleAddModalFileSelect(this, 'PASSPORT COPY')">
+                        <div id="addModalDropzone-PASSPORT_COPY" class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50 hover:bg-white hover:border-brand-maroon transition cursor-pointer group">
+                            <input type="file" id="addModalFileInput-PASSPORT_COPY" accept="image/*,.pdf" class="hidden" multiple>
+                            <div class="flex flex-col items-center gap-2">
+                                <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-400 group-hover:text-brand-maroon"></i>
+                                <span class="text-[11px] font-bold text-slate-600">Drag & drop passport copy atau klik</span>
+                                <span class="text-[10px] text-slate-400">JPG, PNG, PDF max 10MB</span>
                             </div>
+                            <div id="addModalPreview-PASSPORT_COPY" class="mt-3 flex flex-wrap gap-2 justify-center"></div>
                         </div>
                     </div>
                 </div>
@@ -3047,9 +3047,12 @@ function openAddJemaahModal() {
                                 <span id="boardBasisLabel" class="text-xs text-slate-500">-- Pilih Board Basis --</span>
                                 <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
                             </button>
-                            <div id="boardBasisDropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-300 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto">
+                            <div id="boardBasisDropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-300 rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto">
                                 <div id="boardBasisList">
                                     ${boardBasisMultiHtml}
+                                </div>
+                                <div class="p-2 border-t border-slate-100">
+                                    <button type="button" onclick="handleAddNewOption('BOARD BASIS', null, 'boardBasisDropdown')" class="text-[11px] font-bold text-brand-maroon hover:text-rose-900">+ Add option</button>
                                 </div>
                             </div>
                         </div>
@@ -3074,9 +3077,12 @@ function openAddJemaahModal() {
                                 <span id="insuranLabel" class="text-xs text-slate-500">-- Pilih Insuran --</span>
                                 <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
                             </button>
-                            <div id="insuranDropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-300 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto">
+                            <div id="insuranDropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-300 rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto">
                                 <div id="insuranList">
                                     ${insuranMultiHtml}
+                                </div>
+                                <div class="p-2 border-t border-slate-100">
+                                    <button type="button" onclick="handleAddNewOption('INSURAN', null, 'insuranDropdown')" class="text-[11px] font-bold text-brand-maroon hover:text-rose-900">+ Add option</button>
                                 </div>
                             </div>
                         </div>
@@ -3130,7 +3136,7 @@ function openAddJemaahModal() {
 
     if (modal) modal.classList.remove('hidden');
 
-    // Attach listeners for multi-select checkboxes + dropzones (V100: call setup here, not just page load)
+    // Attach listeners for multi-select checkboxes
     setTimeout(()=>{
         document.querySelectorAll('.board-checkbox').forEach(cb=>{
             cb.addEventListener('change', updateBoardBasisSelected);
@@ -3141,21 +3147,7 @@ function openAddJemaahModal() {
         document.querySelectorAll('.ejen-checkbox').forEach(cb=>{
             cb.addEventListener('change', updateEjenSelected);
         });
-        // V100: Setup dropzones for PICTURE and PASSPORT COPY - same as detail modal's setupDropZones
-        if(typeof setupAddModalDropzones === 'function'){
-            setupAddModalDropzones();
-            console.log('V100 setupAddModalDropzones called after openAddJemaahModal');
-        }
-        if(typeof window.setupAddModalDropzones === 'function'){
-            window.setupAddModalDropzones();
-        }
-    }, 150);
-    
-    // Also call again after 500ms to ensure DOM ready
-    setTimeout(()=>{
-        if(typeof setupAddModalDropzones === 'function') setupAddModalDropzones();
-        if(typeof window.setupAddModalDropzones === 'function') window.setupAddModalDropzones();
-    }, 500);
+    }, 100);
 }
 
 // Helper functions for modal multi-dropdowns
@@ -3338,28 +3330,46 @@ async function createNewJemaahFromModal() {
             // V90: Handle PICTURE and PASSPORT COPY uploads if any
             let pictureDropzone = document.getElementById('addModalDropzone-PICTURE');
             let passportDropzone = document.getElementById('addModalDropzone-PASSPORT_COPY');
+            // Fallback to old IDs with space if needed
+            if(!passportDropzone) passportDropzone = document.getElementById('addModalDropzone-PASSPORT COPY');
+            // Also check for _files on dropzone
             const picFiles = (pictureDropzone && pictureDropzone._files) ? pictureDropzone._files : [];
             const passFiles = (passportDropzone && passportDropzone._files) ? passportDropzone._files : [];
             const hasPicture = picFiles.length>0;
             const hasPassport = passFiles.length>0;
-            console.log(`V100 Create check - picture files: ${picFiles.length}, passport files: ${passFiles.length}`, picFiles, passFiles);
             
             if(hasPicture || hasPassport){
               if(saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Uploading files...';
               console.log(`V90 Uploading attachments for new record ${newRecId}: picture=${pictureDropzone?._files?.length||0}, passport=${passportDropzone?._files?.length||0}`);
               
-              // V99: Files already uploaded to Cloudinary in handleAddModalFileSelect/handleAddModalDrop - use directly
+              const cloudName = "dfb839ep";
+              const uploadPreset = "Effah Travel";
+              
+              const uploadField = async (fieldName, files)=>{
+                if(!files || files.length===0) return [];
+                const uploadPromises = files.map(async (file)=>{
+                  const formData = new FormData();
+                  formData.append("file", file);
+                  formData.append("upload_preset", uploadPreset);
+                  const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, { method: "POST", body: formData });
+                  const cloudData = await cloudRes.json();
+                  if(!cloudRes.ok || !cloudData.secure_url) throw new Error("Cloudinary upload failed: " + JSON.stringify(cloudData));
+                  return { url: cloudData.secure_url, filename: file.name };
+                });
+                return await Promise.all(uploadPromises);
+              };
+              
               try{
                 let attachmentsToUpdate = {};
                 
                 if(hasPicture){
-                  // picFiles already contains {url, filename} from Cloudinary
-                  if(picFiles.length>0) attachmentsToUpdate['PICTURE'] = picFiles;
+                  const uploadedPicFiles = await uploadField('PICTURE', picFiles);
+                  if(uploadedPicFiles.length>0) attachmentsToUpdate['PICTURE'] = uploadedPicFiles;
                 }
                 if(hasPassport){
-                  if(passFiles.length>0) attachmentsToUpdate['PASSPORT COPY'] = passFiles;
+                  const uploadedPassFiles = await uploadField('PASSPORT COPY', passFiles);
+                  if(uploadedPassFiles.length>0) attachmentsToUpdate['PASSPORT COPY'] = uploadedPassFiles;
                 }
-                console.log('V99 Attachments to save:', attachmentsToUpdate);
                 
                 if(Object.keys(attachmentsToUpdate).length>0){
                   const airtableUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/DATA%20JEMAAH%20UMRAH/${newRecId}`;
