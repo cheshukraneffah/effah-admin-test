@@ -2963,18 +2963,20 @@ function openAddJemaahModal() {
                 <div class="grid grid-cols-1 sm:grid-cols-3 items-start gap-2 mt-3">
                     <label class="font-bold text-slate-500 uppercase text-[11px] mt-2"><i class="fa-solid fa-image mr-1"></i> PICTURE</label>
                     <div class="sm:col-span-2">
-                        <label for="addModalFileInput-PICTURE" id="addModalDropzone-PICTURE" class="relative block border-2 border-dashed border-slate-300 rounded-xl p-5 text-center bg-slate-50 hover:bg-white hover:border-brand-maroon transition-all duration-200 cursor-pointer group">
-                            <input type="file" id="addModalFileInput-PICTURE" accept="image/*,.pdf,application/pdf" multiple class="hidden">
-                            <div id="addModalDropContent-PICTURE" class="flex flex-col items-center gap-2 pointer-events-none">
-                                <div class="w-12 h-12 rounded-full bg-slate-100 group-hover:bg-rose-50 flex items-center justify-center transition">
-                                    <i class="fa-solid fa-cloud-arrow-up text-xl text-slate-400 group-hover:text-brand-maroon"></i>
+                        <div id="addModalDropzone-PICTURE" class="relative border-2 border-dashed border-slate-300 rounded-xl p-5 text-center bg-slate-50 hover:bg-white hover:border-brand-maroon transition-all duration-200 cursor-pointer group">
+                            <input type="file" id="addModalFileInput-PICTURE" accept="image/*,.pdf,application/pdf" multiple style="display:none">
+                            <label for="addModalFileInput-PICTURE" id="addModalDropLabel-PICTURE" class="block cursor-pointer">
+                                <div id="addModalDropContent-PICTURE" class="flex flex-col items-center gap-2">
+                                    <div class="w-12 h-12 rounded-full bg-slate-100 group-hover:bg-rose-50 flex items-center justify-center transition">
+                                        <i class="fa-solid fa-cloud-arrow-up text-xl text-slate-400 group-hover:text-brand-maroon"></i>
+                                    </div>
+                                    <span class="text-[11px] font-bold text-slate-600">Drag & drop gambar/PDF atau klik untuk pilih</span>
+                                    <span class="text-[10px] text-slate-400">JPG, PNG, PDF max 10MB</span>
+                                    <span id="addModalDropHint-PICTURE" class="hidden text-[10px] font-bold text-brand-maroon mt-1">Lepaskan fail di sini...</span>
                                 </div>
-                                <span class="text-[11px] font-bold text-slate-600">Drag & drop gambar/PDF atau klik untuk pilih</span>
-                                <span class="text-[10px] text-slate-400">JPG, PNG, PDF max 10MB</span>
-                                <span id="addModalDropHint-PICTURE" class="hidden text-[10px] font-bold text-brand-maroon mt-1">Lepaskan fail di sini...</span>
-                            </div>
-                            <div id="addModalPreview-PICTURE" class="mt-4 flex flex-wrap gap-2 justify-center pointer-events-auto"></div>
-                        </label>
+                            </label>
+                            <div id="addModalPreview-PICTURE" class="mt-4 flex flex-wrap gap-2 justify-center"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2990,18 +2992,20 @@ function openAddJemaahModal() {
                 <div class="grid grid-cols-1 sm:grid-cols-3 items-start gap-2 mb-3">
                     <label class="font-bold text-slate-500 uppercase text-[11px] mt-2"><i class="fa-solid fa-file-image mr-1"></i> PASSPORT COPY</label>
                     <div class="sm:col-span-2">
-                        <label for="addModalFileInput-PASSPORT_COPY" id="addModalDropzone-PASSPORT_COPY" class="relative block border-2 border-dashed border-slate-300 rounded-xl p-5 text-center bg-slate-50 hover:bg-white hover:border-brand-maroon transition-all duration-200 cursor-pointer group">
-                            <input type="file" id="addModalFileInput-PASSPORT_COPY" accept="image/*,.pdf,application/pdf" multiple class="hidden">
-                            <div id="addModalDropContent-PASSPORT_COPY" class="flex flex-col items-center gap-2 pointer-events-none">
-                                <div class="w-12 h-12 rounded-full bg-slate-100 group-hover:bg-rose-50 flex items-center justify-center transition">
-                                    <i class="fa-solid fa-cloud-arrow-up text-xl text-slate-400 group-hover:text-brand-maroon"></i>
+                        <div id="addModalDropzone-PASSPORT_COPY" class="relative border-2 border-dashed border-slate-300 rounded-xl p-5 text-center bg-slate-50 hover:bg-white hover:border-brand-maroon transition-all duration-200 cursor-pointer group">
+                            <input type="file" id="addModalFileInput-PASSPORT_COPY" accept="image/*,.pdf,application/pdf" multiple style="display:none">
+                            <label for="addModalFileInput-PASSPORT_COPY" id="addModalDropLabel-PASSPORT_COPY" class="block cursor-pointer">
+                                <div id="addModalDropContent-PASSPORT_COPY" class="flex flex-col items-center gap-2">
+                                    <div class="w-12 h-12 rounded-full bg-slate-100 group-hover:bg-rose-50 flex items-center justify-center transition">
+                                        <i class="fa-solid fa-cloud-arrow-up text-xl text-slate-400 group-hover:text-brand-maroon"></i>
+                                    </div>
+                                    <span class="text-[11px] font-bold text-slate-600">Drag & drop passport copy atau klik</span>
+                                    <span class="text-[10px] text-slate-400">JPG, PNG, PDF max 10MB</span>
+                                    <span id="addModalDropHint-PASSPORT_COPY" class="hidden text-[10px] font-bold text-brand-maroon mt-1">Lepaskan fail di sini...</span>
                                 </div>
-                                <span class="text-[11px] font-bold text-slate-600">Drag & drop passport copy atau klik</span>
-                                <span class="text-[10px] text-slate-400">JPG, PNG, PDF max 10MB</span>
-                                <span id="addModalDropHint-PASSPORT_COPY" class="hidden text-[10px] font-bold text-brand-maroon mt-1">Lepaskan fail di sini...</span>
-                            </div>
-                            <div id="addModalPreview-PASSPORT_COPY" class="mt-4 flex flex-wrap gap-2 justify-center pointer-events-auto"></div>
-                        </label>
+                            </label>
+                            <div id="addModalPreview-PASSPORT_COPY" class="mt-4 flex flex-wrap gap-2 justify-center"></div>
+                        </div>
                     </div>
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
