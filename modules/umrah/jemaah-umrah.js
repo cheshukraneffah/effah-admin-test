@@ -2738,9 +2738,17 @@ function openExpandModal(recId) {
     if (modal) modal.classList.remove('hidden');
 }
 
-function closeExpandModal() {
+function closeExpandModal(){
     const modal = document.getElementById('expandRecordModal');
-    if (modal) modal.classList.add('hidden');
+    if(modal){
+        modal.classList.add('hidden');
+        modal.style.display='none';
+    }
+    // clear addModalFiles
+    try{ addModalFiles = { 'PICTURE': [], 'PASSPORT_COPY': [], 'VISA_COPY': [], 'MOFABIO': [], 'INSURAN_DOC': [] }; }catch(e){}
+    // also reset form container
+    const container = document.getElementById('expandModalFormContainer');
+    if(container) container.innerHTML = '';
 }
 
 function renderDropZoneHtml(recId, fieldName, currentFiles) {
@@ -3305,9 +3313,6 @@ function openAddJemaahModal() {
                                 <div id="insuranList">
                                     ${insuranMultiHtml}
                                 </div>
-                                <div class="p-2 border-t border-slate-100">
-                                    <button type="button" onclick="handleAddNewOption('INSURAN', null, 'insuranDropdown')" class="text-[11px] font-bold text-brand-maroon hover:text-rose-900">+ Add option</button>
-                                </div>
                             </div>
                         </div>
                         <div id="insuranSelected" class="flex flex-wrap gap-1 mt-2"></div>
@@ -3459,240 +3464,157 @@ function filterEjenModal(query){
     });
 }
 
-async function createNewJemaahFromModal() {
+async function createNewJemaahFromModal(){
     const form = document.getElementById('addModalForm');
-    if (!form) return;
-
-    const nameEl = form.querySelector('[name="NAME"]');
-    const nameVal = nameEl ? nameEl.value.trim() : '';
-    if (!nameVal) {
-        alert("Maklumat Tidak Lengkap: Sila masukkan nama jemaah. Medan Nama adalah wajib diisi.");
+    if(!form){
+        alert('Form tidak ditemui');
         return;
     }
-
-    let payloadFields = {};
+    const formData = new FormData(form);
+    const fields = {};
     
-    // NAME and PASSPORT uppercase
-    payloadFields['NAME'] = nameVal.toUpperCase();
-    
-    const icEl = form.querySelector('[name="IC NO."]');
-    if(icEl && icEl.value.trim()) payloadFields['IC NO.'] = icEl.value.trim();
-    
-    const passportEl = form.querySelector('[name="PASSPORT NO."]');
-    if(passportEl && passportEl.value.trim()) payloadFields['PASSPORT NO.'] = passportEl.value.trim().toUpperCase();
-    
-    // Single selects with Add new option handling
-    const singleFields = ['GENDER', 'NATIONALITY', 'STATUS VISA', 'PAKEJ'];
-    singleFields.forEach(fn=>{
-        const el = form.querySelector(`[name="${fn}"]`);
-        if(el && el.value && el.value!=='__ADD_NEW__' && el.value!==''){
-            payloadFields[fn] = el.value;
+    // Basic text fields
+    for(let [k,v] of formData.entries()){
+        if(k==='TRAIN' || k==='FIT TICKET') continue;
+        if(k==='BOARD BASIS' || k==='INSURAN') continue; // handled separately
+        if(v && String(v).trim()!==''){
+            // Uppercase NAME
+            if(k==='NAME') v = String(v).toUpperCase().trim();
+            if(k==='PASSPORT NO.') v = String(v).toUpperCase().trim();
+            fields[k] = v;
         }
-    });
-    
-    // Date fields
-    ['DOB (FOREIGNER)', 'DATE OF ISSUE', 'DATE OF EXPIRE'].forEach(fn=>{
-        const el = form.querySelector(`[name="${fn}"]`);
-        if(el && el.value) payloadFields[fn] = el.value;
-    });
-    
-    // Multi-select via checkboxes - BOARD BASIS
-    const boardChecked = Array.from(document.querySelectorAll('.board-checkbox:checked')).map(cb=>cb.value).filter(v=>v);
-    if(boardChecked.length>0){
-        payloadFields['BOARD BASIS'] = boardChecked;
-    }
-    
-    // Multi-select via checkboxes - INSURAN
-    const insuranChecked = Array.from(document.querySelectorAll('.insuran-checkbox:checked')).map(cb=>cb.value).filter(v=>v);
-    if(insuranChecked.length>0){
-        payloadFields['INSURAN'] = insuranChecked;
     }
     
     // Checkboxes
-    const fitEl = form.querySelector('[name="FIT TICKET"]');
-    if(fitEl) payloadFields['FIT TICKET'] = fitEl.checked;
+    const trainChk = form.querySelector('input[name="TRAIN"]');
+    if(trainChk) fields['TRAIN'] = trainChk.checked ? true : false;
+    const fitChk = form.querySelector('input[name="FIT TICKET"]');
+    if(fitChk) fields['FIT TICKET'] = fitChk.checked ? true : false;
     
-    const trainEl = form.querySelector('[name="TRAIN"]');
-    if(trainEl) payloadFields['TRAIN'] = trainEl.checked;
+    // Multi selects BOARD BASIS, INSURAN
+    const boardChecked = Array.from(form.querySelectorAll('.board-checkbox:checked')).map(cb=>cb.value);
+    if(boardChecked.length>0) fields['BOARD BASIS'] = boardChecked;
+    const insuranChecked = Array.from(form.querySelectorAll('.insuran-checkbox:checked')).map(cb=>cb.value);
+    if(insuranChecked.length>0) fields['INSURAN'] = insuranChecked;
     
-    // TRIP - single link
-    const tripEl = form.querySelector('[name="TRIP"]');
-    if(tripEl && tripEl.value){
-        payloadFields['TRIP'] = [tripEl.value];
+    // Ejen
+    const ejenChecked = Array.from(form.querySelectorAll('.ejen-checkbox:checked')).map(cb=>cb.value);
+    if(ejenChecked.length>0) fields['EJEN'] = ejenChecked;
+    
+    // Trip linkage - critical for table filter
+    const tripSel = form.querySelector('select[name="TRIP"]');
+    if(tripSel && tripSel.value){
+        fields['TRIP'] = [tripSel.value];
     }
     
-    // EJEN - multi link (now supports multiple)
-    const ejenChecked = Array.from(document.querySelectorAll('.ejen-checkbox:checked')).map(cb=>cb.value).filter(v=>v);
-    if(ejenChecked.length>0){
-        payloadFields['EJEN'] = ejenChecked;
+    // Validate required
+    if(!fields['NAME']){
+        alert('NAME wajib isi');
+        return;
     }
     
-    // NOTES
-    const notesEl = form.querySelector('[name="NOTES"]');
-    if(notesEl && notesEl.value.trim()){
-        payloadFields['NOTES'] = notesEl.value.trim();
-    }
-
+    // Save button loading
     const saveBtn = document.getElementById('modalSaveBtn');
-    if (saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Menambah...';
-
-    try {
-        const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/DATA%20JEMAAH%20UMRAH`;
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${AIRTABLE_PAT}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ fields: payloadFields })
-        });
-
-        if (response.ok) {
-            const newRecord = await response.json();
-            const newRecId = newRecord.id;
-            
-            // V90: Handle PICTURE and PASSPORT COPY uploads if any
-            let pictureDropzone = document.getElementById('addModalDropzone-PICTURE');
-            let passportDropzone = document.getElementById('addModalDropzone-PASSPORT_COPY');
-            // Fallback to old IDs with space if needed
-            if(!passportDropzone) passportDropzone = document.getElementById('addModalDropzone-PASSPORT COPY');
-            // Also check for _files on dropzone
-            const picFiles = (pictureDropzone && pictureDropzone._files) ? pictureDropzone._files : [];
-            const passFiles = (passportDropzone && passportDropzone._files) ? passportDropzone._files : [];
-            const hasPicture = picFiles.length>0;
-            const hasPassport = passFiles.length>0;
-            
-            if(hasPicture || hasPassport){
-              if(saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Uploading files...';
-              console.log(`V90 Uploading attachments for new record ${newRecId}: picture=${pictureDropzone?._files?.length||0}, passport=${passportDropzone?._files?.length||0}`);
-              
-              const cloudName = "dfb839ep";
-              const uploadPreset = "Effah Travel";
-              
-              const uploadField = async (fieldName, files)=>{
-                if(!files || files.length===0) return [];
-                const uploadPromises = files.map(async (file)=>{
-                  const formData = new FormData();
-                  formData.append("file", file);
-                  formData.append("upload_preset", uploadPreset);
-                  const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, { method: "POST", body: formData });
-                  const cloudData = await cloudRes.json();
-                  if(!cloudRes.ok || !cloudData.secure_url) throw new Error("Cloudinary upload failed: " + JSON.stringify(cloudData));
-                  return { url: cloudData.secure_url, filename: file.name };
-                });
-                return await Promise.all(uploadPromises);
-              };
-              
-              try{
-                let attachmentsToUpdate = {};
-                
-                if(hasPicture){
-                  const uploadedPicFiles = await uploadField('PICTURE', picFiles);
-                  if(uploadedPicFiles.length>0) attachmentsToUpdate['PICTURE'] = uploadedPicFiles;
-                }
-                if(hasPassport){
-                  const uploadedPassFiles = await uploadField('PASSPORT COPY', passFiles);
-                  if(uploadedPassFiles.length>0) attachmentsToUpdate['PASSPORT COPY'] = uploadedPassFiles;
-                }
-                
-                if(Object.keys(attachmentsToUpdate).length>0){
-                  const airtableUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/DATA%20JEMAAH%20UMRAH/${newRecId}`;
-                  const airtableRes = await fetch(airtableUrl, {
-                    method: 'PATCH',
-                    headers: { 'Authorization': `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fields: attachmentsToUpdate })
-                  });
-                  const resultJson = await airtableRes.json();
-                  if(airtableRes.ok){
-                    console.log('V90 Attachments uploaded for new record', newRecId);
-                    // Update local record
-                    const idx = allJemaahUmrahRecords.findIndex(r=> r.id===newRecId);
-                    if(idx>-1 && resultJson.fields){
-                      if(resultJson.fields['PICTURE']) allJemaahUmrahRecords[idx].fields['PICTURE'] = resultJson.fields['PICTURE'];
-                      if(resultJson.fields['PASSPORT COPY']) allJemaahUmrahRecords[idx].fields['PASSPORT COPY'] = resultJson.fields['PASSPORT COPY'];
-                    }
-                  } else {
-                    console.error('V90 Attachment Airtable error', resultJson);
-                  }
-                }
-              }catch(attErr){
-                console.error('V90 Attachment upload error', attErr);
-                alert("Jemaah berjaya ditambah tapi gagal upload gambar/passport. Sila upload manual di table.");
-              }
-            }
-            
-            allJemaahUmrahRecords.unshift(newRecord);
-            // If attachments were uploaded, we already updated, but need to refresh grid with updated record
-            // Actually we pushed old record before attachment update, so we need to update the first record with new fields if attachments exist
-            // For simplicity, refetch grid after
-            filterAndRenderJemaahGrid();
-            closeExpandModal();
-            console.log('Berjaya menambah jemaah baharu:', newRecord.id);
-        } else {
-            const errText = await response.text();
-            console.error('Gagal menambah jemaah:', errText);
-            alert("Gagal menambah jemaah baharu. Sila pastikan semua maklumat wajib telah diisi dengan betul dan cuba semula. Ralat: " + errText.substring(0,300));
-        }
-    } catch (e) {
-        console.error("Ralat semasa menambah jemaah:", e);
-        alert("Ralat sistem semasa menambah jemaah baharu: " + e.message + ". Sila periksa sambungan internet dan cuba semula.");
-    } finally {
-        if (saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-plus mr-1"></i> Tambah Jemaah';
+    if(saveBtn){
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Menyimpan...';
     }
-}
-
-
-
-function initHeaderDragAndDrop() {
-    let draggedCol = null;
-    const headers = document.querySelectorAll('#jemaahTableHeaderRow th.draggable-header');
-
-    headers.forEach(th => {
-        th.addEventListener('dragstart', (e) => {
-            draggedCol = th.getAttribute('data-col');
-            e.dataTransfer.effectAllowed = 'move';
-            th.classList.add('opacity-50');
-        });
-
-        th.addEventListener('dragend', () => {
-            th.classList.remove('opacity-50');
-            headers.forEach(h => h.classList.remove('drag-over'));
-        });
-
-        th.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            th.classList.add('drag-over');
-        });
-
-        th.addEventListener('dragleave', () => {
-            th.classList.remove('drag-over');
-        });
-
-        th.addEventListener('drop', (e) => {
-            e.preventDefault();
-            th.classList.remove('drag-over');
-
-            const targetCol = th.getAttribute('data-col');
-            if (draggedCol && targetCol && draggedCol !== targetCol) {
-                const fromIndex = columnOrder.indexOf(draggedCol);
-                const toIndex = columnOrder.indexOf(targetCol);
-
-                if (fromIndex !== -1 && toIndex !== -1) {
-                    columnOrder.splice(fromIndex, 1);
-                    columnOrder.splice(toIndex, 0, draggedCol);
-
-                    localStorage.setItem('jemaahColOrder', JSON.stringify(columnOrder));
-
-                    renderTableHeader();
-                    filterAndRenderJemaahGrid();
-                    initColumnResizers();
-                    initHeaderDragAndDrop();
+    
+    // FIX: Upload files from addModalFiles to Cloudinary then attach URLs to Airtable
+    (async()=>{
+        try{
+            const cloudName = "dfb839ep";
+            const uploadPreset = "Effah Travel";
+            
+            const uploadFieldMap = {
+                'PICTURE': 'PICTURE',
+                'PASSPORT_COPY': 'PASSPORT COPY',
+                'VISA_COPY': 'VISA COPY',
+                'MOFABIO': 'MOFABIO'
+            };
+            
+            for(let localKey in addModalFiles){
+                const files = addModalFiles[localKey];
+                if(!files || files.length===0) continue;
+                const airtableField = uploadFieldMap[localKey];
+                if(!airtableField) continue;
+                
+                const uploadedUrls = [];
+                for(let file of files){
+                    const fd = new FormData();
+                    fd.append('file', file);
+                    fd.append('upload_preset', uploadPreset);
+                    fd.append('folder', `effah/${localKey.toLowerCase()}`);
+                    
+                    try{
+                        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
+                            method: 'POST',
+                            body: fd
+                        });
+                        const data = await res.json();
+                        if(data.secure_url){
+                            uploadedUrls.push({ url: data.secure_url, filename: file.name });
+                        }
+                    }catch(e){
+                        console.error('Upload fail', e);
+                    }
+                }
+                
+                if(uploadedUrls.length>0){
+                    // Airtable attachment format
+                    fields[airtableField] = uploadedUrls.map(u=>({ url: u.url, filename: u.filename }));
                 }
             }
-        });
-    });
+            
+            // Now create record in Airtable
+            const pat = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat') || AIRTABLE_PAT;
+            const base = window.AIRTABLE_BASE_ID || localStorage.getItem('effah_base_id') || AIRTABLE_BASE_ID;
+            if(!pat || !base){
+                alert('PAT / Base ID belum set di Settings API');
+                if(saveBtn){ saveBtn.disabled=false; saveBtn.innerHTML='<i class="fa-solid fa-plus mr-1"></i> Tambah Jemaah'; }
+                return;
+            }
+            
+            const url = `https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH`;
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${pat}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ fields })
+            });
+            
+            const result = await res.json();
+            if(result.error){
+                throw new Error(result.error.message || 'Gagal simpan Airtable');
+            }
+            
+            // Success
+            alert('Jemaah berjaya ditambah!');
+            closeExpandModal();
+            
+            // Refresh table
+            if(typeof fetchJemaahUmrahData==='function'){
+                fetchJemaahUmrahData(true);
+            } else if(typeof filterAndRenderJemaahGrid==='function'){
+                // add to local list optimistically
+                allJemaahUmrahRecords.unshift(result);
+                filterAndRenderJemaahGrid();
+            }
+            
+        }catch(err){
+            console.error(err);
+            alert('Gagal tambah jemaah: ' + err.message);
+            if(saveBtn){
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<i class="fa-solid fa-plus mr-1"></i> Tambah Jemaah';
+            }
+        }
+    })();
 }
+
+function
 
 function toggleSortDropdown() {
     const drop = document.getElementById('sortDropdownMenu');
