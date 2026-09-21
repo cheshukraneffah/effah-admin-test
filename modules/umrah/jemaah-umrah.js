@@ -42,6 +42,34 @@ const DEFAULT_COLUMN_ORDER = [
 ];
 let columnOrder = [...DEFAULT_COLUMN_ORDER];
 
+var columnDefinitions = [
+    { key: 'col-name', label: 'NAME', icon: 'fa-font', type: 'A' },
+    { key: 'col-picture', label: 'PICTURE', icon: 'fa-image', type: '🖼️' },
+    { key: 'col-ic', label: 'IC NO.', icon: 'fa-id-card', type: 'A' },
+    { key: 'col-passport', label: 'PASSPORT NO.', icon: 'fa-passport', type: 'A' },
+    { key: 'col-gender', label: 'GENDER', icon: 'fa-venus-mars', type: 'singleSelect' },
+    { key: 'col-family', label: 'FAMILY', icon: 'fa-people-group', type: 'family' },
+    { key: 'col-age', label: 'AGE', icon: 'fa-calculator', type: 'formula' },
+    { key: 'col-dob', label: 'DOB', icon: 'fa-calculator', type: 'formula' },
+    { key: 'col-dobf', label: 'DOB (FOREIGNER)', icon: 'fa-calendar', type: 'date' },
+    { key: 'col-nat', label: 'NATIONALITY', icon: 'fa-flag', type: 'singleSelect' },
+    { key: 'col-visa', label: 'STATUS VISA', icon: 'fa-file-lines', type: 'singleSelect' },
+    { key: 'col-passcopy', label: 'PASSPORT COPY', icon: 'fa-file-image', type: 'attachment' },
+    { key: 'col-visacopy', label: 'VISA COPY', icon: 'fa-file-image', type: 'attachment' },
+    { key: 'col-mofabio', label: 'MOFABIO', icon: 'fa-file-image', type: 'attachment' },
+    { key: 'col-fit', label: 'FIT TICKET', icon: 'fa-square-check', type: 'checkbox' },
+    { key: 'col-trip', label: 'TRIP', icon: 'fa-link', type: 'link' },
+    { key: 'col-issue', label: 'DATE OF ISSUE', icon: 'fa-calendar', type: 'date' },
+    { key: 'col-expire', label: 'DATE OF EXPIRE', icon: 'fa-calendar', type: 'date' },
+    { key: 'col-notes', label: 'NOTES', icon: 'fa-align-left', type: 'text' },
+    { key: 'col-board', label: 'BOARD BASIS', icon: 'fa-utensils', type: 'multiSelect' },
+    { key: 'col-train', label: 'TRAIN', icon: 'fa-train', type: 'checkbox' },
+    { key: 'col-insuran', label: 'INSURAN', icon: 'fa-shield-halved', type: 'multiSelect' },
+    { key: 'col-pakej', label: 'PAKEJ', icon: 'fa-box', type: 'singleSelect' },
+    { key: 'col-ejen', label: 'EJEN', icon: 'fa-user-tie', type: 'link' }
+];
+
+
 // Default Column Widths
 const defaultColumnWidths = {
     'col-idx': 55,
@@ -4146,32 +4174,7 @@ function updateStickyNameLeftOffset(idxWidth) {
     });
 }
 
-const columnDefinitions = [
-    { key: 'col-name', label: 'NAME', icon: 'fa-font', type: 'A' },
-    { key: 'col-picture', label: 'PICTURE', icon: 'fa-image', type: '🖼️' },
-    { key: 'col-ic', label: 'IC NO.', icon: 'fa-id-card', type: 'A' },
-    { key: 'col-passport', label: 'PASSPORT NO.', icon: 'fa-passport', type: 'A' },
-    { key: 'col-gender', label: 'GENDER', icon: 'fa-venus-mars', type: 'singleSelect' },
-    { key: 'col-family', label: 'FAMILY', icon: 'fa-people-group', type: 'family' },
-    { key: 'col-age', label: 'AGE', icon: 'fa-calculator', type: 'formula' },
-    { key: 'col-dob', label: 'DOB', icon: 'fa-calculator', type: 'formula' },
-    { key: 'col-dobf', label: 'DOB (FOREIGNER)', icon: 'fa-calendar', type: 'date' },
-    { key: 'col-nat', label: 'NATIONALITY', icon: 'fa-flag', type: 'singleSelect' },
-    { key: 'col-visa', label: 'STATUS VISA', icon: 'fa-file-lines', type: 'singleSelect' },
-    { key: 'col-passcopy', label: 'PASSPORT COPY', icon: 'fa-file-image', type: 'attachment' },
-    { key: 'col-visacopy', label: 'VISA COPY', icon: 'fa-file-image', type: 'attachment' },
-    { key: 'col-mofabio', label: 'MOFABIO', icon: 'fa-file-image', type: 'attachment' },
-    { key: 'col-fit', label: 'FIT TICKET', icon: 'fa-square-check', type: 'checkbox' },
-    { key: 'col-trip', label: 'TRIP', icon: 'fa-link', type: 'link' },
-    { key: 'col-issue', label: 'DATE OF ISSUE', icon: 'fa-calendar', type: 'date' },
-    { key: 'col-expire', label: 'DATE OF EXPIRE', icon: 'fa-calendar', type: 'date' },
-    { key: 'col-notes', label: 'NOTES', icon: 'fa-align-left', type: 'text' },
-    { key: 'col-board', label: 'BOARD BASIS', icon: 'fa-utensils', type: 'multiSelect' },
-    { key: 'col-train', label: 'TRAIN', icon: 'fa-train', type: 'checkbox' },
-    { key: 'col-insuran', label: 'INSURAN', icon: 'fa-shield-halved', type: 'multiSelect' },
-    { key: 'col-pakej', label: 'PAKEJ', icon: 'fa-box', type: 'singleSelect' },
-    { key: 'col-ejen', label: 'EJEN', icon: 'fa-user-tie', type: 'link' }
-];
+
 
 function getFieldTypeIcon(type){
   const map = {
