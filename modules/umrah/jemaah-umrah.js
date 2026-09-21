@@ -35,7 +35,7 @@ let currentSortDir = 'asc';
 // Default Column Order - FIXED v2: susunan logik ikut screenshot + flow dokumen
 const DEFAULT_COLUMN_ORDER = [
     'col-idx', 'col-name', 'col-picture', 'col-ic', 'col-passport', 
-    'col-gender', 'col-age', 'col-dob', 'col-dobf', 'col-nat', 
+    'col-gender', 'col-age', 'col-dob', 'col-family', 'col-dobf', 'col-nat', 
     'col-visa', 'col-passcopy', 'col-visacopy', 'col-mofabio', 
     'col-fit', 'col-trip', 'col-issue', 'col-expire', 'col-notes',
     'col-board', 'col-train', 'col-insuran', 'col-pakej', 'col-ejen'
@@ -45,6 +45,7 @@ let columnOrder = [...DEFAULT_COLUMN_ORDER];
 // Default Column Widths
 const defaultColumnWidths = {
     'col-idx': 55,
+    'col-family': 200,
     'col-name': 240,
     'col-picture': 90,
     'col-ic': 130,
@@ -72,7 +73,335 @@ const defaultColumnWidths = {
 
 let columnWidths = JSON.parse(localStorage.getItem('jemaahColWidths')) || { ...defaultColumnWidths };
 
-// === FIX V2: File Picker Binding untuk Add Jemaah Modal ===
+
+
+// === FAMILY GROUPS CARA B - Link to FAMILY_GROUPS table ===
+let familyGroupsCache = [];
+let familyGroupsMap = {};
+let familyViewMode = localStorage.getItem('jemaahFamilyViewMode') || 'flat'; // flat | grouped
+let familyColorMap = {};
+const FAMILY_COLORS = ['#0ea5e9','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316','#6366f1','#e11d48','#0d9488'];
+
+function getFamilyColor(familyId){
+    if(!familyId) return null;
+    if(!familyColorMap[familyId]){
+        const idx = Object.keys(familyColorMap).length % FAMILY_COLORS.length;
+        familyColorMap[familyId] = FAMILY_COLORS[idx];
+    }
+    return familyColorMap[familyId];
+}
+
+async function fetchFamilyGroups(){
+    try{
+        const baseId = window.AIRTABLE_BASE_ID || 'appSsn4JyQD4DnYu0';
+        const pat = window.AIRTABLE_PAT;
+        if(!pat) return;
+        const url = `https://api.airtable.com/v0/${baseId}/FAMILY_GROUPS?pageSize=100`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${pat}` } });
+        if(!res.ok) { console.warn('FAMILY_GROUPS fetch failed', res.status); return; }
+        const data = await res.json();
+        familyGroupsCache = data.records || [];
+        familyGroupsMap = {};
+        familyGroupsCache.forEach(r=>{ familyGroupsMap[r.id]=r; });
+        console.log('Family groups loaded', familyGroupsCache.length);
+    }catch(e){ console.error('fetchFamilyGroups error', e); }
+}
+
+function getFamilyGroupById(id){
+    return familyGroupsMap[id] || null;
+}
+
+function getFamilyName(familyId){
+    if(!familyId) return null;
+    const fg = getFamilyGroupById(familyId);
+    if(!fg) return familyId;
+    return fg.fields['Name'] || familyId;
+}
+
+function getJemaahWithoutFamilyInSameTrip(currentTripIds){
+    // currentTripIds = array of trip record ids linked to current jemaah
+    const tripSet = new Set(currentTripIds||[]);
+    return allJemaahUmrahRecords.filter(r=>{
+        const hasFamily = r.fields['FAMILY'] && r.fields['FAMILY'].length>0;
+        if(hasFamily) return false;
+        // if trip filter active, only same trip
+        if(tripSet.size>0){
+            const rTrip = r.fields['TRIP'] || [];
+            const arr = Array.isArray(rTrip)?rTrip:[rTrip];
+            return arr.some(t=> tripSet.has(t));
+        }
+        return true;
+    });
+}
+
+function renderFamilyCell(recId, familyIds){
+    const familyId = Array.isArray(familyIds) ? familyIds[0] : familyIds;
+    if(!familyId){
+        return `<div class="flex items-center justify-between"><span class="text-[10px] text-slate-300">-</span><button onclick="openFamilyDropdown('${recId}')" class="w-6 h-6 rounded bg-sky-50 text-sky-600 hover:bg-sky-100 flex items-center justify-center"><i class="fa-solid fa-plus text-[10px]"></i></button></div>`;
+    }
+    const fg = getFamilyGroupById(familyId);
+    const name = fg ? (fg.fields['Name']||'FAMILY') : familyId;
+    const color = getFamilyColor(familyId);
+    const members = fg ? (fg.fields['MEMBERS']||[]).length : 1;
+    const leaderId = fg ? (fg.fields['LEADER']? (Array.isArray(fg.fields['LEADER'])?fg.fields['LEADER'][0]:fg.fields['LEADER']) : null) : null;
+    const isLeader = leaderId && leaderId===recId;
+    return `<div class="flex items-center gap-1.5 cursor-pointer" onclick="openFamilyDropdown('${recId}')"><span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border" style="background:${color}15; border-color:${color}30; color:${color}"><i class="fa-solid fa-people-group text-[9px]"></i>${name} ${members>1?`(${members})`:''} ${isLeader?'<i class="fa-solid fa-crown text-[9px] text-amber-500"></i>':''}</span></div>`;
+}
+
+function getFamilyBadgeForFlat(familyIds, role){
+    const familyId = Array.isArray(familyIds) ? familyIds[0] : familyIds;
+    if(!familyId) return '<span class="text-[10px] text-slate-300">-</span>';
+    const fg = getFamilyGroupById(familyId);
+    const name = fg ? (fg.fields['Name']||'FAMILY') : familyId;
+    const color = getFamilyColor(familyId);
+    const members = fg ? (fg.fields['MEMBERS']||[]).length : 1;
+    const isLeader = role==='LEADER';
+    return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border" style="background:${color}12; border-color:${color}25; color:${color}">${isLeader?'<i class="fa-solid fa-crown mr-1 text-amber-500"></i>':''}${name}${members>1?` • ${members}`:''}${role && role!=='LEADER'?` • ${role}`:''}</span>`;
+}
+
+async function createFamilyGroup(familyName, tripId, leaderId, memberIds){
+    const baseId = window.AIRTABLE_BASE_ID;
+    const pat = window.AIRTABLE_PAT;
+    if(!pat) { alert('PAT missing'); return null; }
+    // 1. Create FAMILY_GROUPS record
+    const payload = {
+        fields: {
+            'Name': familyName,
+            'TRIP': tripId ? [tripId] : [],
+            'LEADER': leaderId ? [leaderId] : [],
+            'MEMBERS': memberIds || []
+        }
+    };
+    const url = `https://api.airtable.com/v0/${baseId}/FAMILY_GROUPS`;
+    const res = await fetch(url, { method:'POST', headers:{ Authorization:`Bearer ${pat}`, 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
+    if(!res.ok){ const txt=await res.text(); alert('Gagal create family: '+txt); return null; }
+    const rec = await res.json();
+    familyGroupsCache.push(rec);
+    familyGroupsMap[rec.id]=rec;
+    // 2. Update each jemaah FAMILY field
+    for(const jId of memberIds){
+        await updateJemaahFieldDirect(jId, 'FAMILY', [rec.id]);
+    }
+    // 3. Update leader role if needed
+    if(leaderId){
+        await updateJemaahFieldDirect(leaderId, 'FAMILY_ROLE', 'LEADER');
+    }
+    return rec;
+}
+
+async function updateJemaahFieldDirect(recId, fieldName, value){
+    try{
+        const baseId = window.AIRTABLE_BASE_ID;
+        const pat = window.AIRTABLE_PAT;
+        const tableId = jemaahMetaTableId || (await getJemaahTableId());
+        const url = `https://api.airtable.com/v0/${baseId}/${tableId}/${recId}`;
+        const res = await fetch(url, { method:'PATCH', headers:{ Authorization:`Bearer ${pat}`, 'Content-Type':'application/json' }, body: JSON.stringify({ fields:{ [fieldName]: value } }) });
+        if(!res.ok){ console.warn('update failed', await res.text()); return false; }
+        const updated = await res.json();
+        // update local cache
+        const idx = allJemaahUmrahRecords.findIndex(r=>r.id===recId);
+        if(idx>=0){ allJemaahUmrahRecords[idx].fields[fieldName]=value; if(updated.fields) Object.assign(allJemaahUmrahRecords[idx].fields, updated.fields); }
+        return true;
+    }catch(e){ console.error(e); return false; }
+}
+
+function openFamilyDropdown(recId){
+    closeAllFamilyDropdowns();
+    const rec = allJemaahUmrahRecords.find(r=>r.id===recId);
+    if(!rec) return;
+    const tripIds = rec.fields['TRIP'] ? (Array.isArray(rec.fields['TRIP'])?rec.fields['TRIP']:[rec.fields['TRIP']]) : [];
+    const tripIdForNew = tripIds[0]||null;
+    const withoutFamily = getJemaahWithoutFamilyInSameTrip(tripIds);
+    // exclude self
+    const filtered = withoutFamily.filter(r=>r.id!==recId);
+    const existingFamilyId = rec.fields['FAMILY'] ? (Array.isArray(rec.fields['FAMILY'])?rec.fields['FAMILY'][0]:rec.fields['FAMILY']) : null;
+    const existingFamiliesInTrip = familyGroupsCache.filter(fg=>{
+        const fTrip = fg.fields['TRIP']||[];
+        const arr = Array.isArray(fTrip)?fTrip:[fTrip];
+        if(tripIds.length===0) return true;
+        return arr.some(t=> tripIds.includes(t));
+    });
+
+    const cell = document.getElementById(`family-cell-${recId}`);
+    if(!cell) return;
+    const dropdownId = `family-dropdown-${recId}`;
+    let html = `<div id="${dropdownId}" class="absolute z-50 bg-white border border-slate-200 rounded-xl shadow-2xl w-[360px] max-h-[420px] overflow-hidden flex flex-col" style="top:100%; left:0; margin-top:4px;">`;
+    html += `<div class="p-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between"><span class="font-bold text-[11px] uppercase text-slate-600"><i class="fa-solid fa-people-group mr-1"></i> Pair Family - Trip terhad</span><button onclick="closeAllFamilyDropdowns()" class="w-6 h-6 rounded-full hover:bg-slate-200 flex items-center justify-center"><i class="fa-solid fa-xmark text-[10px]"></i></button></div>`;
+    // Existing family select
+    html += `<div class="p-2 border-b border-slate-100"><div class="text-[10px] font-bold text-slate-500 uppercase mb-1">Join family sedia ada (dalam trip ni je)</div><select id="joinFamilySelect-${recId}" class="w-full text-[12px] border border-slate-200 rounded-lg p-2">`;
+    html += `<option value="">-- Pilih family sedia ada --</option>`;
+    existingFamiliesInTrip.forEach(fg=>{
+        const sel = fg.id===existingFamilyId ? 'selected' : '';
+        html += `<option value="${fg.id}" ${sel}>${fg.fields['Name']||fg.id} - ${(fg.fields['MEMBERS']||[]).length} pax</option>`;
+    });
+    html += `</select><button onclick="joinExistingFamily('${recId}')" class="mt-1 w-full py-1.5 bg-slate-800 text-white rounded-lg text-[11px] font-bold hover:bg-slate-900">Join Family Ini</button></div>`;
+
+    // Create new family from tanpa family
+    html += `<div class="flex-1 overflow-y-auto p-2"><div class="text-[10px] font-bold text-slate-500 uppercase mb-1">Cipta family baru - pilih jemaah tanpa family (hide yang dah ada)</div>`;
+    html += `<input type="text" id="familySearch-${recId}" placeholder="Search nama..." class="w-full text-[11px] border border-slate-200 rounded-lg p-2 mb-2" onkeyup="filterFamilySearch('${recId}', this.value)">`;
+    html += `<div class="mb-2"><label class="text-[10px] font-bold text-slate-600">Nama Family Baru:</label><input type="text" id="newFamilyName-${recId}" placeholder="Contoh: FAM-RAMLY-01" class="w-full text-[12px] border border-sky-200 rounded-lg p-2 font-bold uppercase"></div>`;
+    html += `<div id="familyCandidates-${recId}" class="space-y-1">`;
+    if(filtered.length===0){
+        html += `<div class="text-[11px] text-slate-400 p-3 text-center">Semua jemaah dalam trip ni dah ada family ✅</div>`;
+    } else {
+        filtered.forEach(r=>{
+            html += `<label class="family-option flex items-center gap-2 p-2 hover:bg-sky-50 rounded-lg cursor-pointer border border-transparent hover:border-sky-100" data-name="${(r.fields['NAME']||'').toLowerCase()}"><input type="checkbox" value="${r.id}" class="family-check rounded"><div class="flex-1"><div class="font-bold text-[12px]">${r.fields['NAME']||'-'}</div><div class="text-[10px] text-slate-500">${r.fields['AGE']||''} ${r.fields['GENDER']||''}</div></div><span class="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded">Tanpa family</span></label>`;
+        });
+    }
+    html += `</div></div>`;
+    html += `<div class="p-3 border-t border-slate-100 bg-slate-50"><div class="text-[10px] font-bold text-slate-600 mb-1">Siapa Leader? 👑</div><select id="familyLeader-${recId}" class="w-full text-[12px] border border-amber-200 rounded-lg p-2 bg-amber-50"><option value="${recId}">${rec.fields['NAME']||'Current'} (Current - Ali)</option>${filtered.map(r=>`<option value="${r.id}">${r.fields['NAME']}</option>`).join('')}</select><button onclick="createNewFamilyFromDropdown('${recId}', '${tripIdForNew||''}')" class="mt-2 w-full py-2 bg-sky-600 text-white rounded-xl text-[12px] font-bold hover:bg-sky-700"><i class="fa-solid fa-people-group mr-1"></i> Cipta Family & Pair</button><button onclick="unlinkFamily('${recId}')" class="mt-1 w-full py-1 text-[10px] text-rose-500 hover:text-rose-700">Buang dari family (Individual)</button></div>`;
+    html += `</div>`;
+
+    cell.style.position='relative';
+    cell.insertAdjacentHTML('beforeend', html);
+    // close on outside click
+    setTimeout(()=>{
+        document.addEventListener('click', function handler(e){
+            const dd = document.getElementById(dropdownId);
+            if(!dd) { document.removeEventListener('click', handler); return; }
+            if(!dd.contains(e.target) && !e.target.closest(`#family-cell-${recId}`)){ closeAllFamilyDropdowns(); document.removeEventListener('click', handler); }
+        });
+    },100);
+}
+
+function closeAllFamilyDropdowns(){
+    document.querySelectorAll('[id^="family-dropdown-"]').forEach(el=>el.remove());
+}
+function filterFamilySearch(recId, q){
+    const wrap = document.getElementById(`familyCandidates-${recId}`);
+    if(!wrap) return;
+    const opts = wrap.querySelectorAll('.family-option');
+    opts.forEach(o=>{
+        const name = o.getAttribute('data-name')||'';
+        o.style.display = name.includes(q.toLowerCase()) ? 'flex' : 'none';
+    });
+}
+async function joinExistingFamily(recId){
+    const sel = document.getElementById(`joinFamilySelect-${recId}`);
+    if(!sel || !sel.value){ alert('Pilih family dulu'); return; }
+    const familyId = sel.value;
+    await updateJemaahFieldDirect(recId, 'FAMILY', [familyId]);
+    closeAllFamilyDropdowns();
+    if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+}
+async function unlinkFamily(recId){
+    await updateJemaahFieldDirect(recId, 'FAMILY', []);
+    await updateJemaahFieldDirect(recId, 'FAMILY_ROLE', null);
+    closeAllFamilyDropdowns();
+    if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+}
+async function createNewFamilyFromDropdown(recId, tripId){
+    const nameInput = document.getElementById(`newFamilyName-${recId}`);
+    const leaderSel = document.getElementById(`familyLeader-${recId}`);
+    const wrap = document.getElementById(`familyCandidates-${recId}`);
+    const checks = wrap ? Array.from(wrap.querySelectorAll('.family-check:checked')).map(c=>c.value) : [];
+    let familyName = nameInput ? nameInput.value.trim().toUpperCase() : '';
+    if(!familyName){
+        // auto generate
+        const count = familyGroupsCache.length+1;
+        familyName = `FAM-${String(count).padStart(2,'0')}`;
+    }
+    const leaderId = leaderSel ? leaderSel.value : recId;
+    const memberIds = [recId, ...checks];
+    // deduplicate
+    const uniqMembers = [...new Set(memberIds)];
+    const btn = document.querySelector(`#family-dropdown-${recId} button`);
+    if(btn) btn.innerHTML='<i class="fa-solid fa-spinner fa-spin mr-1"></i> Creating...';
+    const newFg = await createFamilyGroup(familyName, tripId, leaderId, uniqMembers);
+    closeAllFamilyDropdowns();
+    if(newFg){
+        alert(`Family ${familyName} berjaya dicipta dengan ${uniqMembers.length} pax! Leader: ${allJemaahUmrahRecords.find(r=>r.id===leaderId)?.fields['NAME']||leaderId}`);
+        if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+    }
+}
+
+// Bulk pairing
+function getSelectedWithoutFamily(){
+    const ids = Array.from(selectedJemaahIds);
+    return ids.filter(id=>{
+        const r = allJemaahUmrahRecords.find(x=>x.id===id);
+        if(!r) return false;
+        return !r.fields['FAMILY'] || r.fields['FAMILY'].length===0;
+    });
+}
+async function bulkPairAsFamily(){
+    const ids = Array.from(selectedJemaahIds);
+    if(ids.length<2){ alert('Pilih minimum 2 jemaah tanpa family untuk pair'); return; }
+    const first = allJemaahUmrahRecords.find(r=>r.id===ids[0]);
+    const tripIds = first ? (first.fields['TRIP']? (Array.isArray(first.fields['TRIP'])?first.fields['TRIP']:[first.fields['TRIP']]):[]) : [];
+    const tripId = tripIds[0]||null;
+    const defaultName = `FAM-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${familyGroupsCache.length+1}`;
+    const name = prompt(`Nama untuk family baru (${ids.length} pax)?`, defaultName);
+    if(!name) return;
+    const leaderName = prompt(`Siapa leader? Taip nama atau biarkan kosong untuk ${first.fields['NAME']}:`, first.fields['NAME']);
+    let leaderId = ids[0];
+    if(leaderName){
+        const found = allJemaahUmrahRecords.find(r=> (r.fields['NAME']||'').toLowerCase().includes(leaderName.toLowerCase()) && ids.includes(r.id));
+        if(found) leaderId = found.id;
+    }
+    const rec = await createFamilyGroup(name.toUpperCase(), tripId, leaderId, ids);
+    if(rec){
+        selectedJemaahIds.clear();
+        if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+        alert(`Family ${name} created!`);
+    }
+}
+
+function toggleFamilyViewMode(){
+    familyViewMode = familyViewMode==='flat' ? 'grouped' : 'flat';
+    localStorage.setItem('jemaahFamilyViewMode', familyViewMode);
+    if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+}
+
+function renderGroupedByFamily(records){
+    // Group records by FAMILY
+    const groups = {};
+    const individuals = [];
+    records.forEach(r=>{
+        const fid = r.fields['FAMILY'] ? (Array.isArray(r.fields['FAMILY'])?r.fields['FAMILY'][0]:r.fields['FAMILY']) : null;
+        if(!fid){ individuals.push(r); }
+        else {
+            if(!groups[fid]) groups[fid]={ id:fid, members:[], fg:getFamilyGroupById(fid) };
+            groups[fid].members.push(r);
+        }
+    });
+    let html = '';
+    Object.values(groups).forEach(g=>{
+        const fg = g.fg;
+        const name = fg ? (fg.fields['Name']||g.id) : g.id;
+        const color = getFamilyColor(g.id);
+        const leaderId = fg ? (fg.fields['LEADER']? (Array.isArray(fg.fields['LEADER'])?fg.fields['LEADER'][0]:fg.fields['LEADER']) : null) : null;
+        html += `<div class="border border-slate-200 rounded-xl mb-3 overflow-hidden"><div class="flex items-center justify-between p-3 cursor-pointer" style="background:${color}12; border-left:4px solid ${color}" onclick="this.parentElement.querySelector('.group-body').classList.toggle('hidden'); this.querySelector('.chev').classList.toggle('rotate-180')"><div class="flex items-center gap-2"><i class="fa-solid fa-people-group text-[14px]" style="color:${color}"></i><span class="font-bold text-[13px]">${name}</span><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white border">${g.members.length} pax</span>${leaderId?`<span class="text-[10px]"><i class="fa-solid fa-crown text-amber-500"></i> ${allJemaahUmrahRecords.find(r=>r.id===leaderId)?.fields['NAME']||'Leader'}</span>`:''}</div><i class="fa-solid fa-chevron-down chev text-[11px] text-slate-400 transition-transform"></i></div><div class="group-body divide-y divide-slate-100">`;
+        g.members.forEach(m=>{
+            const isLeader = m.id===leaderId;
+            html += `<div class="flex items-center gap-3 p-2.5 pl-6 hover:bg-slate-50"><input type="checkbox" ${selectedJemaahIds.has(m.id)?'checked':''} onchange="toggleSelectJemaah('${m.id}')" class="rounded"><span class="font-semibold text-[12px] flex-1">${m.fields['NAME']||'-'} ${isLeader?'<i class="fa-solid fa-crown text-amber-500 ml-1" title="Leader"></i>':''} <span class="text-[10px] text-slate-400 ml-1">${m.fields['FAMILY_ROLE']||''}</span></span><span class="text-[11px] text-slate-500">${m.fields['AGE']||''}</span><button onclick="openFamilyDropdown('${m.id}')" class="text-[10px] text-sky-600 hover:text-sky-800">Edit</button></div>`;
+        });
+        html += `</div></div>`;
+    });
+    if(individuals.length>0){
+        html += `<div class="border border-dashed border-slate-300 rounded-xl mb-3 overflow-hidden"><div class="flex items-center justify-between p-3 bg-slate-50"><div class="flex items-center gap-2"><i class="fa-solid fa-user text-slate-400"></i><span class="font-bold text-[13px]">INDIVIDUAL - Tanpa Family</span><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white border">${individuals.length} pax</span></div></div><div class="divide-y divide-slate-100">`;
+        individuals.forEach(m=>{
+            html += `<div class="flex items-center gap-3 p-2.5 pl-6 hover:bg-slate-50"><input type="checkbox" ${selectedJemaahIds.has(m.id)?'checked':''} onchange="toggleSelectJemaah('${m.id}')" class="rounded"><span class="font-semibold text-[12px] flex-1">${m.fields['NAME']||'-'}</span><span class="text-[11px] text-slate-500">${m.fields['AGE']||''}</span><button onclick="openFamilyDropdown('${m.id}')" class="text-[10px] text-sky-600 hover:text-sky-800">+ Pair</button></div>`;
+        });
+        html += `</div></div>`;
+    }
+    return html;
+}
+
+window.openFamilyDropdown = openFamilyDropdown;
+window.closeAllFamilyDropdowns = closeAllFamilyDropdowns;
+window.filterFamilySearch = filterFamilySearch;
+window.joinExistingFamily = joinExistingFamily;
+window.unlinkFamily = unlinkFamily;
+window.createNewFamilyFromDropdown = createNewFamilyFromDropdown;
+window.bulkPairAsFamily = bulkPairAsFamily;
+window.toggleFamilyViewMode = toggleFamilyViewMode;
+window.renderGroupedByFamily = renderGroupedByFamily;
+window.fetchFamilyGroups = fetchFamilyGroups;
+window.getFamilyName = getFamilyName;
+
+
+// === FIX V2// === FIX V2: File Picker Binding untuk Add Jemaah Modal ===
 let addModalFiles = { 'PICTURE': [], 'PASSPORT_COPY': [], 'VISA_COPY': [], 'MOFABIO': [], 'INSURAN_DOC': [] };
 
 function setupAddModalFilePickers(){
@@ -1972,6 +2301,7 @@ function renderTableHeader() {
         'col-ic': `<th draggable="true" data-col="col-ic" class="p-3 border-r border-slate-300 col-ic draggable-header relative select-none overflow-hidden text-ellipsis">IC NO.<div class="col-resizer"></div></th>`,
         'col-passport': `<th draggable="true" data-col="col-passport" class="p-3 border-r border-slate-300 col-passport draggable-header relative select-none overflow-hidden text-ellipsis">PASSPORT NO.<div class="col-resizer"></div></th>`,
         'col-gender': `<th draggable="true" data-col="col-gender" class="p-3 border-r border-slate-300 col-gender draggable-header relative select-none overflow-hidden text-ellipsis">GENDER<div class="col-resizer"></div></th>`,
+        'col-family': `<th draggable="true" data-col="col-family" class="p-3 border-r border-slate-300 col-family draggable-header relative select-none overflow-hidden text-ellipsis bg-sky-50/50"><span class="inline-flex items-center gap-1.5"><i class="fa-solid fa-people-group text-[11px] text-sky-600"></i> FAMILY</span><div class="col-resizer"></div></th>`,
         'col-age': `<th draggable="true" data-col="col-age" class="p-3 border-r border-slate-300 col-age draggable-header relative select-none overflow-hidden text-ellipsis bg-amber-50/50"><span class="inline-flex items-center gap-1"><i class="fa-solid fa-calculator text-[10px] text-amber-600"></i><span class="italic font-bold">ƒx</span> AGE</span><div class="col-resizer"></div></th>`,
         'col-dob': `<th draggable="true" data-col="col-dob" class="p-3 border-r border-slate-300 col-dob draggable-header relative select-none overflow-hidden text-ellipsis bg-amber-50/50"><span class="inline-flex items-center gap-1"><i class="fa-solid fa-calculator text-[10px] text-amber-600"></i><span class="italic font-bold">ƒx</span> DOB</span><div class="col-resizer"></div></th>`,
         'col-dobf': `<th draggable="true" data-col="col-dobf" class="p-3 border-r border-slate-300 col-dobf draggable-header relative select-none overflow-hidden text-ellipsis">DOB (FOREIGNER)<div class="col-resizer"></div></th>`,
@@ -2133,7 +2463,10 @@ function renderJemaahRows(records) {
         const actualTripName = getResolvedTripName(f['TRIP']);
 
         const tr = document.createElement('tr');
-        tr.className = `hover:bg-slate-50 transition group ${isChecked ? 'bg-amber-50/60' : ''}`;
+        const familyColor = getFamilyColor(f['FAMILY_GROUP']);
+        const familyBg = familyColor ? `background: linear-gradient(90deg, ${familyColor}08 0%, transparent 20%); border-left-color: ${familyColor} !important;` : '';
+        tr.className = `hover:bg-slate-50 transition group ${isChecked ? 'bg-amber-50/60' : ''} ${f['FAMILY_GROUP']?'family-group-'+f['FAMILY_GROUP']:''}`;
+        if(familyColor) tr.style.cssText += familyBg + 'border-left-width:4px; border-left-style:solid;';
         tr.id = `jemaah-row-${id}`;
 
         const cellRenderers = {
@@ -3319,6 +3652,42 @@ function openAddJemaahModal() {
                 </div>
             </div>
 
+            
+            <div class="bg-sky-50/50 rounded-xl p-3 border border-sky-100">
+                <h4 class="font-bold text-[11px] text-sky-700 uppercase tracking-wider mb-3 flex items-center"><i class="fa-solid fa-people-group mr-1.5"></i> Family Pairing (Idea 2)</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
+                    <label class="font-bold text-slate-500 uppercase text-[11px]">FAMILY GROUP</label>
+                    <div class="sm:col-span-2">
+                        <select id="familyGroupSelect" name="FAMILY_GROUP" onchange="handleFamilyGroupChange(this)" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none bg-white text-[13px]">
+                            ${buildFamilyOptionsHtml('')}
+                        </select>
+                        <div id="newFamilyInputWrap" class="hidden mt-2 flex gap-2">
+                            <input type="text" id="newFamilyInput" placeholder="Contoh: FAMILY_RAMLY_01 atau ALI_FAMILY" class="flex-1 p-2.5 border border-sky-300 rounded-xl text-[12px] font-bold uppercase">
+                            <button type="button" onclick="confirmNewFamily()" class="px-3 py-2 bg-sky-600 text-white rounded-xl text-[11px] font-bold">OK</button>
+                        </div>
+                        <p class="text-[10px] text-slate-400 mt-1">Pilih family sedia ada atau cipta baru untuk pair Ali & Abu</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
+                    <label class="font-bold text-slate-500 uppercase text-[11px]">ROLE DALAM FAMILY</label>
+                    <div class="sm:col-span-2">
+                        <select name="FAMILY_ROLE" class="w-full p-2.5 font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none bg-white text-[13px]">
+                            <option value="">-- Pilih Role --</option>
+                            <option value="BAPA">BAPA</option>
+                            <option value="IBU">IBU</option>
+                            <option value="ANAK">ANAK</option>
+                            <option value="DATUK">DATUK</option>
+                            <option value="NENEK">NENEK</option>
+                            <option value="SAUDARA">SAUDARA</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="familyPreview" class="mt-2 p-2 bg-white rounded-lg border border-sky-100 text-[11px] hidden">
+                    <div class="font-bold text-sky-700 mb-1">Ahli family dalam group ini:</div>
+                    <div id="familyPreviewList" class="flex flex-wrap gap-1"></div>
+                </div>
+            </div>
+
             <div class="bg-amber-50/50 rounded-xl p-3 border border-amber-100">
                 <h4 class="font-bold text-[11px] text-amber-700 uppercase tracking-wider mb-3 flex items-center"><i class="fa-solid fa-kaaba mr-1.5"></i> Maklumat Trip & Pakej</h4>
                 <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2 mb-3">
@@ -3524,7 +3893,56 @@ function filterEjenModal(query){
     });
 }
 
-async function createNewJemaahFromModal(){
+async 
+function handleFamilyGroupChange(sel){
+    const wrap = document.getElementById('newFamilyInputWrap');
+    const preview = document.getElementById('familyPreview');
+    if(sel.value==='__NEW__'){
+        if(wrap) wrap.classList.remove('hidden');
+        if(preview) preview.classList.add('hidden');
+    } else {
+        if(wrap) wrap.classList.add('hidden');
+        if(sel.value){
+            // show preview of members
+            const members = getFamilyMembers(sel.value);
+            if(preview){
+                preview.classList.remove('hidden');
+                const listEl = document.getElementById('familyPreviewList');
+                if(listEl){
+                    listEl.innerHTML = members.map(m=>`<span class="px-2 py-0.5 bg-sky-100 text-sky-700 rounded-full text-[10px] font-bold">${m.fields['NAME']||''} ${m.fields['FAMILY_ROLE']?`(${m.fields['FAMILY_ROLE']})`:''}</span>`).join('') || '<span class="text-slate-400">Belum ada ahli lain</span>';
+                }
+            }
+        } else {
+            if(preview) preview.classList.add('hidden');
+        }
+    }
+}
+
+function confirmNewFamily(){
+    const input = document.getElementById('newFamilyInput');
+    const sel = document.getElementById('familyGroupSelect');
+    if(!input || !sel) return;
+    const val = input.value.trim().toUpperCase().replace(/\s+/g,'_');
+    if(!val){ alert('Masukkan nama family'); return; }
+    // Add new option
+    const opt = document.createElement('option');
+    opt.value = val;
+    opt.textContent = val + ' (Baru)';
+    opt.selected = true;
+    sel.insertBefore(opt, sel.querySelector('option[value="__NEW__"]'));
+    document.getElementById('newFamilyInputWrap').classList.add('hidden');
+    input.value = '';
+    handleFamilyGroupChange(sel);
+}
+
+function updateFamilyCellVisual(){
+    // Re-render after family change to show color grouping
+    if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+}
+
+// Hook into createNewJemaahFromModal to include family fields - already handled via FormData since we have name attributes
+
+function createNewJemaahFromModal(){
     const form = document.getElementById('addModalForm');
     if(!form){ alert('Form tidak ditemui'); return; }
     const formData = new FormData(form);
@@ -3734,6 +4152,7 @@ const columnDefinitions = [
     { key: 'col-ic', label: 'IC NO.', icon: 'fa-id-card', type: 'A' },
     { key: 'col-passport', label: 'PASSPORT NO.', icon: 'fa-passport', type: 'A' },
     { key: 'col-gender', label: 'GENDER', icon: 'fa-venus-mars', type: 'singleSelect' },
+    { key: 'col-family', label: 'FAMILY', icon: 'fa-people-group', type: 'family' },
     { key: 'col-age', label: 'AGE', icon: 'fa-calculator', type: 'formula' },
     { key: 'col-dob', label: 'DOB', icon: 'fa-calculator', type: 'formula' },
     { key: 'col-dobf', label: 'DOB (FOREIGNER)', icon: 'fa-calendar', type: 'date' },
