@@ -3761,10 +3761,11 @@ function getFieldTypeIcon(type){
     'attachment': '<i class="fa-solid fa-paperclip text-slate-400 text-[11px]"></i>',
     'date': '<i class="fa-regular fa-calendar text-slate-400 text-[11px]"></i>',
     'checkbox': '<i class="fa-regular fa-square-check text-slate-400 text-[11px]"></i>',
-    'formula': '<i class="fa-solid fa-calculator text-purple-400 text-[11px]"></i>',
+    'formula': '<span class="italic text-[11px] text-slate-500">ƒx</span>',
     'link': '<i class="fa-solid fa-link text-amber-500 text-[11px]"></i>',
     'text': '<i class="fa-solid fa-align-left text-slate-400 text-[11px]"></i>',
-    'A': '<span class="text-[11px] font-bold text-slate-500">A</span>'
+    'A': '<span class="text-[11px] font-bold text-slate-500">A</span>',
+    '🖼️': '<span class="text-[11px]">🖼️</span>'
   };
   return map[type] || '<span class="text-[10px] text-slate-400">T</span>';
 }
@@ -3776,7 +3777,7 @@ function buildHideFieldsList() {
     if (!listContainer) return;
     listContainer.innerHTML = '';
 
-    const excludedFromToggle = ['col-age', 'col-dob'];
+    const excludedFromToggle = []; // FIX v6: include AGE & DOB dalam Arrange Fields
     const orderedDefs = [];
     columnOrder.forEach(k=>{
       if(excludedFromToggle.includes(k)) return;
