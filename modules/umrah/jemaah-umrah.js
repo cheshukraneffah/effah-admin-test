@@ -35,7 +35,7 @@ let currentSortDir = 'asc';
 // Default Column Order - FIXED v2: susunan logik ikut screenshot + flow dokumen
 const DEFAULT_COLUMN_ORDER = [
     'col-idx', 'col-name', 'col-picture', 'col-ic', 'col-passport', 
-    'col-gender', 'col-dobf', 'col-nat', 
+    'col-gender', 'col-age', 'col-dob', 'col-dobf', 'col-nat', 
     'col-visa', 'col-passcopy', 'col-visacopy', 'col-mofabio', 
     'col-fit', 'col-trip', 'col-issue', 'col-expire', 'col-notes',
     'col-board', 'col-train', 'col-insuran', 'col-pakej', 'col-ejen'
@@ -49,7 +49,9 @@ const defaultColumnWidths = {
     'col-picture': 90,
     'col-ic': 130,
     'col-passport': 120,
-    'col-gender': 100,
+    'col-gender': 90,
+    'col-age': 90,
+    'col-dob': 130,
     'col-dobf': 160,
     'col-nat': 110,
     'col-visa': 140,
@@ -276,7 +278,8 @@ document.addEventListener('DOMContentLoaded', () => {
         currentSortField = savedSort.field || 'NAME';
         currentSortDir = savedSort.dir || 'asc';
     }
-    const savedOrder = JSON.parse(localStorage.getItem('jemaahColOrder'));
+    let savedOrder = JSON.parse(localStorage.getItem('jemaahColOrder'));
+    try{ if(savedOrder && (!savedOrder.includes('col-age') || !savedOrder.includes('col-dob'))){ localStorage.removeItem('jemaahColOrder'); savedOrder = null; console.log('Migrating columnOrder to include AGE/DOB'); } }catch(e){}
     if (savedOrder && Array.isArray(savedOrder)) {
         // FIX: validate, buang legacy col-age/dob, buang duplikat, pastikan semua default ada
         let cleaned = [...new Set(savedOrder.filter(k=> k!=='col-age' && k!=='col-dob' && DEFAULT_COLUMN_ORDER.includes(k)))];
@@ -293,12 +296,11 @@ document.addEventListener('DOMContentLoaded', () => {
         columnOrder = [...DEFAULT_COLUMN_ORDER];
     }
     const savedHidden = JSON.parse(localStorage.getItem('jemaahHiddenColumns')) || {};
-    if(savedHidden['col-age'] || savedHidden['col-dob']){
-        delete savedHidden['col-age'];
-        delete savedHidden['col-dob'];
-        localStorage.setItem('jemaahHiddenColumns', JSON.stringify(savedHidden));
-        hiddenColumns = savedHidden;
-    }
+    // FIX v4: jangan hide AGE/DOB, paksa show sebelah GENDER
+    if(savedHidden['col-age']) delete savedHidden['col-age'];
+    if(savedHidden['col-dob']) delete savedHidden['col-dob'];
+    localStorage.setItem('jemaahHiddenColumns', JSON.stringify(savedHidden));
+    hiddenColumns = savedHidden;
     renderJemaahUmrahHTML();
 });
 
@@ -1970,8 +1972,8 @@ function renderTableHeader() {
         'col-ic': `<th draggable="true" data-col="col-ic" class="p-3 border-r border-slate-300 col-ic draggable-header relative select-none overflow-hidden text-ellipsis">IC NO.<div class="col-resizer"></div></th>`,
         'col-passport': `<th draggable="true" data-col="col-passport" class="p-3 border-r border-slate-300 col-passport draggable-header relative select-none overflow-hidden text-ellipsis">PASSPORT NO.<div class="col-resizer"></div></th>`,
         'col-gender': `<th draggable="true" data-col="col-gender" class="p-3 border-r border-slate-300 col-gender draggable-header relative select-none overflow-hidden text-ellipsis">GENDER<div class="col-resizer"></div></th>`,
-        'col-age': `<th draggable="true" data-col="col-age" class="p-3 border-r border-slate-300 col-age draggable-header relative select-none overflow-hidden text-ellipsis">🔒 AGE<div class="col-resizer"></div></th>`,
-        'col-dob': `<th draggable="true" data-col="col-dob" class="p-3 border-r border-slate-300 col-dob draggable-header relative select-none overflow-hidden text-ellipsis">🔒 DOB<div class="col-resizer"></div></th>`,
+        'col-age': `<th draggable="true" data-col="col-age" class="p-3 border-r border-slate-300 col-age draggable-header relative select-none overflow-hidden text-ellipsis bg-amber-50/50"><span class="inline-flex items-center gap-1"><i class="fa-solid fa-calculator text-[10px] text-amber-600"></i><span class="italic font-bold">ƒx</span> AGE</span><div class="col-resizer"></div></th>`,
+        'col-dob': `<th draggable="true" data-col="col-dob" class="p-3 border-r border-slate-300 col-dob draggable-header relative select-none overflow-hidden text-ellipsis bg-amber-50/50"><span class="inline-flex items-center gap-1"><i class="fa-solid fa-calculator text-[10px] text-amber-600"></i><span class="italic font-bold">ƒx</span> DOB</span><div class="col-resizer"></div></th>`,
         'col-dobf': `<th draggable="true" data-col="col-dobf" class="p-3 border-r border-slate-300 col-dobf draggable-header relative select-none overflow-hidden text-ellipsis">DOB (FOREIGNER)<div class="col-resizer"></div></th>`,
         'col-nat': `<th draggable="true" data-col="col-nat" class="p-3 border-r border-slate-300 col-nat draggable-header relative select-none overflow-hidden text-ellipsis">NATIONALITY<div class="col-resizer"></div></th>`,
         'col-visa': `<th draggable="true" data-col="col-visa" class="p-3 border-r border-slate-300 col-visa draggable-header relative select-none overflow-hidden text-ellipsis">STATUS VISA<div class="col-resizer"></div></th>`,
@@ -2141,8 +2143,8 @@ function renderJemaahRows(records) {
             'col-ic': `<td class="p-1 border-r border-slate-300 col-ic"><input type="text" value="${f['IC NO.'] || ''}" onchange="updateJemaahField('${id}', 'IC NO.', this.value)" class="w-full text-xs p-1.5 font-mono rounded-lg border border-transparent hover:border-slate-300 focus:border-brand-maroon focus:bg-white bg-transparent"></td>`,
             'col-passport': `<td class="p-1 border-r border-slate-300 col-passport"><input type="text" value="${f['PASSPORT NO.'] || ''}" onchange="updateJemaahField('${id}', 'PASSPORT NO.', this.value)" class="w-full text-xs p-1.5 font-mono font-bold uppercase rounded-lg border border-transparent hover:border-slate-300 focus:border-brand-maroon focus:bg-white bg-transparent"></td>`,
             'col-gender': `<td class="p-1 border-r border-slate-300 col-gender"><select onchange="updateJemaahField('${id}', 'GENDER', this.value)" class="w-full text-xs p-1.5 font-bold rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent"><option value="">--</option><option value="MALE" ${f['GENDER'] === 'MALE' ? 'selected' : ''}>MALE</option><option value="FEMALE" ${f['GENDER'] === 'FEMALE' ? 'selected' : ''}>FEMALE</option></select></td>`,
-            'col-age': `<td class="p-2.5 border-r border-slate-300 bg-slate-50/50 font-semibold text-slate-600 col-age" id="age-cell-${id}">${f['AGE'] || '-'}</td>`,
-            'col-dob': `<td class="p-2.5 border-r border-slate-300 bg-slate-50/50 font-semibold text-slate-600 col-dob" id="dob-cell-${id}">${f['DOB'] || '-'}</td>`,
+            'col-age': `<td class="p-2.5 border-r border-slate-300 bg-amber-50/20 font-bold text-amber-900 col-age italic" id="age-cell-${id}" title="Formula field - auto calculated"><span class="inline-flex items-center gap-1"><span class="text-[9px] bg-amber-200 px-1 rounded">ƒx</span>${f['AGE'] || '-'}</span></td>`,
+            'col-dob': `<td class="p-2.5 border-r border-slate-300 bg-amber-50/20 font-semibold text-amber-900 col-dob" id="dob-cell-${id}" title="Formula field">${f['DOB'] ? (f['DOB'].includes('/') ? f['DOB'] : new Date(f['DOB']).toLocaleDateString('en-GB')) : '-'}</td>`,
             'col-dobf': `<td class="p-1 border-r border-slate-300 col-dobf"><input type="date" value="${f['DOB (FOREIGNER)'] || ''}" onchange="updateJemaahField('${id}', 'DOB (FOREIGNER)', this.value)" class="w-full text-xs p-1.5 rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent"></td>`,
             'col-nat': `<td class="p-1 border-r border-slate-300 col-nat">${renderSingleSelectCell(id, 'NATIONALITY', f['NATIONALITY'])}</td>`,
             'col-visa': `<td class="p-1 border-r border-slate-300 col-visa">${renderSingleSelectCell(id, 'STATUS VISA', f['STATUS VISA'])}</td>`,
@@ -3524,153 +3526,106 @@ function filterEjenModal(query){
 
 async function createNewJemaahFromModal(){
     const form = document.getElementById('addModalForm');
-    if(!form){
-        alert('Form tidak ditemui');
-        return;
-    }
+    if(!form){ alert('Form tidak ditemui'); return; }
     const formData = new FormData(form);
     const fields = {};
-    
-    // Basic text fields
     for(let [k,v] of formData.entries()){
         if(k==='TRAIN' || k==='FIT TICKET') continue;
-        if(k==='BOARD BASIS' || k==='INSURAN') continue; // handled separately
+        if(k==='BOARD BASIS' || k==='INSURAN') continue;
         if(v && String(v).trim()!==''){
-            // Uppercase NAME
             if(k==='NAME') v = String(v).toUpperCase().trim();
             if(k==='PASSPORT NO.') v = String(v).toUpperCase().trim();
             fields[k] = v;
         }
     }
-    
-    // Checkboxes
     const trainChk = form.querySelector('input[name="TRAIN"]');
     if(trainChk) fields['TRAIN'] = trainChk.checked ? true : false;
     const fitChk = form.querySelector('input[name="FIT TICKET"]');
     if(fitChk) fields['FIT TICKET'] = fitChk.checked ? true : false;
-    
-    // Multi selects BOARD BASIS, INSURAN
     const boardChecked = Array.from(form.querySelectorAll('.board-checkbox:checked')).map(cb=>cb.value);
     if(boardChecked.length>0) fields['BOARD BASIS'] = boardChecked;
     const insuranChecked = Array.from(form.querySelectorAll('.insuran-checkbox:checked')).map(cb=>cb.value);
     if(insuranChecked.length>0) fields['INSURAN'] = insuranChecked;
-    
-    // Ejen
     const ejenChecked = Array.from(form.querySelectorAll('.ejen-checkbox:checked')).map(cb=>cb.value);
     if(ejenChecked.length>0) fields['EJEN'] = ejenChecked;
-    
-    // Trip linkage - critical for table filter
     const tripSel = form.querySelector('select[name="TRIP"]');
-    if(tripSel && tripSel.value){
-        fields['TRIP'] = [tripSel.value];
-    }
+    if(tripSel && tripSel.value){ fields['TRIP'] = [tripSel.value]; }
+    if(!fields['NAME']){ alert('NAME wajib isi'); return; }
     
-    // Validate required
-    if(!fields['NAME']){
-        alert('NAME wajib isi');
-        return;
+    // === OPTIMISTIC: close modal instantly, no loading ===
+    const tempId = 'temp_' + Date.now();
+    const localPreviewUrls = {};
+    for(let localKey in addModalFiles){
+        const files = addModalFiles[localKey];
+        if(!files || files.length===0) continue;
+        localPreviewUrls[localKey] = files.map(f=>{
+            try{ return { url: URL.createObjectURL(f), filename: f.name }; }catch(e){ return null; }
+        }).filter(Boolean);
     }
+    const tempFields = { ...fields };
+    if(localPreviewUrls['PICTURE']) tempFields['PICTURE'] = localPreviewUrls['PICTURE'];
+    if(localPreviewUrls['PASSPORT_COPY']) tempFields['PASSPORT COPY'] = localPreviewUrls['PASSPORT_COPY'];
+    if(localPreviewUrls['VISA_COPY']) tempFields['VISA COPY'] = localPreviewUrls['VISA_COPY'];
+    if(localPreviewUrls['MOFABIO']) tempFields['MOFABIO'] = localPreviewUrls['MOFABIO'];
+    tempFields['AGE'] = '...'; // formula placeholder, akan calculate Airtable nanti
+    tempFields['_optimistic'] = true;
     
-    // Save button loading
-    const saveBtn = document.getElementById('modalSaveBtn');
-    if(saveBtn){
-        saveBtn.disabled = true;
-        saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Menyimpan...';
-    }
+    const tempRecord = { id: tempId, fields: tempFields };
+    allJemaahUmrahRecords.unshift(tempRecord);
+    try{ localStorage.setItem('effah_jemaah_optimistic', JSON.stringify(allJemaahUmrahRecords.slice(0,50))); }catch(e){}
+    if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+    closeExpandModal();
+    if(typeof App!=='undefined' && App.toast) App.toast('Jemaah ditambah - sync background...');
     
-    // FIX: Upload files from addModalFiles to Cloudinary then attach URLs to Airtable
+    // Background upload
     (async()=>{
         try{
             const cloudName = "dfb839ep";
             const uploadPreset = "Effah Travel";
-            
-            const uploadFieldMap = {
-                'PICTURE': 'PICTURE',
-                'PASSPORT_COPY': 'PASSPORT COPY',
-                'VISA_COPY': 'VISA COPY',
-                'MOFABIO': 'MOFABIO'
-            };
-            
+            const uploadFieldMap = { 'PICTURE': 'PICTURE', 'PASSPORT_COPY': 'PASSPORT COPY', 'VISA_COPY': 'VISA COPY', 'MOFABIO': 'MOFABIO' };
+            const finalFields = { ...fields };
             for(let localKey in addModalFiles){
                 const files = addModalFiles[localKey];
                 if(!files || files.length===0) continue;
                 const airtableField = uploadFieldMap[localKey];
                 if(!airtableField) continue;
-                
                 const uploadedUrls = [];
                 for(let file of files){
                     const fd = new FormData();
                     fd.append('file', file);
                     fd.append('upload_preset', uploadPreset);
                     fd.append('folder', `effah/${localKey.toLowerCase()}`);
-                    
                     try{
-                        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
-                            method: 'POST',
-                            body: fd
-                        });
+                        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, { method: 'POST', body: fd });
                         const data = await res.json();
-                        if(data.secure_url){
-                            uploadedUrls.push({ url: data.secure_url, filename: file.name });
-                        }
-                    }catch(e){
-                        console.error('Upload fail', e);
-                    }
+                        if(data.secure_url) uploadedUrls.push({ url: data.secure_url, filename: file.name });
+                    }catch(e){ console.error('Upload fail', e); }
                 }
-                
-                if(uploadedUrls.length>0){
-                    // Airtable attachment format
-                    fields[airtableField] = uploadedUrls.map(u=>({ url: u.url, filename: u.filename }));
-                }
+                if(uploadedUrls.length>0) finalFields[airtableField] = uploadedUrls;
             }
-            
-            // Now create record in Airtable
             const pat = window.AIRTABLE_PAT || localStorage.getItem('effah_api_pat') || AIRTABLE_PAT;
             const base = window.AIRTABLE_BASE_ID || localStorage.getItem('effah_base_id') || AIRTABLE_BASE_ID;
-            if(!pat || !base){
-                alert('PAT / Base ID belum set di Settings API');
-                if(saveBtn){ saveBtn.disabled=false; saveBtn.innerHTML='<i class="fa-solid fa-plus mr-1"></i> Tambah Jemaah'; }
-                return;
-            }
-            
+            if(!pat || !base) throw new Error('PAT / Base ID belum set');
             const url = `https://api.airtable.com/v0/${base}/DATA%20JEMAAH%20UMRAH`;
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${pat}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ fields })
-            });
-            
+            const res = await fetch(url, { method: 'POST', headers: { 'Authorization': `Bearer ${pat}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: finalFields }) });
             const result = await res.json();
-            if(result.error){
-                throw new Error(result.error.message || 'Gagal simpan Airtable');
-            }
-            
-            // Success
-            alert('Jemaah berjaya ditambah!');
-            closeExpandModal();
-            
-            // Refresh table
-            if(typeof fetchJemaahUmrahData==='function'){
-                fetchJemaahUmrahData(true);
-            } else if(typeof filterAndRenderJemaahGrid==='function'){
-                // add to local list optimistically
-                allJemaahUmrahRecords.unshift(result);
-                filterAndRenderJemaahGrid();
-            }
-            
+            if(result.error) throw new Error(result.error.message || 'Gagal simpan Airtable');
+            const idx = allJemaahUmrahRecords.findIndex(r=>r.id===tempId);
+            if(idx!==-1) allJemaahUmrahRecords[idx] = result;
+            if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+            // background refresh selepas 3 saat, bukan blocking
+            setTimeout(()=>{ if(typeof fetchJemaahUmrahData==='function') fetchJemaahUmrahData(); }, 3000);
+            if(typeof App!=='undefined' && App.toast) App.toast('Jemaah berjaya sync!');
         }catch(err){
             console.error(err);
-            alert('Gagal tambah jemaah: ' + err.message);
-            if(saveBtn){
-                saveBtn.disabled = false;
-                saveBtn.innerHTML = '<i class="fa-solid fa-plus mr-1"></i> Tambah Jemaah';
-            }
+            const rec = allJemaahUmrahRecords.find(r=>r.id===tempId);
+            if(rec){ rec.fields._syncError = err.message; }
+            if(typeof filterAndRenderJemaahGrid==='function') filterAndRenderJemaahGrid();
+            if(typeof App!=='undefined' && App.toast) App.toast('Gagal sync background: ' + err.message);
         }
     })();
 }
+
 
 function toggleSortDropdown() {
     const drop = document.getElementById('sortDropdownMenu');
