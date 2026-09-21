@@ -3614,8 +3614,6 @@ async function createNewJemaahFromModal(){
     })();
 }
 
-function
-
 function toggleSortDropdown() {
     const drop = document.getElementById('sortDropdownMenu');
     if (drop) drop.classList.toggle('hidden');
