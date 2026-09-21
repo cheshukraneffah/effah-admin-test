@@ -32,14 +32,15 @@ let hiddenColumns = JSON.parse(localStorage.getItem('jemaahHiddenColumns')) || {
 let currentSortField = 'NAME';
 let currentSortDir = 'asc';
 
-// Default Column Order
-let columnOrder = [
+// Default Column Order - FIXED v2: susunan logik ikut screenshot + flow dokumen
+const DEFAULT_COLUMN_ORDER = [
     'col-idx', 'col-name', 'col-picture', 'col-ic', 'col-passport', 
     'col-gender', 'col-dobf', 'col-nat', 
     'col-visa', 'col-passcopy', 'col-visacopy', 'col-mofabio', 
     'col-fit', 'col-trip', 'col-issue', 'col-expire', 'col-notes',
     'col-board', 'col-train', 'col-insuran', 'col-pakej', 'col-ejen'
 ];
+let columnOrder = [...DEFAULT_COLUMN_ORDER];
 
 // Default Column Widths
 const defaultColumnWidths = {
@@ -69,14 +70,158 @@ const defaultColumnWidths = {
 
 let columnWidths = JSON.parse(localStorage.getItem('jemaahColWidths')) || { ...defaultColumnWidths };
 
+// === FIX V2: File Picker Binding untuk Add Jemaah Modal ===
+let addModalFiles = { 'PICTURE': [], 'PASSPORT_COPY': [], 'VISA_COPY': [], 'MOFABIO': [], 'INSURAN_DOC': [] };
+
+function setupAddModalFilePickers(){
+    const fileFields = ['PICTURE','PASSPORT_COPY','VISA_COPY','MOFABIO'];
+    // alias mapping untuk id yang pakai underscore
+    const idMap = {
+        'PICTURE': 'PICTURE',
+        'PASSPORT_COPY': 'PASSPORT_COPY',
+        'VISA_COPY': 'VISA_COPY',
+        'MOFABIO': 'MOFABIO'
+    };
+    
+    fileFields.forEach(field=>{
+        const dropId = `addModalDropzone-${field}`;
+        const inputId = `addModalFileInput-${field}`;
+        const previewId = `addModalPreview-${field}`;
+        const dropzone = document.getElementById(dropId);
+        const fileInput = document.getElementById(inputId);
+        if(!dropzone || !fileInput) return;
+        
+        // Reset
+        addModalFiles[field] = addModalFiles[field] || [];
+        
+        const openPicker = (e)=>{
+            if(e) e.stopPropagation();
+            fileInput.click();
+        };
+        
+        // Hapus listener lama dengan clone (simple)
+        const newDrop = dropzone.cloneNode(true);
+        dropzone.parentNode.replaceChild(newDrop, dropzone);
+        const dz = document.getElementById(dropId);
+        const fi = document.getElementById(inputId);
+        const previewEl = document.getElementById(previewId);
+        
+        if(!dz || !fi) return;
+        
+        dz.addEventListener('click', (e)=>{
+            // jangan trigger kalau klik pada preview delete button
+            if(e.target.closest('button')) return;
+            fi.click();
+        });
+        
+        dz.addEventListener('dragover', (e)=>{
+            e.preventDefault();
+            dz.classList.add('border-brand-maroon','bg-rose-50','scale-[1.02]');
+            dz.classList.remove('border-slate-300','bg-slate-50');
+        });
+        
+        dz.addEventListener('dragleave', (e)=>{
+            e.preventDefault();
+            dz.classList.remove('border-brand-maroon','bg-rose-50','scale-[1.02]');
+            dz.classList.add('border-slate-300','bg-slate-50');
+        });
+        
+        dz.addEventListener('drop', (e)=>{
+            e.preventDefault();
+            dz.classList.remove('border-brand-maroon','bg-rose-50','scale-[1.02]');
+            dz.classList.add('border-slate-300','bg-slate-50');
+            if(e.dataTransfer.files && e.dataTransfer.files.length){
+                handleAddModalFiles(field, e.dataTransfer.files);
+            }
+        });
+        
+        fi.addEventListener('change', (e)=>{
+            if(e.target.files && e.target.files.length){
+                handleAddModalFiles(field, e.target.files);
+                // reset value supaya boleh pilih file sama lagi
+                e.target.value = '';
+            }
+        });
+    });
+}
+
+function handleAddModalFiles(field, fileList){
+    const files = Array.from(fileList);
+    if(!files.length) return;
+    addModalFiles[field] = addModalFiles[field] || [];
+    
+    // Validate
+    const validFiles = files.filter(f=>{
+        const isValidType = f.type.startsWith('image/') || f.type==='application/pdf' || f.name.toLowerCase().endsWith('.pdf');
+        const isValidSize = f.size <= 10*1024*1024;
+        if(!isValidType) alert(`File ${f.name}: format tak disokong. Guna JPG/PNG/PDF`);
+        if(!isValidSize) alert(`File ${f.name}: lebih 10MB`);
+        return isValidType && isValidSize;
+    });
+    
+    addModalFiles[field].push(...validFiles);
+    
+    // Update preview
+    const previewId = `addModalPreview-${field}`;
+    const previewEl = document.getElementById(previewId);
+    if(previewEl){
+        previewEl.innerHTML = addModalFiles[field].map((f,i)=>`
+            <div class="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1 text-[11px]">
+                <i class="fa-solid ${f.type.includes('pdf')?'fa-file-pdf text-red-500':'fa-file-image text-blue-500'}"></i>
+                <span class="max-w-[120px] truncate font-bold">${f.name}</span>
+                <span class="text-[10px] text-slate-400">${(f.size/1024).toFixed(0)}KB</span>
+                <button type="button" onclick="removeAddModalFile('${field}',${i})" class="w-5 h-5 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200"><i class="fa-solid fa-xmark text-[10px]"></i></button>
+            </div>
+        `).join('');
+    }
+}
+
+function removeAddModalFile(field, idx){
+    if(addModalFiles[field]) {
+        addModalFiles[field].splice(idx,1);
+        const previewId = `addModalPreview-${field}`;
+        const previewEl = document.getElementById(previewId);
+        if(previewEl){
+            if(addModalFiles[field].length===0){
+                previewEl.innerHTML = '';
+            } else {
+                previewEl.innerHTML = addModalFiles[field].map((f,i)=>`
+                    <div class="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1 text-[11px]">
+                        <i class="fa-solid ${f.type.includes('pdf')?'fa-file-pdf text-red-500':'fa-file-image text-blue-500'}"></i>
+                        <span class="max-w-[120px] truncate font-bold">${f.name}</span>
+                        <span class="text-[10px] text-slate-400">${(f.size/1024).toFixed(0)}KB</span>
+                        <button type="button" onclick="removeAddModalFile('${field}',${i})" class="w-5 h-5 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200"><i class="fa-solid fa-xmark text-[10px]"></i></button>
+                    </div>
+                `).join('');
+            }
+        }
+    }
+}
+
+window.removeAddModalFile = removeAddModalFile;
+
+
 // CLEANED: override removed - using global var from config.js
 
 function cleanTripName(raw){
   if(!raw) return 'TBC';
-  let s = String(raw);
-  // buang pattern "26/08 |" atau "26/08 | 16 - 25 OGOS 2026"
-  if(s.includes('|')) s = s.split('|').pop();
-  return s.trim();
+  let s = String(raw).trim();
+  // Kalau ada pipe, ambil part terakhir yang ada makna
+  if(s.includes('|')){
+    const parts = s.split('|').map(p=>p.trim()).filter(p=>p.length>0);
+    // ambil part paling panjang / paling akhir yang mengandungi huruf
+    if(parts.length>0){
+      // prefer part yang ada huruf, bukan hanya tarikh 26/08
+      const withAlpha = parts.filter(p=> /[A-Z]/i.test(p));
+      s = (withAlpha.length>0 ? withAlpha[withAlpha.length-1] : parts[parts.length-1]);
+    }
+  }
+  // buang prefix tarikh pendek macam "26/08" atau "07/25" di depan jika masih ada
+  s = s.replace(/^\d{1,2}\/\d{1,2}\s*\|?\s*/,'').trim();
+  // Normalisasi: kalau format "07 - 19 JULAI 2026" kekalkan
+  // Kalau kosong lepas clean, fallback ke raw
+  if(!s) return String(raw).trim() || 'TBC';
+  return s.toUpperCase();
 }
 // CLEANED: override removed - using global var from config.js
 // make brand-maroon class fallback
@@ -84,6 +229,44 @@ function cleanTripName(raw){
   const style=document.createElement('style');
   style.textContent='.bg-brand-maroon{background:#800020}.text-brand-maroon{color:#800020}.hover\\:bg-rose-900:hover{background:#600018}';
   document.head.appendChild(style);
+
+// Hook setup after openAddJemaahModal original
+(function(){
+    const _origOpenAdd = window.openAddJemaahModal;
+    if(_origOpenAdd){
+        const original = _origOpenAdd;
+        window.openAddJemaahModal = function(){
+            original.apply(this, arguments);
+            setTimeout(()=>{
+                const modal = document.getElementById('expandRecordModal');
+                if(modal){
+                    modal.classList.remove('hidden');
+                    modal.style.display='flex';
+                }
+                setupAddModalFilePickers();
+            }, 100);
+        };
+    } else {
+        // if not yet defined, patch via event
+        document.addEventListener('DOMContentLoaded', ()=>{
+            const orig = window.openAddJemaahModal;
+            if(orig){
+                window.openAddJemaahModal = function(){
+                    orig.apply(this, arguments);
+                    setTimeout(()=>{
+                        const modal = document.getElementById('expandRecordModal');
+                        if(modal){
+                            modal.classList.remove('hidden');
+                            modal.style.display='flex';
+                        }
+                        setupAddModalFilePickers();
+                    }, 100);
+                };
+            }
+        });
+    }
+})();
+
 })();
 
 
@@ -95,17 +278,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const savedOrder = JSON.parse(localStorage.getItem('jemaahColOrder'));
     if (savedOrder && Array.isArray(savedOrder)) {
-        columnOrder = savedOrder.filter(k=> k!=='col-age' && k!=='col-dob');
+        // FIX: validate, buang legacy col-age/dob, buang duplikat, pastikan semua default ada
+        let cleaned = [...new Set(savedOrder.filter(k=> k!=='col-age' && k!=='col-dob' && DEFAULT_COLUMN_ORDER.includes(k)))];
+        // tambah yang missing dari default supaya tak hilang
+        DEFAULT_COLUMN_ORDER.forEach(k=>{
+            if(!cleaned.includes(k)) cleaned.push(k);
+        });
+        columnOrder = cleaned.length>0 ? cleaned : [...DEFAULT_COLUMN_ORDER];
         if(columnOrder.length===0){
-            columnOrder = [
-                'col-idx', 'col-name', 'col-picture', 'col-ic', 'col-passport', 
-                'col-gender', 'col-dobf', 'col-nat', 
-                'col-visa', 'col-passcopy', 'col-visacopy', 'col-mofabio', 
-                'col-fit', 'col-trip', 'col-issue', 'col-expire', 'col-notes',
-                'col-board', 'col-train', 'col-insuran', 'col-pakej', 'col-ejen'
-            ];
+            columnOrder = [...DEFAULT_COLUMN_ORDER];
         }
         localStorage.setItem('jemaahColOrder', JSON.stringify(columnOrder));
+    } else {
+        columnOrder = [...DEFAULT_COLUMN_ORDER];
     }
     const savedHidden = JSON.parse(localStorage.getItem('jemaahHiddenColumns')) || {};
     if(savedHidden['col-age'] || savedHidden['col-dob']){
@@ -2842,6 +3027,7 @@ function openAddJemaahModal() {
     const delBtn = document.getElementById('modalDeleteBtn');
     const saveBtn = document.getElementById('modalSaveBtn');
 
+    addModalFiles = { 'PICTURE': [], 'PASSPORT_COPY': [], 'VISA_COPY': [], 'MOFABIO': [], 'INSURAN_DOC': [] };
     if (titleEl) titleEl.textContent = 'TAMBAH JEMAAH BAHARU';
     if (delBtn) delBtn.classList.add('hidden');
     if (saveBtn) {
@@ -2898,7 +3084,45 @@ function openAddJemaahModal() {
             html = '<div class="p-3 text-xs text-slate-400">Tiada data ejen. Sila refresh.</div>';
         }
         return html;
-    })();
+    
+// Hook setup after openAddJemaahModal original
+(function(){
+    const _origOpenAdd = window.openAddJemaahModal;
+    if(_origOpenAdd){
+        const original = _origOpenAdd;
+        window.openAddJemaahModal = function(){
+            original.apply(this, arguments);
+            setTimeout(()=>{
+                const modal = document.getElementById('expandRecordModal');
+                if(modal){
+                    modal.classList.remove('hidden');
+                    modal.style.display='flex';
+                }
+                setupAddModalFilePickers();
+            }, 100);
+        };
+    } else {
+        // if not yet defined, patch via event
+        document.addEventListener('DOMContentLoaded', ()=>{
+            const orig = window.openAddJemaahModal;
+            if(orig){
+                window.openAddJemaahModal = function(){
+                    orig.apply(this, arguments);
+                    setTimeout(()=>{
+                        const modal = document.getElementById('expandRecordModal');
+                        if(modal){
+                            modal.classList.remove('hidden');
+                            modal.style.display='flex';
+                        }
+                        setupAddModalFilePickers();
+                    }, 100);
+                };
+            }
+        });
+    }
+})();
+
+})();
 
     // V91: Board Basis multi - filter blank + Add option
     const boardBasisOptions = (jemaahFieldOptions['BOARD BASIS'] || []).filter(o=> o.name && o.name.trim()!=='');
@@ -3944,6 +4168,44 @@ function filterJemaahTable() {
   #modul-maklumat-jemaah{overflow:auto;}
   `;
   document.head.appendChild(style);
+
+// Hook setup after openAddJemaahModal original
+(function(){
+    const _origOpenAdd = window.openAddJemaahModal;
+    if(_origOpenAdd){
+        const original = _origOpenAdd;
+        window.openAddJemaahModal = function(){
+            original.apply(this, arguments);
+            setTimeout(()=>{
+                const modal = document.getElementById('expandRecordModal');
+                if(modal){
+                    modal.classList.remove('hidden');
+                    modal.style.display='flex';
+                }
+                setupAddModalFilePickers();
+            }, 100);
+        };
+    } else {
+        // if not yet defined, patch via event
+        document.addEventListener('DOMContentLoaded', ()=>{
+            const orig = window.openAddJemaahModal;
+            if(orig){
+                window.openAddJemaahModal = function(){
+                    orig.apply(this, arguments);
+                    setTimeout(()=>{
+                        const modal = document.getElementById('expandRecordModal');
+                        if(modal){
+                            modal.classList.remove('hidden');
+                            modal.style.display='flex';
+                        }
+                        setupAddModalFilePickers();
+                    }, 100);
+                };
+            }
+        });
+    }
+})();
+
 })();
 
 
@@ -3966,6 +4228,44 @@ function filterJemaahTable() {
       fetchJemaahUmrahData();
     }
   },500);
+
+// Hook setup after openAddJemaahModal original
+(function(){
+    const _origOpenAdd = window.openAddJemaahModal;
+    if(_origOpenAdd){
+        const original = _origOpenAdd;
+        window.openAddJemaahModal = function(){
+            original.apply(this, arguments);
+            setTimeout(()=>{
+                const modal = document.getElementById('expandRecordModal');
+                if(modal){
+                    modal.classList.remove('hidden');
+                    modal.style.display='flex';
+                }
+                setupAddModalFilePickers();
+            }, 100);
+        };
+    } else {
+        // if not yet defined, patch via event
+        document.addEventListener('DOMContentLoaded', ()=>{
+            const orig = window.openAddJemaahModal;
+            if(orig){
+                window.openAddJemaahModal = function(){
+                    orig.apply(this, arguments);
+                    setTimeout(()=>{
+                        const modal = document.getElementById('expandRecordModal');
+                        if(modal){
+                            modal.classList.remove('hidden');
+                            modal.style.display='flex';
+                        }
+                        setupAddModalFilePickers();
+                    }, 100);
+                };
+            }
+        });
+    }
+})();
+
 })();
 
 
@@ -4098,6 +4398,44 @@ document.addEventListener('click', function(e){
       }
     }
   });
+
+// Hook setup after openAddJemaahModal original
+(function(){
+    const _origOpenAdd = window.openAddJemaahModal;
+    if(_origOpenAdd){
+        const original = _origOpenAdd;
+        window.openAddJemaahModal = function(){
+            original.apply(this, arguments);
+            setTimeout(()=>{
+                const modal = document.getElementById('expandRecordModal');
+                if(modal){
+                    modal.classList.remove('hidden');
+                    modal.style.display='flex';
+                }
+                setupAddModalFilePickers();
+            }, 100);
+        };
+    } else {
+        // if not yet defined, patch via event
+        document.addEventListener('DOMContentLoaded', ()=>{
+            const orig = window.openAddJemaahModal;
+            if(orig){
+                window.openAddJemaahModal = function(){
+                    orig.apply(this, arguments);
+                    setTimeout(()=>{
+                        const modal = document.getElementById('expandRecordModal');
+                        if(modal){
+                            modal.classList.remove('hidden');
+                            modal.style.display='flex';
+                        }
+                        setupAddModalFilePickers();
+                    }, 100);
+                };
+            }
+        });
+    }
+})();
+
 })();
 
 
@@ -4108,5 +4446,43 @@ document.addEventListener('click', function(e){
   }
 });
 
+
+
+// Hook setup after openAddJemaahModal original
+(function(){
+    const _origOpenAdd = window.openAddJemaahModal;
+    if(_origOpenAdd){
+        const original = _origOpenAdd;
+        window.openAddJemaahModal = function(){
+            original.apply(this, arguments);
+            setTimeout(()=>{
+                const modal = document.getElementById('expandRecordModal');
+                if(modal){
+                    modal.classList.remove('hidden');
+                    modal.style.display='flex';
+                }
+                setupAddModalFilePickers();
+            }, 100);
+        };
+    } else {
+        // if not yet defined, patch via event
+        document.addEventListener('DOMContentLoaded', ()=>{
+            const orig = window.openAddJemaahModal;
+            if(orig){
+                window.openAddJemaahModal = function(){
+                    orig.apply(this, arguments);
+                    setTimeout(()=>{
+                        const modal = document.getElementById('expandRecordModal');
+                        if(modal){
+                            modal.classList.remove('hidden');
+                            modal.style.display='flex';
+                        }
+                        setupAddModalFilePickers();
+                    }, 100);
+                };
+            }
+        });
+    }
+})();
 
 })();
