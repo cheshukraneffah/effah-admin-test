@@ -302,6 +302,42 @@ document.addEventListener('DOMContentLoaded', () => {
     renderJemaahUmrahHTML();
 });
 
+
+function initHeaderDragAndDrop(){
+    try{
+        const headers = document.querySelectorAll('th.draggable-header');
+        headers.forEach(th=>{
+            th.setAttribute('draggable','true');
+            th.addEventListener('dragstart', (e)=>{
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', th.dataset.col || '');
+                th.classList.add('opacity-50');
+                window._dragCol = th.dataset.col;
+            });
+            th.addEventListener('dragend', ()=>{
+                th.classList.remove('opacity-50');
+                document.querySelectorAll('th.drag-over').forEach(el=>el.classList.remove('drag-over'));
+            });
+            th.addEventListener('dragover', (e)=>{
+                e.preventDefault();
+                th.classList.add('drag-over');
+            });
+            th.addEventListener('dragleave', ()=>{
+                th.classList.remove('drag-over');
+            });
+            th.addEventListener('drop', (e)=>{
+                e.preventDefault();
+                th.classList.remove('drag-over');
+                const fromCol = window._dragCol;
+                const toCol = th.dataset.col;
+                if(fromCol && toCol && fromCol!==toCol && typeof reorderColumns==='function'){
+                    reorderColumns(fromCol, toCol);
+                }
+            });
+        });
+    }catch(err){ console.warn('initHeaderDragAndDrop fail', err); }
+}
+
 function renderJemaahUmrahHTML() {
     const container = document.getElementById('modul-jemaah-umrah');
     if (!container) return;
@@ -587,8 +623,18 @@ function getJemaahHijriSeasonFromField(val){
   return val.toString().trim().toUpperCase(); // V50: full 26/27 • 1448H, jangan extract 1448H je
 }
 function cleanTripName(tripName) {
-    if (!tripName) return 'TBC';
-    return tripName.replace(/^[\d\/]+\s*\|\s*/i, '').trim();
+    if(!tripName) return 'TBC';
+    let s = String(tripName).trim();
+    if(s.includes('|')){
+        const parts = s.split('|').map(p=>p.trim()).filter(p=>p.length>0);
+        if(parts.length>0){
+            const withAlpha = parts.filter(p=> /[A-Z]/i.test(p));
+            s = (withAlpha.length>0 ? withAlpha[withAlpha.length-1] : parts[parts.length-1]);
+        }
+    }
+    s = s.replace(/^\d{1,2}\/\d{1,2}\s*\|?\s*/,'').trim();
+    if(!s) return String(tripName).trim() || 'TBC';
+    return s.toUpperCase();
 }
 
 async function fetchTripMapping() {
@@ -1957,7 +2003,7 @@ function filterAndRenderJemaahGrid() {
 
     if (!selectedTripFilter && !selectedHijriFilter) {
         if (tbody) {
-            tbody.innerHTML = `
+            const thead0 = document.getElementById('jemaahTableHeaderRow'); if(thead0) thead0.style.display='none'; tbody.innerHTML = `
                 <tr>
                     <td colspan="19" class="text-center py-24 text-slate-400">
                         <i class="fa-solid fa-hand-pointer text-3xl mb-3 text-brand-maroon animate-bounce"></i>
@@ -1971,6 +2017,8 @@ function filterAndRenderJemaahGrid() {
     }
 
     let filtered = [...allJemaahUmrahRecords];
+    // show header bila ada filter
+    const theadShow = document.getElementById('jemaahTableHeaderRow'); if(theadShow) theadShow.style.display=''; const headerWrapShow = document.querySelector('#jemaahTableContainer thead'); if(headerWrapShow) headerWrapShow.style.display='';
 
     if(selectedHijriFilter){
       if(selectedHijriFilter === 'TBC'){
@@ -2057,8 +2105,18 @@ function renderJemaahRows(records) {
     tbody.innerHTML = '';
 
     if (records.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="19" class="text-center py-12 text-slate-400">Tiada rekod jemaah untuk view ini.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="19" class="text-center py-16 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fa-solid fa-inbox text-3xl text-slate-300"></i><span class="text-sm font-bold">Tiada rekod jemaah untuk view ini.</span><span class="text-[11px] text-slate-400">Cuba pilih trip lain atau tambah jemaah baru</span></div></td></tr>';
+        // FIX UI: hide header bila takde item - bagi nampak cantik
+        const thead = document.getElementById('jemaahTableHeaderRow');
+        if(thead) thead.style.display = 'none';
+        const headerWrap = document.querySelector('#jemaahTableContainer thead');
+        if(headerWrap) headerWrap.style.display = 'none';
         return;
+    } else {
+        const thead = document.getElementById('jemaahTableHeaderRow');
+        if(thead) thead.style.display = '';
+        const headerWrap = document.querySelector('#jemaahTableContainer thead');
+        if(headerWrap) headerWrap.style.display = '';
     }
 
     records.forEach((rec, idx) => {
