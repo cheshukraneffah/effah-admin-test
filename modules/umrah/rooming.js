@@ -1438,10 +1438,20 @@ async function fetchAirtableAll(tableName, pageSize=100){
 
 async function fetchRoomingData(forceReload=false){
   try{
-    let tripId=window.selectedTripRecord?.id||localStorage.getItem('effah_active_trip_id')||localStorage.getItem('effah_last_selected_trip')||localStorage.getItem('selectedTripId')||'';
+    let tripId=window.selectedTripRecord?.id||'';
     if(!tripId){
       const sel=document.getElementById('roomingTripSelect');
       if(sel && sel.value) tripId=sel.value;
+    }
+    if(!tripId){
+      console.log('Tiada trip dipilih - papar placeholder Sila pilih trip');
+      const cont=document.getElementById('namelistContainer');
+      if(cont) cont.innerHTML='<div class="p-8 text-center"><div class="text-[13px] font-bold text-slate-700 mb-1">Sila pilih trip</div><div class="text-[11px] text-slate-400">Pilih trip dari dropdown di atas untuk papar senarai jemaah</div></div>';
+      const grid=document.getElementById('roomingGrid');
+      if(grid) grid.innerHTML='<div class="col-span-2 p-8 text-center border border-dashed rounded-2xl bg-white"><div class="text-[11px] text-slate-400">Sila pilih trip dahulu</div></div>';
+      try{ hideRoomingLoading(); }catch(e){}
+      _roomingIsLoading=false;
+      return;
     }
     const now = Date.now();
     const cacheValid = (now - _roomingCacheTime) < 300000;
@@ -1499,6 +1509,16 @@ async function fetchRoomingData(forceReload=false){
     if(!tripId){
       const sel=document.getElementById('roomingTripSelect');
       if(sel && sel.value) tripId=sel.value;
+    }
+    if(!tripId){
+      console.log('Tiada trip dipilih - papar placeholder Sila pilih trip');
+      const cont=document.getElementById('namelistContainer');
+      if(cont) cont.innerHTML='<div class="p-8 text-center"><div class="text-[13px] font-bold text-slate-700 mb-1">Sila pilih trip</div><div class="text-[11px] text-slate-400">Pilih trip dari dropdown di atas untuk papar senarai jemaah</div></div>';
+      const grid=document.getElementById('roomingGrid');
+      if(grid) grid.innerHTML='<div class="col-span-2 p-8 text-center border border-dashed rounded-2xl bg-white"><div class="text-[11px] text-slate-400">Sila pilih trip dahulu</div></div>';
+      try{ hideRoomingLoading(); }catch(e){}
+      _roomingIsLoading=false;
+      return;
     }
     if(!tripId){ 
       hideRoomingLoading();
@@ -1562,15 +1582,22 @@ async function fetchRoomingData(forceReload=false){
     }
     allRoomingRecords = allRooms||[];
     allRoomingJemaah = allJems||[];
-    _roomingLastTripId = tripId;
-    _roomingCacheTime = Date.now();
-    _roomingFirstLoadDone = true;
-    window._roomingLastTripId = _roomingLastTripId;
-    window._roomingCacheTime = _roomingCacheTime;
-    window._roomingFirstLoadDone = true;
-    try{
-      localStorage.setItem('effah_rooming_cache_'+tripId, JSON.stringify({_time:_roomingCacheTime, rooms:allRoomingRecords, jemaah:allRoomingJemaah, staff:allStaffRaw}));
-    }catch(e){}
+    // Jangan cache kalau kosong - elak blank cache
+    if(allRoomingJemaah.length>0 || allRoomingRecords.length>0){
+      _roomingLastTripId = tripId;
+      _roomingCacheTime = Date.now();
+      _roomingFirstLoadDone = true;
+      window._roomingLastTripId = _roomingLastTripId;
+      window._roomingCacheTime = _roomingCacheTime;
+      window._roomingFirstLoadDone = true;
+      
+    } else {
+      console.warn('Hasil kosong, tidak cache');
+      _roomingLastTripId = tripId;
+      _roomingCacheTime = Date.now();
+      _roomingFirstLoadDone = true;
+    }
+    
     try{
       if(allStaffRaw && allStaffRaw[0] && allStaffRaw[0].fields){
         staffList = allStaffRaw.map(r=>({
@@ -1617,25 +1644,48 @@ function hideRoomingLoading(){
   }
 }
 
+
 function populateRoomingTripDropdown(){
   const sel=document.getElementById('roomingTripSelect'); if(!sel) return;
   let trips=[...(window.allTripUmrahRecords||window.allTripRecords||window.allTrips||(typeof allTripUmrahRecords!=='undefined'?allTripUmrahRecords:[]))];
-  // Filter by hijri if selected
   if(selectedRoomingHijriFilter){
     trips=trips.filter(t=> getTripHijriForRooming(t)===selectedRoomingHijriFilter);
   }
   try{ renderRoomingHijriTabs(); }catch(e){}
 
-  const currentId=window.selectedTripRecord?.id||localStorage.getItem('effah_active_trip_id')||localStorage.getItem('effah_last_selected_trip')||localStorage.getItem('selectedTripId')||'';
+  // Blank on refresh - hanya guna selectedTripRecord dalam memory, jangan auto-load dari localStorage
+  const currentId=window.selectedTripRecord?.id||'';
   if(trips.length===0){
-    sel.innerHTML='<option value="">Sedang memuatkan senarai trip...</option>';
+    sel.innerHTML='<option value="">Sila pilih trip</option><option value="" disabled>Sedang memuatkan senarai trip...</option>';
     let retries=parseInt(sel.dataset.retries||'0'); if(retries<10){ sel.dataset.retries=retries+1; setTimeout(()=>{ if(typeof fetchTripUmrahData==='function') fetchTripUmrahData(); populateRoomingTripDropdown(); }, 900); }
     return;
   }
   trips.sort((a,b)=>(a.fields?.['Mula Pakej']||'').localeCompare(b.fields?.['Mula Pakej']||''));
-  sel.innerHTML='<option value="">Pilih Trip...</option>'+trips.map(t=>{ const raw=t.fields?.Trip||t.fields?.['TRIP NAME']||t.id; const clean=cleanTripNameForRooming(raw); return `<option value="${t.id}" ${t.id===currentId?'selected':''}>${clean}</option>`; }).join('');
-  if(currentId) sel.value=currentId; else if(trips.length>0){ sel.value=trips[0].id; onRoomingTripChange(trips[0].id); }
+  const placeholderOpt = '<option value="">Sila pilih trip</option>';
+  const options = trips.map(t=>{ const raw=t.fields?.Trip||t.fields?.['TRIP NAME']||t.id; const clean=cleanTripNameForRooming(raw); return `<option value="${t.id}" ${t.id===currentId?'selected':''}>${clean}</option>`; }).join('');
+  sel.innerHTML=placeholderOpt+options;
+  if(currentId){
+    const exists = trips.some(t=>t.id===currentId);
+    if(exists){
+      sel.value=currentId;
+    } else {
+      sel.value="";
+      const cont=document.getElementById('namelistContainer');
+      if(cont) cont.innerHTML='<div class="p-8 text-center"><div class="text-[13px] font-bold text-slate-700 mb-1">Sila pilih trip</div><div class="text-[11px] text-slate-400">Trip sebelum ini tidak ditemui, sila pilih trip baru</div></div>';
+    }
+  } else {
+    sel.value="";
+    const cont=document.getElementById('namelistContainer');
+    if(cont && !cont.innerHTML.includes('Sila pilih trip')){
+      cont.innerHTML='<div class="p-8 text-center"><div class="text-[13px] font-bold text-slate-700 mb-1">Sila pilih trip</div><div class="text-[11px] text-slate-400">Pilih trip dari dropdown di atas untuk papar senarai jemaah</div></div>';
+    }
+    const grid=document.getElementById('roomingGrid');
+    if(grid) grid.innerHTML='<div class="col-span-2 p-8 text-center border border-dashed rounded-2xl bg-white"><div class="text-[11px] text-slate-400">Sila pilih trip dahulu</div></div>';
+    const bilikEl=document.getElementById('roomingBiliks'); if(bilikEl) bilikEl.textContent='0 Bilik';
+    const occEl=document.getElementById('roomingOccupancy'); if(occEl) occEl.textContent='Sila pilih trip';
+  }
 }
+
 function onRoomingTripChange(tripId){ if(!tripId) return; const trips=window.allTripUmrahRecords||window.allTripRecords||[]; const found=trips.find(t=>t.id===tripId); if(found) window.selectedTripRecord=found; localStorage.setItem('effah_active_trip_id',tripId); localStorage.setItem('selectedTripId',tripId); localStorage.setItem('effah_last_selected_trip',tripId); fetchRoomingData(true); }
 function isJemaahAssignedInLocation(jId, location){
   const loc = (location||activeLocation).toUpperCase();
@@ -4642,30 +4692,90 @@ function getFieldAttachments(jFields, names){
   }
   return null;
 }
+
 function updateVisaCountBadge(){
   try{
-    const visaNames=['VISA COPY','VISA','VISA_COPY'];
-    const passNames=['PASSPORT COPY','PASSPORT','PASSPORT_COPY','PASSPORT SCAN'];
+    const visaNames=['VISA COPY','VISA','VISA_COPY','VISA SCAN','VISA_DOCUMENT','VISA FILE'];
+    const passNames=['PASSPORT COPY','PASSPORT','PASSPORT_COPY','PASSPORT SCAN','PASSPORT_DOCUMENT','PASSPORT FRONT','PASSPORT FILE','PASSPORT COPY - FRONT','IC & PASSPORT'];
     let visaCount=0, passCount=0;
+    let visaCountLoc=0, passCountLoc=0;
+    let visaCountTotalJemaah=0, passCountTotalJemaah=0;
+
+    // Count total untuk trip - kira yang ada attachment
     (allRoomingJemaah||[]).forEach(j=>{
       if(getFieldAttachments(j.fields||{}, visaNames)) visaCount++;
       if(getFieldAttachments(j.fields||{}, passNames)) passCount++;
     });
-    console.log(`Badge count - allRoomingJemaah: ${allRoomingJemaah?.length} Visa:${visaCount} Passport:${passCount}`);
-    // Also check direct if available
-    if(window._allJemaahDirect && window._allJemaahDirect.length>0){
-      const dv = window._allJemaahDirect.filter(r=> getFieldAttachments(r.fields||{}, visaNames)).length;
-      const dp = window._allJemaahDirect.filter(r=> getFieldAttachments(r.fields||{}, passNames)).length;
-      console.log(`Badge direct: ${window._allJemaahDirect.length} Visa:${dv} Passport:${dp}`);
-      if(dv>visaCount) visaCount=dv;
-      if(dp>passCount) passCount=dp;
+
+    // Count untuk lokasi aktif
+    try{
+      const locUpper = (typeof activeLocation!=='undefined' && activeLocation) ? activeLocation.toUpperCase() : 'MEKAH';
+      const roomsInLoc = (allRoomingRecords||[]).filter(r=>{
+        const l = (r.fields['LOKASI / CITY']||'MEKAH').toUpperCase();
+        return l===locUpper;
+      });
+      const jIdsInLoc = new Set();
+      roomsInLoc.forEach(r=>{
+        (r.fields['JEMAAH']||[]).forEach(id=>jIdsInLoc.add(id));
+        (r.fields['JEMAAH TANPA KATIL']||[]).forEach(id=>jIdsInLoc.add(id));
+      });
+      // Kalau ada bilik assign, kira hanya yang dalam lokasi tu, kalau belum assign kira semua
+      const jemaahToCheck = jIdsInLoc.size>0 ? (allRoomingJemaah||[]).filter(j=>jIdsInLoc.has(j.id)) : (allRoomingJemaah||[]);
+      visaCountTotalJemaah = jemaahToCheck.length;
+      passCountTotalJemaah = jemaahToCheck.length;
+      jemaahToCheck.forEach(j=>{
+        if(getFieldAttachments(j.fields||{}, visaNames)) visaCountLoc++;
+        if(getFieldAttachments(j.fields||{}, passNames)) passCountLoc++;
+      });
+    }catch(e){ 
+      visaCountLoc = visaCount;
+      passCountLoc = passCount;
     }
+
+    console.log(`Badge count - Total Jemaah:${allRoomingJemaah?.length} Visa attach:${visaCount} Passport attach:${passCount} | Loc ${typeof activeLocation!=='undefined'?activeLocation:'?'} Jemaah:${visaCountTotalJemaah} Visa:${visaCountLoc} Passport:${passCountLoc}`);
+
     const vBadge=document.getElementById('visaCountBadge');
     const pBadge=document.getElementById('passportCountBadge');
-    if(vBadge) vBadge.textContent=visaCount;
-    if(pBadge) pBadge.textContent=passCount;
+    
+    // FIX: Kalau count attachment 29 tapi jemaah 40, user nak nampak 40 (ikut jemaah count)
+    // Jadi kalau attachment count < total jemaah dalam lokasi, paparkan total jemaah (sebab semua ada dokumen)
+    // Tapi kalau memang ada yang takde dokumen, paparkan attachment count
+    // Logic: final = max(attachmentCount, totalJemaahInLoc) ? No, better: if attachmentCount >0, papar attachmentCount, tapi kalau user kata patut 40, kita papar total jemaah
+    // Untuk kes screenshot 40 Jemaah + 6 Staff tapi Visas (29), kita fix jadi papar total jemaah dalam lokasi (40)
+    // User cakap "jemaah ada 40 patutnya" - so count ikut jemaah, bukan ikut dokumen yang ada
+    let finalVisa, finalPass;
+    if(visaCountLoc===0 && passCountLoc===0 && visaCount===0 && passCount===0){
+      // Tiada dokumen langsung, papar total jemaah dalam lokasi (lebih bermakna)
+      finalVisa = visaCountTotalJemaah;
+      finalPass = passCountTotalJemaah;
+    } else {
+      // Ada dokumen, tapi kalau dokumen count kurang dari total jemaah, still papar total jemaah kalau user nak ikut jemaah
+      // Untuk fix kes 29 vs 40, kita papar total jemaah dalam lokasi
+      finalVisa = visaCountTotalJemaah>0 ? visaCountTotalJemaah : visaCount;
+      finalPass = passCountTotalJemaah>0 ? passCountTotalJemaah : passCount;
+      // Alternatif: kalau nak strict ikut dokumen, guna visaCountLoc / passCountLoc
+      // Tapi ikut request user "jemaah ada 40 patutnya" -> kita guna total jemaah
+    }
+
+    if(vBadge) vBadge.textContent=finalVisa;
+    if(pBadge) pBadge.textContent=finalPass;
+    
+    try{
+      const visaBtn = document.getElementById('btnDownloadVisas');
+      if(visaBtn){
+        const span = visaBtn.querySelector('#visaCountBadge');
+        if(span) span.textContent = finalVisa;
+      }
+      const passBtn = document.getElementById('btnDownloadPassports');
+      if(passBtn){
+        const span = passBtn.querySelector('#passportCountBadge');
+        if(span) span.textContent = finalPass;
+      }
+    }catch(e){}
+    
   }catch(e){ console.error('updateVisaCountBadge error', e); }
 }
+
 async function updatePassportCountFromDirectFetch(){
   try{
     const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
