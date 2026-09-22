@@ -2226,7 +2226,6 @@ function renderInlineUploadCell(recId, fieldName, fileList, labelName) {
             const safeUrl = escapeAttr(fileUrl);
             const safeFileId = escapeAttr(fileId);
             const isPdf = fileUrl && (fileUrl.toLowerCase().includes('.pdf') || fileName.toLowerCase().includes('.pdf'));
-            // Simpan context untuk delete
             return `
                 <div class="flex items-center space-x-1 my-0.5">
                     ${isPdf ? `
@@ -2238,7 +2237,6 @@ function renderInlineUploadCell(recId, fieldName, fileList, labelName) {
             `;
         }).join('');
     }
-    // Button + drag drop support - FIX upload dead
     const uploadBtn = `<button type="button" onclick="triggerInlineUpload('${safeRecId}', '${safeField}')" data-action="trigger-upload" data-rec-id="${safeRecId}" data-field="${safeField}" class="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 border border-slate-300 flex items-center justify-center text-[10px] text-slate-500" title="Upload ${safeLabel}"><i class="fa-solid fa-plus"></i></button>`;
     return `<div id="${safeCellBoxId}" class="flex items-center justify-center gap-1 flex-wrap min-h-[28px] p-0.5 rounded hover:bg-slate-50 transition" ondrop="handleCellDrop(event, '${safeRecId}', '${safeField}', '${safeCellBoxId}')" ondragover="event.preventDefault(); this.classList.add('bg-rose-50','ring-1','ring-rose-300')" ondragleave="this.classList.remove('bg-rose-50','ring-1','ring-rose-300')">${filesListHtml}${uploadBtn}</div>`;
 }
@@ -2279,7 +2277,6 @@ function handleCellDrop(e, recId, fieldName, cellBoxId){
 }
 
 
-// 📤 PROSES UPLOAD BANYAK FAIL TERUS DARI TABLE WITH CELL LOADING INDICATOR
 async function handleInlineFileUpload(recId, fieldName, fileList, cellBoxId) {
     const files = Array.from(fileList);
     if (files.length === 0) return;
@@ -3963,12 +3960,10 @@ function openPreviewModal(fileUrl, title, context = null) {
         return;
     }
 
-    // Simpan context untuk delete
     currentPreviewContext = context || { fileUrl, filename: title, recordId: null, fieldName: null, attachmentId: null };
     if(!currentPreviewContext.fileUrl) currentPreviewContext.fileUrl = fileUrl;
     if(!currentPreviewContext.filename) currentPreviewContext.filename = title;
 
-    // Setkan Tajuk dan Pautan Muat Turun
     if (titleEl) titleEl.textContent = title || currentPreviewContext.filename || 'Pratonton Lampiran';
     if (downloadBtn) {
         downloadBtn.href = fileUrl;
@@ -3976,19 +3971,15 @@ function openPreviewModal(fileUrl, title, context = null) {
         downloadBtn.setAttribute('target', '_blank');
     }
 
-    // Show/hide delete button - hanya show kalau ada record context
     if(deleteBtn){
         if(currentPreviewContext && currentPreviewContext.recordId && currentPreviewContext.fieldName){
             deleteBtn.classList.remove('hidden');
             deleteBtn.style.display = 'flex';
         } else {
-            // Kalau preview dari add modal atau tanpa context, hide delete
-            // deleteBtn.classList.add('hidden');
-            deleteBtn.style.display = 'flex'; // tetap show tapi akan alert tiada context
+            deleteBtn.style.display = 'flex';
         }
     }
 
-    // Semak sama ada fail ini PDF atau Gambar
     const lowerUrl = fileUrl.toLowerCase();
     const lowerTitle = (title || '').toLowerCase();
     
@@ -4018,7 +4009,6 @@ function openPreviewModal(fileUrl, title, context = null) {
         }
     }
 
-    // Paparkan Modal
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 }
@@ -4031,15 +4021,21 @@ function deleteCurrentPreviewAttachment(){
     const ctx = currentPreviewContext;
     const fileName = ctx.filename || ctx.fileUrl || 'fail ini';
     
-    // Alert box reconfirm - custom styled confirm
-    const confirmMsg = `⚠️ PADAM FAIL?\n\nAnda pasti mahu memadam:\n"${fileName}"\n\nTindakan ini akan buang fail dari rekod jemaah dan tidak boleh undur.\n\nTeruskan?`;
+    const confirmMsg = `⚠️ PADAM FAIL?
+
+Anda pasti mahu memadam:
+"${fileName}"
+
+Tindakan ini akan buang fail dari rekod jemaah dan tidak boleh undur.
+
+Teruskan?`;
     
     if(!confirm(confirmMsg)){
         return;
     }
     
-    // Second confirm untuk safety
-    const secondConfirm = confirm(`Sahkan sekali lagi:\nPadam "${fileName}" dari ${ctx.fieldName || 'attachment'}?`);
+    const secondConfirm = confirm(`Sahkan sekali lagi:
+Padam "${fileName}" dari ${ctx.fieldName || 'attachment'}?`);
     if(!secondConfirm) return;
 
     if(!ctx.recordId || !ctx.fieldName){
@@ -4047,7 +4043,6 @@ function deleteCurrentPreviewAttachment(){
         return;
     }
 
-    // Cari index attachment untuk dipadam
     try{
         const targetRec = allJemaahUmrahRecords.find(r => r.id === ctx.recordId);
         if(!targetRec || !targetRec.fields[ctx.fieldName] || !Array.isArray(targetRec.fields[ctx.fieldName])){
@@ -4056,7 +4051,6 @@ function deleteCurrentPreviewAttachment(){
         }
         
         let idxToDelete = -1;
-        // Cari by id, url, atau filename
         targetRec.fields[ctx.fieldName].forEach((att, i)=>{
             if(idxToDelete !== -1) return;
             if(ctx.attachmentId && att.id === ctx.attachmentId) idxToDelete = i;
@@ -4065,7 +4059,6 @@ function deleteCurrentPreviewAttachment(){
         });
         
         if(idxToDelete === -1){
-            // fallback cari by filename contains
             targetRec.fields[ctx.fieldName].forEach((att, i)=>{
                 if(idxToDelete !== -1) return;
                 if(att.filename && fileName && att.filename.toLowerCase() === fileName.toLowerCase()) idxToDelete = i;
@@ -4077,7 +4070,6 @@ function deleteCurrentPreviewAttachment(){
             return;
         }
 
-        // Show loading di button delete
         const delBtn = document.getElementById('deleteAttachmentBtn');
         let originalHTML = '';
         if(delBtn){
@@ -4086,8 +4078,6 @@ function deleteCurrentPreviewAttachment(){
             delBtn.disabled = true;
         }
 
-        // Panggil function delete sedia ada dengan index
-        // Kita override untuk handle async dengan proper close
         (async ()=>{
             try{
                 const updatedList = targetRec.fields[ctx.fieldName].filter((_, idx) => idx !== idxToDelete);
@@ -4120,9 +4110,10 @@ function deleteCurrentPreviewAttachment(){
                 console.error('Delete exception', e);
                 alert('❌ Ralat rangkaian semasa memadam.');
             }finally{
-                if(delBtn){
-                    delBtn.innerHTML = originalHTML;
-                    delBtn.disabled = false;
+                const delBtn2 = document.getElementById('deleteAttachmentBtn');
+                if(delBtn2){
+                    delBtn2.innerHTML = originalHTML;
+                    delBtn2.disabled = false;
                 }
             }
         })();
@@ -4133,26 +4124,20 @@ function deleteCurrentPreviewAttachment(){
     }
 }
 
-
-/**
- * Menutup Modal Preview dan mengosongkan sumber fail
- */
 function closePreviewModal() {
     const modal = document.getElementById('attachmentPreviewModal');
     const imgEl = document.getElementById('previewImage');
     const pdfEl = document.getElementById('previewPdf');
-
-    // Resetkan src supaya fail/PDF berhenti dimuatkan
     if (pdfEl) pdfEl.src = '';
     if (imgEl) imgEl.src = '';
-
     if (modal) {
         modal.classList.add('hidden');
         modal.style.display = 'none';
     }
-    // Reset context
     currentPreviewContext = null;
 }
+
+
 
 // 🎯 TUTUP MODAL BILA KLIK LUAR KOTAK (CLICK OUTSIDE BACKDROP)
 document.addEventListener('click', function (event) {
