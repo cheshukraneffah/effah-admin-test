@@ -1315,6 +1315,7 @@ function renderLocationTabs(){
 }
 
 
+
 async function fetchWithTimeout(url, opts={}, timeoutMs=25000){
   const controller = new AbortController();
   const id = setTimeout(()=>controller.abort(), timeoutMs);
@@ -1368,7 +1369,7 @@ async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100){
           continue;
         }
         if(res.status===422){
-          console.warn('422 filter invalid untuk', tableName, filterFormula, t);
+          console.warn('422 filter formula invalid untuk', tableName, filterFormula, t);
           return null;
         }
         console.warn(`Gagal fetch ${tableName} ${res.status}`, t);
@@ -1381,10 +1382,19 @@ async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100){
     }catch(e){
       console.error(`fetch ${tableName} error`, e.name);
       if(e.name==='AbortError'){
-        if(retries<1){ retries++; await new Promise(r=>setTimeout(r, 1500)); continue; }
+        console.warn('Timeout, retry sekali lagi');
+        if(retries<1){
+          retries++;
+          await new Promise(r=>setTimeout(r, 1500));
+          continue;
+        }
         break;
       }
-      if(retries<2){ retries++; await new Promise(r=>setTimeout(r, 1000)); continue; }
+      if(retries<2){
+        retries++;
+        await new Promise(r=>setTimeout(r, 1000));
+        continue;
+      }
       break;
     }
   }while(offset);
@@ -1403,7 +1413,10 @@ async function fetchAirtableAll(tableName, pageSize=100){
     try{
       const res = await fetchWithTimeout(url, {headers:{Authorization:`Bearer ${pat}`}}, 25000);
       if(!res.ok){
-        if(res.status===429){ await new Promise(r=>setTimeout(r, 2000)); continue; }
+        if(res.status===429){
+          await new Promise(r=>setTimeout(r, 2000));
+          continue;
+        }
         break;
       }
       const data = await res.json();
@@ -1412,7 +1425,11 @@ async function fetchAirtableAll(tableName, pageSize=100){
       attempts=0;
     }catch(e){
       if(e.name==='AbortError') break;
-      if(attempts<2){ attempts++; await new Promise(r=>setTimeout(r, 1000)); continue; }
+      if(attempts<2){
+        attempts++;
+        await new Promise(r=>setTimeout(r, 1000));
+        continue;
+      }
       break;
     }
   }while(offset);
@@ -1421,25 +1438,11 @@ async function fetchAirtableAll(tableName, pageSize=100){
 
 async function fetchRoomingData(forceReload=false){
   try{
-        let tripId=window.selectedTripRecord?.id||'';
+    let tripId=window.selectedTripRecord?.id||'';
     if(!tripId){
       const sel=document.getElementById('roomingTripSelect');
       if(sel && sel.value) tripId=sel.value;
     }
-    // Jika masih tiada tripId, jangan fetch, papar mesej sila pilih
-    if(!tripId){
-      console.log('Tiada trip dipilih - papar placeholder');
-      const cont=document.getElementById('namelistContainer');
-      if(cont) cont.innerHTML='<div class="p-8 text-center"><div class="text-[13px] font-bold text-slate-700 mb-1">Sila pilih trip</div><div class="text-[11px] text-slate-400">Pilih trip dari dropdown di atas untuk papar senarai jemaah</div></div>';
-      const grid=document.getElementById('roomingGrid');
-      if(grid) grid.innerHTML='<div class="col-span-2 p-8 text-center border border-dashed rounded-2xl bg-white"><div class="text-[11px] text-slate-400">Sila pilih trip dahulu</div></div>';
-      const bilikEl=document.getElementById('roomingBiliks'); if(bilikEl) bilikEl.textContent='0 Bilik';
-      const occEl=document.getElementById('roomingOccupancy'); if(occEl) occEl.textContent='Sila pilih trip';
-      try{ hideRoomingLoading(); }catch(e){}
-      _roomingIsLoading=false;
-      return;
-    }
-
     const now = Date.now();
     const cacheValid = (now - _roomingCacheTime) < 300000;
     const canUseCache = _roomingFirstLoadDone && !forceReload && tripId && tripId===_roomingLastTripId && allRoomingJemaah.length>0 && cacheValid && !_roomingIsLoading;
@@ -1457,7 +1460,6 @@ async function fetchRoomingData(forceReload=false){
       try{ renderStaffList(); }catch(e){}
       try{ renderRoomingGrid(); }catch(e){}
       try{ renderLocationTabs(); }catch(e){}
-      try{ updateVisaCountBadge(); }catch(e){}
       try{ hideRoomingLoading(); }catch(e){}
       return;
     }
@@ -1467,8 +1469,7 @@ async function fetchRoomingData(forceReload=false){
         if(cached){
           const parsed = JSON.parse(cached);
           const age = now - (parsed._time||0);
-          // Jangan guna cache kalau data kosong (0 jemaah & 0 bilik) - elak blank cache
-          if(age < 300000 && parsed.jemaah && parsed.rooms && (parsed.jemaah.length>0 || parsed.rooms.length>0)){
+          if(age < 300000 && parsed.jemaah && parsed.rooms){
             console.log('LOCALSTORAGE CACHE HIT umur', Math.round(age/1000)+'s');
             allRoomingRecords = parsed.rooms;
             allRoomingJemaah = parsed.jemaah;
@@ -1484,13 +1485,9 @@ async function fetchRoomingData(forceReload=false){
             try{ renderStaffList(); }catch(e){}
             try{ renderRoomingGrid(); }catch(e){}
             try{ renderLocationTabs(); }catch(e){}
-            try{ updateVisaCountBadge(); }catch(e){}
             try{ hideRoomingLoading(); }catch(e){}
             _roomingIsLoading=false;
             return;
-          } else if(parsed.jemaah && parsed.jemaah.length===0 && parsed.rooms && parsed.rooms.length===0){
-            console.log('Cache kosong dikesan, akan fetch baru, buang cache lama');
-            localStorage.removeItem('effah_rooming_cache_'+tripId);
           }
         }
       }catch(e){}
@@ -1499,14 +1496,11 @@ async function fetchRoomingData(forceReload=false){
     _roomingIsLoading = true;
     showRoomingLoading(); 
     try{ populateRoomingTripDropdown(); }catch(e){}
-
     if(!tripId){
       const sel=document.getElementById('roomingTripSelect');
       if(sel && sel.value) tripId=sel.value;
     }
     if(!tripId){ 
-      const cont=document.getElementById('namelistContainer');
-      if(cont) cont.innerHTML='<div class="p-8 text-center"><div class="text-[13px] font-bold text-slate-700 mb-1">Sila pilih trip</div><div class="text-[11px] text-slate-400">Pilih trip dari dropdown di atas</div></div>'; 
       hideRoomingLoading();
       _roomingIsLoading=false;
       return; 
@@ -1568,25 +1562,15 @@ async function fetchRoomingData(forceReload=false){
     }
     allRoomingRecords = allRooms||[];
     allRoomingJemaah = allJems||[];
-
-    // Jangan cache kalau kosong - elak blank cache
-    if(allRoomingJemaah.length>0 || allRoomingRecords.length>0){
-      _roomingLastTripId = tripId;
-      _roomingCacheTime = Date.now();
-      _roomingFirstLoadDone = true;
-      window._roomingLastTripId = _roomingLastTripId;
-      window._roomingCacheTime = _roomingCacheTime;
-      window._roomingFirstLoadDone = true;
-      try{
-        localStorage.setItem('effah_rooming_cache_'+tripId, JSON.stringify({_time:_roomingCacheTime, rooms:allRoomingRecords, jemaah:allRoomingJemaah, staff:allStaffRaw}));
-      }catch(e){}
-    } else {
-      console.warn('Hasil kosong, tidak cache untuk elak blank');
-      _roomingLastTripId = tripId;
-      _roomingCacheTime = Date.now();
-      _roomingFirstLoadDone = true;
-    }
-
+    _roomingLastTripId = tripId;
+    _roomingCacheTime = Date.now();
+    _roomingFirstLoadDone = true;
+    window._roomingLastTripId = _roomingLastTripId;
+    window._roomingCacheTime = _roomingCacheTime;
+    window._roomingFirstLoadDone = true;
+    try{
+      localStorage.setItem('effah_rooming_cache_'+tripId, JSON.stringify({_time:_roomingCacheTime, rooms:allRoomingRecords, jemaah:allRoomingJemaah, staff:allStaffRaw}));
+    }catch(e){}
     try{
       if(allStaffRaw && allStaffRaw[0] && allStaffRaw[0].fields){
         staffList = allStaffRaw.map(r=>({
@@ -1609,7 +1593,6 @@ async function fetchRoomingData(forceReload=false){
     try{ renderStaffList(); }catch(e){}
     try{ renderRoomingGrid(); }catch(e){}
     try{ renderLocationTabs(); }catch(e){}
-    try{ updateVisaCountBadge(); }catch(e){}
   }catch(e){ 
     console.error('fetchRoomingData fatal', e); 
   }finally{
@@ -1617,6 +1600,7 @@ async function fetchRoomingData(forceReload=false){
     try{ hideRoomingLoading(); }catch(e){}
   }
 }
+
 
 
 
@@ -1637,7 +1621,6 @@ function hideRoomingLoading(){
 function populateRoomingTripDropdown(){
   const sel=document.getElementById('roomingTripSelect'); if(!sel) return;
   let trips=[...(window.allTripUmrahRecords||window.allTripRecords||window.allTrips||(typeof allTripUmrahRecords!=='undefined'?allTripUmrahRecords:[]))];
-  // Filter by hijri if selected
   if(selectedRoomingHijriFilter){
     trips=trips.filter(t=> getTripHijriForRooming(t)===selectedRoomingHijriFilter);
   }
@@ -1645,31 +1628,25 @@ function populateRoomingTripDropdown(){
 
   // Blank on refresh - hanya guna selectedTripRecord dalam memory, jangan auto-load dari localStorage
   const currentId=window.selectedTripRecord?.id||'';
-  // Jika tiada trip langsung
   if(trips.length===0){
     sel.innerHTML='<option value="">Sila pilih trip</option><option value="" disabled>Sedang memuatkan senarai trip...</option>';
     let retries=parseInt(sel.dataset.retries||'0'); if(retries<10){ sel.dataset.retries=retries+1; setTimeout(()=>{ if(typeof fetchTripUmrahData==='function') fetchTripUmrahData(); populateRoomingTripDropdown(); }, 900); }
     return;
   }
   trips.sort((a,b)=>(a.fields?.['Mula Pakej']||'').localeCompare(b.fields?.['Mula Pakej']||''));
-  // Placeholder blank dulu
   const placeholderOpt = '<option value="">Sila pilih trip</option>';
   const options = trips.map(t=>{ const raw=t.fields?.Trip||t.fields?.['TRIP NAME']||t.id; const clean=cleanTripNameForRooming(raw); return `<option value="${t.id}" ${t.id===currentId?'selected':''}>${clean}</option>`; }).join('');
   sel.innerHTML=placeholderOpt+options;
-  // Hanya auto-select jika ada currentId dalam storage, kalau takde biar blank
   if(currentId){
-    // pastikan ID wujud dalam list
     const exists = trips.some(t=>t.id===currentId);
     if(exists){
       sel.value=currentId;
     } else {
       sel.value="";
-      // jangan auto fetch kalau ID tak wujud
       const cont=document.getElementById('namelistContainer');
       if(cont) cont.innerHTML='<div class="p-8 text-center"><div class="text-[13px] font-bold text-slate-700 mb-1">Sila pilih trip</div><div class="text-[11px] text-slate-400">Trip sebelum ini tidak ditemui, sila pilih trip baru</div></div>';
     }
   } else {
-    // Tiada currentId - biar blank, jangan auto load first trip
     sel.value="";
     const cont=document.getElementById('namelistContainer');
     if(cont && !cont.innerHTML.includes('Sila pilih trip')){
@@ -1771,6 +1748,7 @@ function renderNamelist(){
         return false;
       });
     } else {
+      // Legacy pakej filter
       const upper = filterVal.toUpperCase();
       filtered=filtered.filter(r=>getPakejVal(r.fields).toUpperCase()===upper);
     }
@@ -1783,7 +1761,8 @@ function renderNamelist(){
       else return nameB.localeCompare(nameA);
     });
   }
-  // OPTIMIZED: Pre-compute assigned sets O(n+m) bukan O(n*m)
+  const total=allRoomingJemaah.length;
+  // OPTIMIZED V119: precompute assigned sets O(n+m) bukan O(n*m)
   const assignedAnySet = new Set();
   const assignedInLocSet = new Set();
   const assignedTanpaInLocSet = new Set();
@@ -1802,16 +1781,12 @@ function renderNamelist(){
         if(recLoc===locUpper) assignedTanpaInLocSet.add(id);
       }
     }
-  }catch(e){ console.warn('precompute assigned fail', e); }
-
-  const total=allRoomingJemaah.length;
+  }catch(e){ console.warn('precompute fail', e); }
   const belumGlobal = total - assignedAnySet.size;
-  // belumInLoc = yang tak ada di location semasa
   let belumInLoc = 0;
   for(const r of allRoomingJemaah){
     if(!assignedInLocSet.has(r.id) && !assignedTanpaInLocSet.has(r.id)) belumInLoc++;
   }
-
   const totalEl=document.getElementById('totalJemaahBadge'); if(totalEl) { totalEl.textContent=total+' Jumlah'; totalEl.style.display='none'; }
   const belumEl=document.getElementById('belumAssignBadge'); if(belumEl) { belumEl.textContent=belumInLoc+' Belum Ditetapkan di '+activeLocation; belumEl.style.display='none'; }
   const topBelum=document.getElementById('belumAssignTop'); if(topBelum) { topBelum.textContent=belumGlobal+' Belum Ditetapkan'; topBelum.style.display='none'; }
@@ -1820,30 +1795,112 @@ function renderNamelist(){
   const topAssignedBadge=document.getElementById('topAssignedBadge'); if(topAssignedBadge) topAssignedBadge.style.display='none';
   if(total===0){ cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400">Tiada jemaah untuk trip ini</div>'; return; }
   cont.innerHTML=filtered.map((r,i)=>{
-    const name=getJemaahName(r.fields);
-    const assignedNormalInLoc=assignedInLocSet.has(r.id);
-    const assignedTanpaInLoc=assignedTanpaInLocSet.has(r.id);
+        const name=getJemaahName(r.fields);
+    // guna Set yang dah precompute kalau ada, fallback ke function lama
+    const assignedNormalInLoc = (typeof assignedInLocSet!=='undefined' && assignedInLocSet.has) ? assignedInLocSet.has(r.id) : isJemaahAssignedInLocation(r.id, activeLocation);
+    const assignedTanpaInLoc = (typeof assignedTanpaInLocSet!=='undefined' && assignedTanpaInLocSet.has) ? assignedTanpaInLocSet.has(r.id) : allRoomingRecords.some(rec=> (rec.fields['LOKASI / CITY']||'MEKAH').toUpperCase()===activeLocation.toUpperCase() && ((rec.fields['JEMAAH TANPA KATIL']||[]).includes(r.id)));
     const assignedInLoc = assignedNormalInLoc || assignedTanpaInLoc;
-    const assignedGlobal=assignedAnySet.has(r.id);
+    const assignedGlobal = (typeof assignedAnySet!=='undefined' && assignedAnySet.has) ? assignedAnySet.has(r.id) : isJemaahAssignedAny(r.id);
+    // FIX ghost dropdown: jangan guna opacity-60 sebab child dropdown ikut transparent, guna bg saja
     const rowCls=assignedInLoc?'bg-slate-100 text-slate-500':'hover:bg-slate-50';
     const drag=assignedInLoc?'':`onclick="selectJemaahForAssign('${r.id}')" data-jemaah-id="${r.id}" style="cursor:pointer;"`;
     let statusIcon = assignedInLoc? `<button onclick="removeJemaahFromCurrentLoc('${r.id}')" class="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-[10px]" title="Keluarkan dari ${activeLocation}">✕</button>` : `<button onclick="quickAssign('${r.id}')" class="w-5 h-5 rounded-full border bg-slate-100 hover:bg-slate-200 text-[10px]">+</button>`;
     if(!assignedInLoc && assignedGlobal) statusIcon = `<button onclick="quickAssign('${r.id}')" class="w-5 h-5 rounded-full border bg-amber-100 hover:bg-amber-200 text-[10px]" title="Sudah ada di lokasi lain, boleh tambah di ${activeLocation} juga">+</button>`;
     const fbArr = getBoardArray(r.fields);
-    const fb = fbArr.length>0 ? fbArr.join(', ') : '-';
-    const insArr = (typeof getInsuranArrayV2==='function' ? getInsuranArrayV2(r.fields) : getInsuranArray(r.fields));
-    const ins = insArr.length>0 ? insArr.join(', ') : '-';
-    const pakej = getPakejVal(r.fields)||'-';
-    const visa = getVisaVal(r.fields)||'-';
-    const train = isTrainChecked(r.fields) ? '✓' : '-';
-    return `<div class="flex items-center justify-between px-3 py-2 border-b border-slate-100 text-[11px] ${rowCls}" ${drag}>
-      <div class="flex-1 min-w-0">
-        <div class="font-bold truncate">${name}</div>
-        <div class="text-[9px] text-slate-500 truncate">${pakej} • ${fb} • ${visa}</div>
+    const fb = fbArr[0] || '-';
+    const fbDisplay = fbArr.length ? fbArr.join(', ') : '-';
+    const pk = getPakejVal(r.fields) || '-';
+    const trChecked = isTrainChecked(r.fields);
+    const insArr = getInsuranArray(r.fields);
+    let fbCls = 'bg-white border-slate-200';
+    // Determine class based on first or combined
+    if(fbArr.some(x=>x.includes('MEKAH'))) fbCls='bg-orange-100 border-orange-200 text-orange-800';
+    else if(fbArr.some(x=>x.includes('MADINAH'))) fbCls='bg-blue-100 border-blue-200 text-blue-800';
+    else if(fbArr.includes('FULLBOARD')) fbCls='bg-emerald-100 border-emerald-200 text-emerald-800';
+    else if(fbArr.length===0) fbCls='bg-white border-dashed border-slate-300 text-slate-400';
+    const boardOptions = (roomingFieldOptions['BOARD BASIS'] && roomingFieldOptions['BOARD BASIS'].length>0) ? roomingFieldOptions['BOARD BASIS'] : ([]);
+    const boardOptionsWithAdd = boardOptions; // dynamic
+    const boardCheckboxes = boardOptionsWithAdd.map(opt=>{
+      const checked = fbArr.includes(opt);
+      return `<label class="flex items-center gap-1.5 px-2 py-1 hover:bg-slate-50 rounded text-[10px] cursor-pointer"><input type="checkbox" ${checked?'checked':''} onchange="toggleBoardMulti('${r.id}','${opt}')" class="w-3 h-3 accent-[#7A0C2E]"> ${opt}</label>`;
+    }).join('');
+    
+
+    const insArr2 = getInsuranArrayV2 ? getInsuranArrayV2(r.fields) : getInsuranArray(r.fields);
+      const insDisplay = insArr2.length ? insArr2.join(', ') : '- INSURAN';
+      const insCls = insArr2.length ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-slate-200 text-slate-400';
+      const insuranOptions = (roomingFieldOptions['INSURAN'] && roomingFieldOptions['INSURAN'].length>0) ? roomingFieldOptions['INSURAN'] : ([]);
+      const insCheckboxes = insuranOptions.map(opt=>{
+        const checked = insArr2.includes(opt);
+        return `<label class="flex items-center gap-1.5 px-2 py-1.5 hover:bg-slate-50 rounded text-[10px] cursor-pointer"><input type="checkbox" ${checked?'checked':''} onchange="toggleInsuranMulti('${r.id}','${opt}')" class="w-3.5 h-3.5 accent-[#7A0C2E]"> <span class="px-1.5 py-0.5 rounded-full text-[8px] ${opt==='TAKAFUL'?'bg-emerald-100':opt==='ETIQA'?'bg-amber-100':'bg-blue-100'}">${opt}</span></label>`;
+      }).join('');
+      const insToggle = `<div class="relative w-full">
+        <button onclick="event.stopPropagation(); toggleInsuranDropdown('${r.id}')" class="text-[7px] border rounded-full px-2 py-0.5 font-bold ${insCls} outline-none w-full truncate text-left flex items-center justify-between bg-white opacity-100" style="opacity:1;" title="INSURAN - klik untuk pilih">
+          <span class="truncate">${insDisplay}</span><span class="ml-1">▼</span>
+        </button>
+        <div id="insuranDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1" style="background:#ffffff !important; opacity:1 !important;">
+          ${insCheckboxes}
+          <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('INSURAN', '${r.id}')" class="w-full text-left px-2 py-1 text-[8px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded mb-1">+ Tambah Pilihan</button></div>
+          <div class="border-t border-slate-100 mt-1 pt-1 flex justify-between">
+            <button onclick="clearInsuranMulti('${r.id}'); closeInsuranDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-slate-100">Padam</button>
+            <button onclick="closeInsuranDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-[#7A0C2E] text-white">OK</button>
+          </div>
+        </div>
+      </div>`;
+
+        return `<div ${drag} class="grid grid-cols-12 items-center px-1.5 py-1.5 text-[11px] border-b border-slate-50 ${rowCls}">
+      <div class="col-span-1 text-slate-400 text-[10px]">${String(i+1).padStart(2,'0')}</div>
+      <div class="col-span-3 font-medium truncate text-[10px] ${assignedInLoc?'text-slate-500 italic':''}" title="${name}">${name}</div>
+      <div class="col-span-2 flex items-center gap-0.5 relative">
+        <div class="relative w-full">
+          <button onclick="event.stopPropagation(); toggleBoardDropdown('${r.id}')" class="text-[7px] border rounded-full px-2 py-0.5 font-bold ${fbCls} outline-none w-full truncate text-left flex items-center justify-between bg-white opacity-100" style="opacity:1; isolation:isolate;" title="BOARD BASIS - klik untuk pilih 2">
+            <span class="truncate">${fbDisplay}</span><span class="ml-1">▼</span>
+          </button>
+          <div id="boardDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1" style="background:#ffffff !important; opacity:1 !important; isolation:isolate;">
+            ${boardCheckboxes}
+            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('BOARD BASIS', '${r.id}')" class="w-full text-left px-2 py-1 text-[8px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded mb-1">+ Tambah Pilihan</button></div>
+            <div class="border-t border-slate-100 mt-1 pt-1 flex justify-between">
+              <button onclick="clearBoardMulti('${r.id}'); closeBoardDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-slate-100">Padam</button>
+              <button onclick="closeBoardDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-[#7A0C2E] text-white">OK</button>
+            </div>
+            <div class="text-[7px] text-slate-400 px-2 mt-1">Boleh pilih 2: BB (MEKAH) + FB (MADINAH)</div>
+          </div>
+        </div>
       </div>
-      <div class="flex items-center gap-2 ml-2">${statusIcon}</div>
+      <div class="col-span-1 text-center">
+        <input type="checkbox" ${trChecked?'checked':''} onchange="updateJemaahCheckbox('${r.id}','TRAIN',this.checked)" class="w-3.5 h-3.5 accent-[#7A0C2E] rounded" title="TRAIN">
+      </div>
+      <div class="col-span-2 flex items-center gap-0.5 flex-wrap justify-center">
+        ${insToggle}
+      </div>
+      <div class="col-span-1 flex items-center gap-0.5 relative">
+        <div class="relative w-full cell-dropdown-wrapper">
+          <button onclick="event.stopPropagation(); toggleCellDropdown('pakejDrop-${r.id}')" class="text-[7px] border border-slate-200 rounded-full px-2 py-0.5 bg-white w-full max-w-[70px] truncate font-bold text-[7px] text-left flex items-center justify-between ${pk==='-'?'text-slate-400':'text-slate-700'}" title="PAKEJ">
+            <span class="truncate">${pk||'-'}</span><span class="ml-1">▼</span>
+          </button>
+          <div id="pakejDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[180px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1 max-h-60 overflow-y-auto">
+            ${(roomingFieldOptions['PAKEJ']||[]).map(o=>`<button onclick="event.stopPropagation(); updateJemaahField('${r.id}','PAKEJ','${o}'); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${pk===o?'bg-slate-900 text-white font-bold':''}">${o}</button>`).join('')}
+            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('PAKEJ', '${r.id}')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Tambah Pilihan</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-span-2 flex items-center justify-center relative">
+        <div class="relative w-full cell-dropdown-wrapper">
+          <button onclick="event.stopPropagation(); toggleCellDropdown('visaDrop-${r.id}')" class="text-[7px] border border-slate-300 rounded-full px-2 py-0.5 bg-white w-full max-w-[70px] truncate font-bold text-[7px] ${getVisaClass(getVisaVal(r.fields))} text-left flex items-center justify-between" title="STATUS VISA">
+            <span class="truncate">${getVisaVal(r.fields)||'- VISA'}</span><span class="ml-1">▼</span>
+          </button>
+          <div id="visaDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1 max-h-60 overflow-y-auto">
+            <button onclick="event.stopPropagation(); updateJemaahField('${r.id}','STATUS VISA',''); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${!getVisaVal(r.fields)?'bg-slate-900 text-white font-bold':''}">- VISA</button>
+            ${(roomingFieldOptions['STATUS VISA']||[]).map(o=>`<button onclick="event.stopPropagation(); updateJemaahField('${r.id}','STATUS VISA','${o}'); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${getVisaVal(r.fields)===o?'bg-slate-900 text-white font-bold':''}">${o}</button>`).join('')}
+            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('STATUS VISA', '${r.id}')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Tambah Pilihan</button></div>
+          </div>
+        </div>
+      </div>
     </div>`;
   }).join('');
+  makeNamelistSticky();
+  const sortIconEl=document.getElementById('sortIcon');
+  if(sortIconEl) sortIconEl.textContent = roomingSortActive ? (roomingSortDir==='asc'?'↑ A-Z':'↓ Z-A') : '↕';
 }
 
 
@@ -4608,30 +4665,65 @@ function getFieldAttachments(jFields, names){
   }
   return null;
 }
+
 function updateVisaCountBadge(){
   try{
-    const visaNames=['VISA COPY','VISA','VISA_COPY'];
-    const passNames=['PASSPORT COPY','PASSPORT','PASSPORT_COPY','PASSPORT SCAN'];
+    const visaNames=['VISA COPY','VISA','VISA_COPY','VISA SCAN','VISA_DOCUMENT'];
+    const passNames=['PASSPORT COPY','PASSPORT','PASSPORT_COPY','PASSPORT SCAN','PASSPORT_DOCUMENT','PASSPORT FRONT'];
     let visaCount=0, passCount=0;
+    let visaCountLoc=0, passCountLoc=0;
+    
     (allRoomingJemaah||[]).forEach(j=>{
       if(getFieldAttachments(j.fields||{}, visaNames)) visaCount++;
       if(getFieldAttachments(j.fields||{}, passNames)) passCount++;
     });
-    console.log(`Badge count - allRoomingJemaah: ${allRoomingJemaah?.length} Visa:${visaCount} Passport:${passCount}`);
-    // Also check direct if available
-    if(window._allJemaahDirect && window._allJemaahDirect.length>0){
-      const dv = window._allJemaahDirect.filter(r=> getFieldAttachments(r.fields||{}, visaNames)).length;
-      const dp = window._allJemaahDirect.filter(r=> getFieldAttachments(r.fields||{}, passNames)).length;
-      console.log(`Badge direct: ${window._allJemaahDirect.length} Visa:${dv} Passport:${dp}`);
-      if(dv>visaCount) visaCount=dv;
-      if(dp>passCount) passCount=dp;
+    
+    try{
+      const locUpper = (typeof activeLocation!=='undefined' && activeLocation) ? activeLocation.toUpperCase() : 'MEKAH';
+      const roomsInLoc = (allRoomingRecords||[]).filter(r=>{
+        const l = (r.fields['LOKASI / CITY']||'MEKAH').toUpperCase();
+        return l===locUpper;
+      });
+      const jIdsInLoc = new Set();
+      roomsInLoc.forEach(r=>{
+        (r.fields['JEMAAH']||[]).forEach(id=>jIdsInLoc.add(id));
+        (r.fields['JEMAAH TANPA KATIL']||[]).forEach(id=>jIdsInLoc.add(id));
+      });
+      const jemaahToCheck = jIdsInLoc.size>0 ? (allRoomingJemaah||[]).filter(j=>jIdsInLoc.has(j.id)) : (allRoomingJemaah||[]);
+      jemaahToCheck.forEach(j=>{
+        if(getFieldAttachments(j.fields||{}, visaNames)) visaCountLoc++;
+        if(getFieldAttachments(j.fields||{}, passNames)) passCountLoc++;
+      });
+    }catch(e){ 
+      visaCountLoc = visaCount;
+      passCountLoc = passCount;
     }
+    
+    console.log(`Badge count - Total: ${allRoomingJemaah?.length} Visa:${visaCount} Passport:${passCount} | Loc ${typeof activeLocation!=='undefined'?activeLocation:'?'} Visa:${visaCountLoc} Passport:${passCountLoc}`);
+    
     const vBadge=document.getElementById('visaCountBadge');
     const pBadge=document.getElementById('passportCountBadge');
-    if(vBadge) vBadge.textContent=visaCount;
-    if(pBadge) pBadge.textContent=passCount;
+    const finalVisa = visaCountLoc>0 ? visaCountLoc : visaCount;
+    const finalPass = passCountLoc>0 ? passCountLoc : passCount;
+    if(vBadge) vBadge.textContent=finalVisa;
+    if(pBadge) pBadge.textContent=finalPass;
+    
+    try{
+      const visaBtn = document.getElementById('btnDownloadVisas');
+      if(visaBtn){
+        const span = visaBtn.querySelector('#visaCountBadge');
+        if(span) span.textContent = finalVisa;
+      }
+      const passBtn = document.getElementById('btnDownloadPassports');
+      if(passBtn){
+        const span = passBtn.querySelector('#passportCountBadge');
+        if(span) span.textContent = finalPass;
+      }
+    }catch(e){}
+    
   }catch(e){ console.error('updateVisaCountBadge error', e); }
 }
+
 async function updatePassportCountFromDirectFetch(){
   try{
     const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
