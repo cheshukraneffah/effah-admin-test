@@ -4138,6 +4138,7 @@ function filterJemaahTable() {
     modal.classList.remove('hidden');
     modal.style.display='flex';
   };
+})();
 
 // V54: Auto-close dropdowns when clicking outside - fix image_c96f0e.png double dropdown overlap
 document.addEventListener('click', function(e){
@@ -4239,6 +4240,7 @@ document.addEventListener('click', function(e){
 
 
 
+
 // FIX a: Single guarded hook for openAddJemaahModal - elak double binding
 (function(){
     if(window.__jemaahModalHooked) return;
@@ -4276,9 +4278,7 @@ document.addEventListener('click', function(e){
             }
         });
     }
-
-
-// FIX a: Single guarded hook injected above
+})();
 
 document.addEventListener('click', function(e){
   if(!e.target.closest('[data-cell-dropdown]') && !e.target.closest('.cell-dropdown-wrapper')){
