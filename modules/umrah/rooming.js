@@ -4166,8 +4166,7 @@ async function _downloadAllDocs(fieldName, label){
   const originalText = btn?.innerHTML;
   try{
     const searchNames = fieldName.includes('VISA') ? ['VISA COPY'] : ['PASSPORT COPY'];
-    
-    let withDocs = allRoomingJemaah.filter(j=> {
+    let withDocs = allRoomingJemaah.filter(j=>{
       const f=j.fields||{};
       if(f[fieldName] && Array.isArray(f[fieldName]) && f[fieldName].length>0) return true;
       const atts = getFieldAttachments(f, searchNames);
@@ -4189,14 +4188,15 @@ async function _downloadAllDocs(fieldName, label){
     }catch(e){}
 
     if(withDocs.length===0){
-      alert(`Tiada ${fieldName} dalam trip ini.\nTotal jemaah: ${allRoomingJemaah.length}\n\nPastikan column ${fieldName} ada attachment dalam Airtable.`);
+      alert(`Tiada ${fieldName} dalam trip ini. Total jemaah: ${allRoomingJemaah.length}`);
       return;
     }
 
     withDocs = withDocs.sort((a,b)=> getJemaahName(a.fields).toUpperCase().localeCompare(getJemaahName(b.fields).toUpperCase()));
 
-    // Modal download - restore old feature
+    // Modal dengan cancel button
     window._visaDownloadCancelled=false;
+    window._visaAbortController=new AbortController();
     let modal=document.getElementById('visaDownloadModal');
     if(!modal){
       modal=document.createElement('div');
@@ -4205,32 +4205,41 @@ async function _downloadAllDocs(fieldName, label){
       modal.innerHTML=`
         <div class="bg-white rounded-2xl p-5 max-w-md w-full shadow-2xl">
           <div class="flex justify-between items-center mb-3">
-            <h3 class="font-bold text-[13px]" id="visaModalTitle">Downloading ${label}... (${withDocs.length} docs)</h3>
-            <button onclick="document.getElementById('visaDownloadModal').classList.add('hidden')" class="px-3 py-1 bg-red-50 border border-red-200 text-red-600 rounded-full text-[10px] font-bold">✕</button>
+            <h3 class="font-bold text-[13px]" id="visaModalTitle">Downloading ${label}... (${withDocs.length})</h3>
+            <button id="visaCancelBtn" onclick="cancelVisaDownload()" class="px-3 py-1 bg-red-50 border border-red-200 text-red-600 rounded-full text-[10px] font-bold hover:bg-red-100">✕ Cancel</button>
           </div>
           <div class="w-full bg-slate-100 rounded-full h-3 mb-3 overflow-hidden"><div id="visaProgressBar" class="h-3 bg-emerald-600 rounded-full transition-all" style="width:0%"></div></div>
-          <div id="visaProgressText" class="text-[11px] text-slate-600 mb-1">0 / ${withDocs.length}</div>
+          <div id="visaProgressText" class="text-[11px] text-slate-600 mb-1">0 / 0</div>
           <div id="visaProgressName" class="text-[10px] text-slate-500 truncate">-</div>
-          <div id="visaProgressLog" class="mt-3 max-h-[20vh] overflow-y-auto text-[9px] text-slate-400 space-y-0.5"></div>
+          <div id="visaProgressLog" class="mt-3 max-h-[15vh] overflow-y-auto text-[9px] text-slate-400 space-y-0.5"></div>
+          <div class="flex gap-2 mt-4">
+            <button id="visaCancelBtn2" onclick="cancelVisaDownload()" class="flex-1 py-2 bg-slate-100 border border-slate-200 rounded-xl font-bold text-[11px] hover:bg-slate-200">Cancel Download</button>
+            <button id="visaCloseBtn" onclick="closeVisaModal()" class="flex-1 py-2 bg-[#064E3B] text-white rounded-xl font-bold text-[11px] hidden">Close</button>
+          </div>
         </div>
       `;
       document.body.appendChild(modal);
     } else {
       modal.classList.remove('hidden');
+      window._visaDownloadCancelled=false;
+      const c1=document.getElementById('visaCancelBtn');
+      const c2=document.getElementById('visaCancelBtn2');
+      const cl=document.getElementById('visaCloseBtn');
+      if(c1) c1.classList.remove('hidden');
+      if(c2) c2.classList.remove('hidden');
+      if(cl) cl.classList.add('hidden');
       document.getElementById('visaProgressLog').innerHTML='';
       document.getElementById('visaProgressBar').style.width='0%';
-      const titleEl=document.getElementById('visaModalTitle');
-      if(titleEl) titleEl.textContent=`Downloading ${label}... (${withDocs.length} docs)`;
     }
 
     const updateProgress=(curr,total,name,log)=>{
       const pct=Math.round(curr/total*100);
       const bar=document.getElementById('visaProgressBar');
       const txt=document.getElementById('visaProgressText');
-      const nameEl=document.getElementById('visaProgressName');
+      const nm=document.getElementById('visaProgressName');
       if(bar) bar.style.width=pct+'%';
       if(txt) txt.textContent=curr+' / '+total+' ('+pct+'%)';
-      if(nameEl) nameEl.textContent=name||'-';
+      if(nm) nm.textContent=name||'-';
       if(log){
         const logEl=document.getElementById('visaProgressLog');
         if(logEl){
@@ -4242,7 +4251,7 @@ async function _downloadAllDocs(fieldName, label){
       }
     };
 
-    if(btn){ btn.disabled=true; btn.innerHTML='⏳ Loading pdf-lib...'; }
+    if(btn){ btn.disabled=true; btn.innerHTML='⏳ Loading...'; }
 
     const pdfLib=await loadPdfLib();
     const {PDFDocument}=pdfLib;
@@ -4250,53 +4259,40 @@ async function _downloadAllDocs(fieldName, label){
     let successCount=0;
 
     for(let i=0;i<withDocs.length;i++){
+      if(window._visaDownloadCancelled) throw new Error('Cancelled by user');
       const jRec=withDocs[i];
       const nama=getJemaahName(jRec.fields);
       updateProgress(i, withDocs.length, nama, `Fetching: ${nama}`);
-      
-      let attachments = jRec.fields[fieldName];
-      if(!attachments || !Array.isArray(attachments) || attachments.length===0){
-        attachments = getFieldAttachments(jRec.fields, searchNames) || [];
-      }
-      
-      for(let att of attachments){
-        if(!att||!att.url) continue;
+      let atts = jRec.fields[fieldName];
+      if(!atts || !Array.isArray(atts) || atts.length===0) atts = getFieldAttachments(jRec.fields, searchNames) || [];
+      for(let att of atts){
+        if(!att.url) continue;
         try{
-          if(btn) btn.innerHTML=`⏳ ${i+1}/${withDocs.length} ${nama.substring(0,12)}...`;
           const buffer=await fetchWithRetry(att.url);
-          const isPdf = (att.filename||'').toLowerCase().endsWith('.pdf') || (att.type||'').includes('pdf');
+          const isPdf=(att.filename||'').toLowerCase().endsWith('.pdf')||(att.type||'').includes('pdf');
           if(isPdf){
             const srcPdf=await PDFDocument.load(buffer, {ignoreEncryption:true});
-            const pages = await mergedPdf.copyPages(srcPdf, srcPdf.getPageIndices());
+            const pages=await mergedPdf.copyPages(srcPdf, srcPdf.getPageIndices());
             pages.forEach(p=> mergedPdf.addPage(p));
-            successCount++;
-            updateProgress(i+1, withDocs.length, nama, `✓ PDF ${att.filename}`);
           } else {
             let img;
-            if((att.filename||'').toLowerCase().endsWith('.png')) img = await mergedPdf.embedPng(buffer);
-            else img = await mergedPdf.embedJpg(buffer);
-            const page = mergedPdf.addPage([595.28, 841.89]);
-            const {width, height} = img.scale(1);
-            const scale = Math.min(595.28/width, 841.89/height) * 0.95;
+            if((att.filename||'').toLowerCase().endsWith('.png')) img=await mergedPdf.embedPng(buffer);
+            else img=await mergedPdf.embedJpg(buffer);
+            const page=mergedPdf.addPage([595.28, 841.89]);
+            const {width,height}=img.scale(1);
+            const scale=Math.min(595.28/width, 841.89/height)*0.95;
             page.drawImage(img, {x:(595.28-width*scale)/2, y:(841.89-height*scale)/2, width:width*scale, height:height*scale});
-            successCount++;
-            updateProgress(i+1, withDocs.length, nama, `✓ Image ${att.filename}`);
           }
-        }catch(e){ 
-          console.warn('embed fail', nama, e);
-          updateProgress(i+1, withDocs.length, nama, `✗ Fail ${nama}: ${e.message}`);
-        }
+          successCount++;
+        }catch(e){ console.warn('fail', e); }
       }
     }
 
     if(successCount===0){
-      alert('PDF kosong - attachment gagal dibaca. Cuba lagi.');
-      if(btn){ btn.disabled=false; btn.innerHTML=originalText||`Download ${label} ( ${withDocs.length} )`; }
+      alert('PDF kosong - attachment gagal');
+      if(btn){ btn.disabled=false; btn.innerHTML=originalText||`Download ${label}`; }
       return;
     }
-
-    updateProgress(withDocs.length, withDocs.length, 'Merging...', 'Compiling final PDF...');
-    if(btn) btn.innerHTML='⏳ Compiling PDF...';
 
     const pdfBytes=await mergedPdf.save();
     const blob=new Blob([pdfBytes], {type:'application/pdf'});
@@ -4307,26 +4303,39 @@ async function _downloadAllDocs(fieldName, label){
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setTimeout(()=>URL.revokeObjectURL(url), 10000);
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
 
-    updateProgress(withDocs.length, withDocs.length, `Done! ${successCount} files`, `Saved ${(blob.size/1024/1024).toFixed(2)} MB`);
-    
+    updateProgress(withDocs.length, withDocs.length, 'Done!', `Saved ${successCount} files`);
     setTimeout(()=>{
       const m=document.getElementById('visaDownloadModal');
       if(m) m.classList.add('hidden');
     }, 3000);
 
     if(btn){ btn.disabled=false; btn.innerHTML=originalText||`Download ${label} ( ${withDocs.length} )`; }
-    // Update count lepas download
     try{ updateVisaCountBadge(); }catch(e){}
-    
   }catch(e){
-    console.error('_downloadAllDocs error', e);
-    alert('Ralat download: '+e.message);
-    if(btn){ btn.disabled=false; btn.innerHTML=`Download ${label}`; }
+    console.error(e);
+    alert('Ralat: '+e.message);
     const m=document.getElementById('visaDownloadModal');
     if(m) m.classList.add('hidden');
+    if(btn){ btn.disabled=false; }
   }
+}
+
+function cancelVisaDownload(){
+  window._visaDownloadCancelled=true;
+  try{ window._visaAbortController?.abort(); }catch(e){}
+  const m=document.getElementById('visaDownloadModal');
+  if(m) m.classList.add('hidden');
+  const btnV=document.getElementById('btnDownloadVisas');
+  const btnP=document.getElementById('btnDownloadPassports');
+  if(btnV) btnV.disabled=false;
+  if(btnP) btnP.disabled=false;
+}
+
+function closeVisaModal(){
+  const m=document.getElementById('visaDownloadModal');
+  if(m) m.classList.add('hidden');
 }
 
 function downloadAllVisas(){ return _downloadAllDocs('VISA COPY', 'Visas'); }
@@ -4568,23 +4577,22 @@ function getFieldAttachments(jFields, names){
 
 function updateVisaCountBadge(){
   try{
-    // Fetch count dari column field PASSPORT COPY / VISA COPY macam dalam screenshot Airtable kau
     const visaNames=['VISA COPY'];
     const passNames=['PASSPORT COPY'];
     let visaCount=0, passCount=0;
     let visaCountLoc=0, passCountLoc=0;
 
-    // Count total trip - dari column
-    visaCount = (allRoomingJemaah||[]).filter(j=> {
+    // Count dari column PASSPORT COPY / VISA COPY terus (screenshot Airtable)
+    visaCount = (allRoomingJemaah||[]).filter(j=>{
       const f=j.fields||{};
       return (f['VISA COPY'] && Array.isArray(f['VISA COPY']) && f['VISA COPY'].length>0) || getFieldAttachments(f, visaNames);
     }).length;
-    passCount = (allRoomingJemaah||[]).filter(j=> {
+    passCount = (allRoomingJemaah||[]).filter(j=>{
       const f=j.fields||{};
       return (f['PASSPORT COPY'] && Array.isArray(f['PASSPORT COPY']) && f['PASSPORT COPY'].length>0) || getFieldAttachments(f, passNames);
     }).length;
 
-    // Count ikut lokasi aktif MEKAH/MADINAH/TAIF
+    // Ikut lokasi aktif MEKAH/MADINAH/TAIF
     try{
       const locUpper = (typeof activeLocation!=='undefined' && activeLocation) ? activeLocation.toUpperCase() : 'MEKAH';
       const roomsInLoc = (allRoomingRecords||[]).filter(r=>{
@@ -4597,11 +4605,11 @@ function updateVisaCountBadge(){
         (r.fields['JEMAAH TANPA KATIL']||[]).forEach(id=>jIdsInLoc.add(id));
       });
       const jemaahToCheck = jIdsInLoc.size>0 ? (allRoomingJemaah||[]).filter(j=>jIdsInLoc.has(j.id)) : (allRoomingJemaah||[]);
-      visaCountLoc = jemaahToCheck.filter(j=> {
+      visaCountLoc = jemaahToCheck.filter(j=>{
         const f=j.fields||{};
         return (f['VISA COPY'] && Array.isArray(f['VISA COPY']) && f['VISA COPY'].length>0) || getFieldAttachments(f, visaNames);
       }).length;
-      passCountLoc = jemaahToCheck.filter(j=> {
+      passCountLoc = jemaahToCheck.filter(j=>{
         const f=j.fields||{};
         return (f['PASSPORT COPY'] && Array.isArray(f['PASSPORT COPY']) && f['PASSPORT COPY'].length>0) || getFieldAttachments(f, passNames);
       }).length;
@@ -4609,43 +4617,54 @@ function updateVisaCountBadge(){
         visaCountLoc = visaCount;
         passCountLoc = passCount;
       }
-    }catch(e){ 
+    }catch(e){
       visaCountLoc = visaCount;
       passCountLoc = passCount;
     }
 
-    console.log(`Badge count - Total:${allRoomingJemaah?.length} Visa doc:${visaCount} Passport doc:${passCount} | Loc ${typeof activeLocation!=='undefined'?activeLocation:'?'} Visa:${visaCountLoc} Passport:${passCountLoc}`);
+    console.log(`Badge count - Total:${allRoomingJemaah?.length} Visa:${visaCount} Passport:${passCount} | Loc ${typeof activeLocation!=='undefined'?activeLocation:'?'} Visa:${visaCountLoc} Passport:${passCountLoc}`);
 
-    // Update semua badge - id visaCountBadge / passportCountBadge
+    // Update semua badge
     document.querySelectorAll('#visaCountBadge').forEach(el=> el.textContent=visaCountLoc);
     document.querySelectorAll('#passportCountBadge').forEach(el=> el.textContent=passCountLoc);
     
     // Update button text juga
-    try{
-      const vBtn = document.getElementById('btnDownloadVisas');
-      const pBtn = document.getElementById('btnDownloadPassports');
-      if(vBtn){
-        // Cari span dalam button atau update innerHTML
-        vBtn.innerHTML = vBtn.innerHTML.replace(/Download Visas \(\s*\d*\s*\)/, `Download Visas ( ${visaCountLoc} )`);
-        if(!vBtn.innerHTML.includes('Download Visas (')){
-          vBtn.innerHTML = `Download Visas ( ${visaCountLoc} )`;
-        }
-        // Pastikan badge dalam button juga update
-        const vb = vBtn.querySelector('#visaCountBadge');
-        if(vb) vb.textContent=visaCountLoc;
+    const vBtn = document.getElementById('btnDownloadVisas');
+    const pBtn = document.getElementById('btnDownloadPassports');
+    if(vBtn){
+      // Kalau ada span badge dalam button, update span, kalau takde, replace text
+      const span = vBtn.querySelector('#visaCountBadge');
+      if(span) span.textContent = visaCountLoc;
+      // Update text Download Visas ( X )
+      if(vBtn.textContent.includes('Download Visas')){
+        vBtn.innerHTML = `Download Visas ( ${visaCountLoc} )`;
       }
-      if(pBtn){
-        pBtn.innerHTML = pBtn.innerHTML.replace(/Download Passports \(\s*\d*\s*\)/, `Download Passports ( ${passCountLoc} )`);
-        if(!pBtn.innerHTML.includes('Download Passports (')){
-          pBtn.innerHTML = `Download Passports ( ${passCountLoc} )`;
-        }
-        const pb = pBtn.querySelector('#passportCountBadge');
-        if(pb) pb.textContent=passCountLoc;
+    }
+    if(pBtn){
+      const span = pBtn.querySelector('#passportCountBadge');
+      if(span) span.textContent = passCountLoc;
+      if(pBtn.textContent.includes('Download Passports')){
+        pBtn.innerHTML = `Download Passports ( ${passCountLoc} )`;
       }
-    }catch(e){ console.warn('btn update fail', e); }
-    
+    }
+
   }catch(e){ console.error('updateVisaCountBadge error', e); }
 }
+
+// Tambah auto-update badge setiap 1s untuk 5s pertama lepas load (elak race condition 0)
+(function(){
+  let tries=0;
+  const iv=setInterval(()=>{
+    try{
+      if(allRoomingJemaah && allRoomingJemaah.length>0){
+        updateVisaCountBadge();
+        tries++;
+        if(tries>=5) clearInterval(iv);
+      }
+    }catch(e){}
+  }, 1000);
+  setTimeout(()=>clearInterval(iv), 6000);
+})();
 
 async function updatePassportCountFromDirectFetch(){
   try{
