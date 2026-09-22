@@ -1314,6 +1314,7 @@ function renderLocationTabs(){
   container.innerHTML=html;
 }
 
+
 async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100){
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); 
   const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
@@ -1329,11 +1330,18 @@ async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100){
     try{
       const res = await fetch(url, {headers:{Authorization:`Bearer ${pat}`}});
       if(!res.ok){
+        const t = await res.text();
         if(res.status===429){
+          console.warn('429 rate limit, retry 1.5s', tableName);
           await new Promise(r=>setTimeout(r, 1500));
           continue;
         }
-        console.warn(`Gagal fetch ${tableName}`, res.status);
+        console.warn(`Gagal fetch ${tableName} ${res.status}`, t.substring(0,300));
+        // kalau filter formula error (422), cuba tanpa filter sebagai fallback
+        if(res.status===422 && filterFormula){
+          console.warn('Filter formula mungkin salah, cuba fetch tanpa filter untuk', tableName);
+          return null; // signal fallback needed
+        }
         break;
       }
       const data = await res.json();
@@ -1353,6 +1361,25 @@ async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100){
   return all;
 }
 
+async function fetchAirtableAll(tableName, pageSize=100){
+  const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); 
+  const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
+  if(!base||!pat) return [];
+  let all=[], offset='';
+  const encodedTable = encodeURIComponent(tableName);
+  do{
+    const url = `https://api.airtable.com/v0/${base}/${encodedTable}?pageSize=${pageSize}${offset?`&offset=${offset}`:''}`;
+    try{
+      const res = await fetch(url, {headers:{Authorization:`Bearer ${pat}`}});
+      if(!res.ok) break;
+      const data = await res.json();
+      if(data.records) all = all.concat(data.records);
+      offset = data.offset||'';
+    }catch(e){ break; }
+  }while(offset);
+  return all;
+}
+
 async function fetchRoomingData(forceReload=false){
   try{
     let tripId=window.selectedTripRecord?.id||localStorage.getItem('effah_active_trip_id')||localStorage.getItem('effah_last_selected_trip')||localStorage.getItem('selectedTripId')||'';
@@ -1364,7 +1391,7 @@ async function fetchRoomingData(forceReload=false){
     const cacheValid = (now - _roomingCacheTime) < 300000;
     const canUseCache = _roomingFirstLoadDone && !forceReload && tripId && tripId===_roomingLastTripId && allRoomingJemaah.length>0 && cacheValid && !_roomingIsLoading;
     if(canUseCache){
-      console.log('CACHE ROOMING DIGUNAKAN V103.28 - using cached data for trip', tripId);
+      console.log('CACHE ROOMING DIGUNAKAN - trip', tripId);
       try{
         if((!staffList || staffList.length===0) && _staffCache[tripId] && _staffCache[tripId].length>0){
           staffList = _staffCache[tripId];
@@ -1408,18 +1435,61 @@ async function fetchRoomingData(forceReload=false){
       return;
     }
 
-    // OPTIMIZED: guna filterByFormula terus di Airtable, bukan fetch semua
-    const filterFormula = `SEARCH("${tripId}", ARRAYJOIN({TRIP} & ""))`;
-    console.log('OPTIMIZED FETCH - filter', filterFormula);
+    // CUBA FILTER OPTIMIZED DULU - 2 formula alternatif (sebab Airtable linked record filter tricky)
+    // Formula 1: SEARCH recordId dalam ARRAYJOIN
+    // Formula 2: FIND recordId
+    const filterFormulas = [
+      `FIND("${tripId}", ARRAYJOIN({TRIP} & ""))`,
+      `SEARCH("${tripId}", ARRAYJOIN({TRIP} & ""))`,
+      `SEARCH("${tripId}", ARRAYJOIN({TRIP}))`
+    ];
+    
+    let allRooms=null, allJems=null, allStaffRaw=null;
+    let usedFormula = null;
+    
+    for(let formula of filterFormulas){
+      console.log('CUBA FILTER FORMULA:', formula);
+      const [r1, r2, r3] = await Promise.all([
+        fetchAirtableWithFilter('ROOMING LIST', formula, 100),
+        fetchAirtableWithFilter('DATA JEMAAH UMRAH', formula, 100),
+        fetchAirtableWithFilter('STAFF LIST (ROOMING)', formula, 100)
+      ]);
+      // kalau null = formula error, cuba formula lain
+      if(r1===null || r2===null){
+        console.warn('Formula error, cuba formula seterusnya');
+        continue;
+      }
+      // kalau ada data (walaupun 0 bilik tapi ada jemaah), guna
+      if((r2 && r2.length>0) || (r1 && r1.length>0)){
+        allRooms=r1; allJems=r2; allStaffRaw=r3;
+        usedFormula=formula;
+        console.log('FILTER BERJAYA dengan formula:', formula, 'rooms', r1.length, 'jemaah', r2.length);
+        break;
+      }
+      // kalau dua2 kosong, mungkin memang trip kosong atau formula tak match - simpan untuk fallback check
+      allRooms=r1; allJems=r2; allStaffRaw=r3;
+      usedFormula=formula;
+    }
 
-    // Fetch 3 table serentak (parallel) dengan filter - jauh lebih laju
-    const [allRooms, allJems, allStaffRaw] = await Promise.all([
-      fetchAirtableWithFilter('ROOMING LIST', filterFormula, 100),
-      fetchAirtableWithFilter('DATA JEMAAH UMRAH', filterFormula, 100),
-      fetchAirtableWithFilter('STAFF LIST (ROOMING)', filterFormula, 100)
-    ]);
+    // FALLBACK: kalau optimized filter masih kosong, buat cara lama (fetch semua tapi parallel + filter client side)
+    // Ini lebih lambat tapi confirm dapat data
+    if(!allJems || allJems.length===0){
+      console.warn('Optimized filter dapat 0 jemaah, fallback ke client-side filter (lambat sikit tapi confirm data ada)');
+      const [roomsAll, jemsAll, staffAll] = await Promise.all([
+        fetchAirtableAll('ROOMING LIST', 100),
+        fetchAirtableAll('DATA JEMAAH UMRAH', 100),
+        fetchAirtableAll('STAFF LIST (ROOMING)', 100)
+      ]);
+      console.log('Fallback fetch all done: rooms', roomsAll.length, 'jemaah', jemsAll.length);
+      allRooms = roomsAll.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
+      allJems = jemsAll.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
+      allStaffRaw = staffAll.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
+      console.log('Fallback filtered: rooms', allRooms.length, 'jemaah', allJems.length);
+    } else {
+      console.log('OPTIMIZED fetch berjaya guna formula:', usedFormula);
+    }
 
-    console.log('OPTIMIZED fetch done: rooms', allRooms.length, 'jemaah', allJems.length, 'staffRaw', allStaffRaw.length);
+    console.log('Final: rooms', allRooms.length, 'jemaah', allJems.length, 'staffRaw', allStaffRaw.length);
 
     allRoomingRecords = allRooms;
     allRoomingJemaah = allJems;
@@ -1431,19 +1501,24 @@ async function fetchRoomingData(forceReload=false){
     window._roomingCacheTime = _roomingCacheTime;
     window._roomingFirstLoadDone = true;
 
-    // Process staff - mapping cepat
+    // Process staff
     try{
-      staffList = allStaffRaw.map(r=>({
-        id:r.id,
-        airtableId:r.id,
-        name:r.fields['NAME']||'',
-        boardBasis:r.fields['BOARD BASIS']||'',
-        train:!!r.fields['TRAIN'],
-        sortNumber:r.fields['SORT NUMBER']||9999,
-        trip:r.fields['TRIP']||[],
-        roomIds: r.fields['ROOMING LIST'] || r.fields['ROOM'] || r.fields['BILIK'] || [],
-        roomLink: (r.fields['ROOMING LIST']||[])[0]||null
-      }));
+      // allStaffRaw boleh jadi raw Airtable records atau sudah mapped
+      if(allStaffRaw.length>0 && allStaffRaw[0].fields){
+        staffList = allStaffRaw.map(r=>({
+          id:r.id,
+          airtableId:r.id,
+          name:r.fields['NAME']||'',
+          boardBasis:r.fields['BOARD BASIS']||'',
+          train:!!r.fields['TRAIN'],
+          sortNumber:r.fields['SORT NUMBER']||9999,
+          trip:r.fields['TRIP']||[],
+          roomIds: r.fields['ROOMING LIST'] || r.fields['ROOM'] || r.fields['BILIK'] || [],
+          roomLink: (r.fields['ROOMING LIST']||[])[0]||null
+        }));
+      } else {
+        staffList = allStaffRaw;
+      }
       staffList.sort((a,b)=>(a.sortNumber||9999)-(b.sortNumber||9999));
       try{ const cacheKey = tripId || 'default'; _staffCache[cacheKey] = JSON.parse(JSON.stringify(staffList)); window._staffCache = _staffCache; }catch(e){}
     }catch(e){ console.warn('staff mapping fail', e); }
@@ -1463,6 +1538,7 @@ async function fetchRoomingData(forceReload=false){
     if(typeof hideRoomingLoading==='function') hideRoomingLoading();
   }
 }
+
 
 
 function hideRoomingLoading(){
@@ -1557,13 +1633,14 @@ function isJemaahAssignedAny(jId){
 function isStaffAssigned(staffId){ const s=staffList.find(x=>x.id===staffId); if(!s) return false; return allRoomingRecords.some(r=> (r.fields['STAFF / EXTRA']||'').split(',').map(x=>x.trim()).includes(s.name)); }
 
 
+
 function renderNamelist(){
   const cont=document.getElementById('namelistContainer'); if(!cont) return;
   const q=(document.getElementById('searchRoomingJemaah')?.value||'').toLowerCase();
   const filterVal=(document.getElementById('filterPakejRooming')?.value||'').trim();
   let filtered=[...allRoomingJemaah];
   if(q) filtered=filtered.filter(r=>getJemaahName(r.fields).toLowerCase().includes(q));
-  if(filterVal){
+  if(filterVal && filterVal!=='All' && filterVal!==''){
     if(filterVal.includes(':')){
       const [field, val] = filterVal.split(':');
       const upperVal = val.toUpperCase();
@@ -1598,7 +1675,7 @@ function renderNamelist(){
       else return nameB.localeCompare(nameA);
     });
   }
-  // OPTIMIZED: Pre-compute assigned sets O(n+m) bukan O(n*m)
+  // OPTIMIZED: Pre-compute assigned sets O(n+m)
   const assignedAnySet = new Set();
   const assignedInLocSet = new Set();
   const assignedTanpaInLocSet = new Set();
@@ -1617,33 +1694,28 @@ function renderNamelist(){
         if(recLoc===locUpper) assignedTanpaInLocSet.add(id);
       }
     }
-  }catch(e){ console.warn('precompute assigned fail', e); }
+  }catch(e){}
 
   const total=allRoomingJemaah.length;
-  const belumGlobal = total - assignedAnySet.size;
-  // belumInLoc = yang tak ada di location semasa
   let belumInLoc = 0;
   for(const r of allRoomingJemaah){
     if(!assignedInLocSet.has(r.id) && !assignedTanpaInLocSet.has(r.id)) belumInLoc++;
   }
 
-  const totalEl=document.getElementById('totalJemaahBadge'); if(totalEl) { totalEl.textContent=total+' Jumlah'; totalEl.style.display='none'; }
-  const belumEl=document.getElementById('belumAssignBadge'); if(belumEl) { belumEl.textContent=belumInLoc+' Belum Ditetapkan di '+activeLocation; belumEl.style.display='none'; }
-  const topBelum=document.getElementById('belumAssignTop'); if(topBelum) { topBelum.textContent=belumGlobal+' Belum Ditetapkan'; topBelum.style.display='none'; }
-  const topAssign=document.getElementById('assignedTop'); if(topAssign) { topAssign.textContent=(total-belumGlobal)+' Telah Ditetapkan'; topAssign.style.display='none'; }
-  const topUnassignedBadge=document.getElementById('topUnassignedBadge'); if(topUnassignedBadge) topUnassignedBadge.style.display='none';
-  const topAssignedBadge=document.getElementById('topAssignedBadge'); if(topAssignedBadge) topAssignedBadge.style.display='none';
   if(total===0){ cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400">Tiada jemaah untuk trip ini</div>'; return; }
-  cont.innerHTML=filtered.map((r,i)=>{
+
+  cont.innerHTML=filtered.map((r, idx)=>{
     const name=getJemaahName(r.fields);
     const assignedNormalInLoc=assignedInLocSet.has(r.id);
     const assignedTanpaInLoc=assignedTanpaInLocSet.has(r.id);
     const assignedInLoc = assignedNormalInLoc || assignedTanpaInLoc;
     const assignedGlobal=assignedAnySet.has(r.id);
-    const rowCls=assignedInLoc?'bg-slate-100 text-slate-500':'hover:bg-slate-50';
+    const rowCls=assignedInLoc?'bg-slate-100 text-slate-400':'hover:bg-slate-50';
     const drag=assignedInLoc?'':`onclick="selectJemaahForAssign('${r.id}')" data-jemaah-id="${r.id}" style="cursor:pointer;"`;
-    let statusIcon = assignedInLoc? `<button onclick="removeJemaahFromCurrentLoc('${r.id}')" class="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-[10px]" title="Keluarkan dari ${activeLocation}">✕</button>` : `<button onclick="quickAssign('${r.id}')" class="w-5 h-5 rounded-full border bg-slate-100 hover:bg-slate-200 text-[10px]">+</button>`;
-    if(!assignedInLoc && assignedGlobal) statusIcon = `<button onclick="quickAssign('${r.id}')" class="w-5 h-5 rounded-full border bg-amber-100 hover:bg-amber-200 text-[10px]" title="Sudah ada di lokasi lain, boleh tambah di ${activeLocation} juga">+</button>`;
+    let actionBtn = assignedInLoc? `<button onclick="removeJemaahFromCurrentLoc('${r.id}'); event.stopPropagation();" class="w-6 h-6 rounded-full bg-amber-100 text-amber-700 text-[10px]">✕</button>` : `<button onclick="quickAssign('${r.id}'); event.stopPropagation();" class="w-6 h-6 rounded-full bg-slate-900 text-white text-[10px]">+</button>`;
+    if(!assignedInLoc && assignedGlobal){
+      actionBtn = `<button onclick="quickAssign('${r.id}'); event.stopPropagation();" class="w-6 h-6 rounded-full bg-amber-400 text-white text-[10px]" title="Sudah di lokasi lain">+</button>`;
+    }
     const fbArr = getBoardArray(r.fields);
     const fb = fbArr.length>0 ? fbArr.join(', ') : '-';
     const insArr = (typeof getInsuranArrayV2==='function' ? getInsuranArrayV2(r.fields) : getInsuranArray(r.fields));
@@ -1651,15 +1723,19 @@ function renderNamelist(){
     const pakej = getPakejVal(r.fields)||'-';
     const visa = getVisaVal(r.fields)||'-';
     const train = isTrainChecked(r.fields) ? '✓' : '-';
-    return `<div class="flex items-center justify-between px-3 py-2 border-b border-slate-100 text-[11px] ${rowCls}" ${drag}>
-      <div class="flex-1 min-w-0">
-        <div class="font-bold truncate">${name}</div>
-        <div class="text-[9px] text-slate-500 truncate">${pakej} • ${fb} • ${visa}</div>
-      </div>
-      <div class="flex items-center gap-2 ml-2">${statusIcon}</div>
+    return `<div class="grid grid-cols-[30px_1fr_90px_40px_90px_70px_60px_40px] gap-2 items-center px-3 py-2 border-b border-slate-100 text-[11px] ${rowCls}" ${drag}>
+      <div class="text-[10px] text-slate-500">${idx+1}</div>
+      <div class="font-bold truncate" title="${name}">${name} ${assignedInLoc?'<span class="ml-1 text-[9px] bg-slate-200 px-1.5 py-0.5 rounded-full">✓ '+activeLocation+'</span>':''}</div>
+      <div class="truncate text-[10px]">${fb}</div>
+      <div class="text-center">${train}</div>
+      <div class="truncate text-[10px]">${ins}</div>
+      <div class="truncate text-[10px]">${pakej}</div>
+      <div class="truncate text-[10px]">${visa}</div>
+      <div class="flex justify-center">${actionBtn}</div>
     </div>`;
   }).join('');
 }
+
 
 
 function toggleSortNama(){
