@@ -1470,6 +1470,7 @@ async function fetchRoomingData(forceReload=false){
       try{ renderStaffList(); }catch(e){}
       try{ renderRoomingGrid(); }catch(e){}
       try{ renderLocationTabs(); }catch(e){}
+      try{ updateVisaCountBadge(); }catch(e){}
       try{ hideRoomingLoading(); }catch(e){}
       return;
     }
@@ -1495,6 +1496,7 @@ async function fetchRoomingData(forceReload=false){
             try{ renderStaffList(); }catch(e){}
             try{ renderRoomingGrid(); }catch(e){}
             try{ renderLocationTabs(); }catch(e){}
+            try{ updateVisaCountBadge(); }catch(e){}
             try{ hideRoomingLoading(); }catch(e){}
             _roomingIsLoading=false;
             return;
@@ -1620,6 +1622,7 @@ async function fetchRoomingData(forceReload=false){
     try{ renderStaffList(); }catch(e){}
     try{ renderRoomingGrid(); }catch(e){}
     try{ renderLocationTabs(); }catch(e){}
+    try{ updateVisaCountBadge(); }catch(e){}
   }catch(e){ 
     console.error('fetchRoomingData fatal', e); 
   }finally{
@@ -2212,7 +2215,7 @@ function renderStaffList(){
 
 
 
-function setActiveLocation(loc){ activeLocation=loc.toUpperCase(); localStorage.setItem('effah_active_location',activeLocation); const el=document.getElementById('copyTargetLoc'); if(el) el.textContent=activeLocation; renderLocationTabs(); renderRoomingGrid(); renderNamelist(); renderStaffList(); }
+function setActiveLocation(loc){ activeLocation=loc.toUpperCase(); localStorage.setItem('effah_active_location',activeLocation); const el=document.getElementById('copyTargetLoc'); if(el) el.textContent=activeLocation; renderLocationTabs(); renderRoomingGrid(); renderNamelist(); renderStaffList(); try{ updateVisaCountBadge(); }catch(e){} }
 function _stopAutoScroll(){ if(_autoScrollInterval){ clearInterval(_autoScrollInterval); _autoScrollInterval=null; } }
 function _startAutoScroll(){
   if(_autoScrollInterval) return;
