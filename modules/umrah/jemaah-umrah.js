@@ -514,7 +514,7 @@ function renderJemaahUmrahHTML() {
         </div>
 
         <div id="attachmentPreviewModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
-            <div class="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-700 animate-in fade-in zoom-in duration-150">
+            <div id="previewModalContainer" class="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-700 animate-in fade-in zoom-in duration-150">
                 <div class="bg-slate-900 text-white p-4 px-6 flex items-center justify-between">
                     <div class="flex items-center space-x-2">
                         <i class="fa-solid fa-file-image text-emerald-400"></i>
@@ -522,8 +522,11 @@ function renderJemaahUmrahHTML() {
                     </div>
                     <div class="flex items-center space-x-3">
                         <a id="downloadAttachmentBtn" href="#" target="_blank" download class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition flex items-center">
-                            <i class="fa-solid fa-download mr-1.5"></i> Download
+                            <i class="fa-solid fa-download mr-1.5"></i> Muat Turun
                         </a>
+                        <button id="deleteAttachmentBtn" onclick="deleteCurrentPreviewAttachment()" class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition flex items-center" title="Padam fail ini">
+                            <i class="fa-solid fa-trash-can mr-1.5"></i> Padam
+                        </button>
                         <button onclick="closePreviewModal()" class="text-slate-400 hover:text-white text-lg p-1">
                             <i class="fa-solid fa-xmark"></i>
                         </button>
@@ -2209,6 +2212,8 @@ function renderInlineUploadCell(recId, fieldName, fileList, labelName) {
     const safeRecId = escapeAttr(recId);
     const safeField = escapeAttr(fieldName);
     const safeLabel = escapeHtml(labelName);
+    const cellBoxId = `cell-upload-${recId}-${fieldName.replace(/\s+/g, '_')}`;
+    const safeCellBoxId = escapeAttr(cellBoxId);
 
     let filesListHtml = '';
     if (files.length > 0) {
@@ -2221,22 +2226,58 @@ function renderInlineUploadCell(recId, fieldName, fileList, labelName) {
             const safeUrl = escapeAttr(fileUrl);
             const safeFileId = escapeAttr(fileId);
             const isPdf = fileUrl && (fileUrl.toLowerCase().includes('.pdf') || fileName.toLowerCase().includes('.pdf'));
-
+            // Simpan context untuk delete
             return `
                 <div class="flex items-center space-x-1 my-0.5">
                     ${isPdf ? `
-                        <button onclick="openPreviewModal('${safeUrl}', '${safeFileNameAttr}', {recordId:'${safeRecId}', fieldName:'${safeField}', attachmentId:'${safeFileId}', filename:'${safeFileNameAttr}'})" class="bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold px-1.5 py-0.5 rounded text-[10px] border border-rose-200 truncate max-w-[70px]" title="${safeFileName}">PDF</button>
+                        <button onclick="openPreviewModal('${safeUrl}', '${safeFileNameAttr}', {recordId:'${safeRecId}', fieldName:'${safeField}', attachmentId:'${safeFileId}', filename:'${safeFileNameAttr}', fileUrl:'${safeUrl}'})" class="bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold px-1.5 py-0.5 rounded text-[10px] border border-rose-200 truncate max-w-[70px]" title="${safeFileName}">PDF</button>
                     ` : `
-                        <img src="${safeUrl}" onclick="openPreviewModal('${safeUrl}', '${safeFileNameAttr}', {recordId:'${safeRecId}', fieldName:'${safeField}', attachmentId:'${safeFileId}', filename:'${safeFileNameAttr}'})" class="w-6 h-6 rounded object-cover border border-slate-300 cursor-pointer hover:scale-110 transition" title="${safeFileName}">
+                        <img src="${safeUrl}" onclick="openPreviewModal('${safeUrl}', '${safeFileNameAttr}', {recordId:'${safeRecId}', fieldName:'${safeField}', attachmentId:'${safeFileId}', filename:'${safeFileNameAttr}', fileUrl:'${safeUrl}'})" class="w-6 h-6 rounded object-cover border border-slate-300 cursor-pointer hover:scale-110 transition" title="${safeFileName}">
                     `}
                 </div>
             `;
         }).join('');
     }
-    // FIX d: Guna data-attributes untuk event delegation, bukan inline onchange banyak
-    const uploadBtn = `<button type="button" data-action="trigger-upload" data-rec-id="${safeRecId}" data-field="${safeField}" class="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 border border-slate-300 flex items-center justify-center text-[10px] text-slate-500" title="Upload ${safeLabel}"><i class="fa-solid fa-plus"></i></button>`;
-    return `<div class="flex items-center justify-center gap-1 flex-wrap">${filesListHtml}${uploadBtn}</div>`;
+    // Button + drag drop support - FIX upload dead
+    const uploadBtn = `<button type="button" onclick="triggerInlineUpload('${safeRecId}', '${safeField}')" data-action="trigger-upload" data-rec-id="${safeRecId}" data-field="${safeField}" class="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 border border-slate-300 flex items-center justify-center text-[10px] text-slate-500" title="Upload ${safeLabel}"><i class="fa-solid fa-plus"></i></button>`;
+    return `<div id="${safeCellBoxId}" class="flex items-center justify-center gap-1 flex-wrap min-h-[28px] p-0.5 rounded hover:bg-slate-50 transition" ondrop="handleCellDrop(event, '${safeRecId}', '${safeField}', '${safeCellBoxId}')" ondragover="event.preventDefault(); this.classList.add('bg-rose-50','ring-1','ring-rose-300')" ondragleave="this.classList.remove('bg-rose-50','ring-1','ring-rose-300')">${filesListHtml}${uploadBtn}</div>`;
 }
+
+function triggerInlineUpload(recId, fieldName){
+    try{
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.multiple = true;
+        input.accept = 'image/*,application/pdf,.pdf,.jpg,.jpeg,.png';
+        input.style.display = 'none';
+        document.body.appendChild(input);
+        input.onchange = (e)=>{
+            const files = e.target.files;
+            if(!files || !files.length) { document.body.removeChild(input); return; }
+            const cellBoxId = `cell-upload-${recId}-${fieldName.replace(/\s+/g, '_')}`;
+            if(typeof handleInlineFileUpload === 'function'){
+                handleInlineFileUpload(recId, fieldName, files, cellBoxId);
+            }
+            document.body.removeChild(input);
+        };
+        input.click();
+    }catch(err){
+        console.error('triggerInlineUpload error', err);
+    }
+}
+
+function handleCellDrop(e, recId, fieldName, cellBoxId){
+    try{
+        e.preventDefault();
+        if(e.currentTarget) e.currentTarget.classList.remove('bg-rose-50','ring-1','ring-rose-300');
+        if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length){
+            if(typeof handleInlineFileUpload === 'function'){
+                handleInlineFileUpload(recId, fieldName, e.dataTransfer.files, cellBoxId);
+            }
+        }
+    }catch(err){ console.error('handleCellDrop', err); }
+}
+
 
 // 📤 PROSES UPLOAD BANYAK FAIL TERUS DARI TABLE WITH CELL LOADING INDICATOR
 async function handleInlineFileUpload(recId, fieldName, fileList, cellBoxId) {
@@ -3907,24 +3948,44 @@ function getAttachmentArray(attachmentField) {
 // 👁️ MODAL PREVIEW PDF & IMAGE (FIXED CLOSE & OUTSIDE CLICK)
 // ==========================================
 
-function openPreviewModal(fileUrl, title) {
+let currentPreviewContext = null;
+
+function openPreviewModal(fileUrl, title, context = null) {
     const modal = document.getElementById('attachmentPreviewModal');
     const imgEl = document.getElementById('previewImage');
     const pdfEl = document.getElementById('previewPdf');
     const titleEl = document.getElementById('previewTitle');
     const downloadBtn = document.getElementById('downloadAttachmentBtn');
+    const deleteBtn = document.getElementById('deleteAttachmentBtn');
 
     if (!modal || !fileUrl) {
         console.error("Modal atau URL fail tidak dijumpai!");
         return;
     }
 
+    // Simpan context untuk delete
+    currentPreviewContext = context || { fileUrl, filename: title, recordId: null, fieldName: null, attachmentId: null };
+    if(!currentPreviewContext.fileUrl) currentPreviewContext.fileUrl = fileUrl;
+    if(!currentPreviewContext.filename) currentPreviewContext.filename = title;
+
     // Setkan Tajuk dan Pautan Muat Turun
-    if (titleEl) titleEl.textContent = title || 'Pratonton Lampiran';
+    if (titleEl) titleEl.textContent = title || currentPreviewContext.filename || 'Pratonton Lampiran';
     if (downloadBtn) {
         downloadBtn.href = fileUrl;
-        downloadBtn.setAttribute('download', title || 'fail_lampiran');
+        downloadBtn.setAttribute('download', title || currentPreviewContext.filename || 'fail_lampiran');
         downloadBtn.setAttribute('target', '_blank');
+    }
+
+    // Show/hide delete button - hanya show kalau ada record context
+    if(deleteBtn){
+        if(currentPreviewContext && currentPreviewContext.recordId && currentPreviewContext.fieldName){
+            deleteBtn.classList.remove('hidden');
+            deleteBtn.style.display = 'flex';
+        } else {
+            // Kalau preview dari add modal atau tanpa context, hide delete
+            // deleteBtn.classList.add('hidden');
+            deleteBtn.style.display = 'flex'; // tetap show tapi akan alert tiada context
+        }
     }
 
     // Semak sama ada fail ini PDF atau Gambar
@@ -3959,7 +4020,119 @@ function openPreviewModal(fileUrl, title) {
 
     // Paparkan Modal
     modal.classList.remove('hidden');
+    modal.style.display = 'flex';
 }
+
+function deleteCurrentPreviewAttachment(){
+    if(!currentPreviewContext){
+        alert('Tiada maklumat fail untuk dipadam.');
+        return;
+    }
+    const ctx = currentPreviewContext;
+    const fileName = ctx.filename || ctx.fileUrl || 'fail ini';
+    
+    // Alert box reconfirm - custom styled confirm
+    const confirmMsg = `⚠️ PADAM FAIL?\n\nAnda pasti mahu memadam:\n"${fileName}"\n\nTindakan ini akan buang fail dari rekod jemaah dan tidak boleh undur.\n\nTeruskan?`;
+    
+    if(!confirm(confirmMsg)){
+        return;
+    }
+    
+    // Second confirm untuk safety
+    const secondConfirm = confirm(`Sahkan sekali lagi:\nPadam "${fileName}" dari ${ctx.fieldName || 'attachment'}?`);
+    if(!secondConfirm) return;
+
+    if(!ctx.recordId || !ctx.fieldName){
+        alert('Tidak dapat padam: maklumat rekod tidak lengkap.');
+        return;
+    }
+
+    // Cari index attachment untuk dipadam
+    try{
+        const targetRec = allJemaahUmrahRecords.find(r => r.id === ctx.recordId);
+        if(!targetRec || !targetRec.fields[ctx.fieldName] || !Array.isArray(targetRec.fields[ctx.fieldName])){
+            alert('Rekod tidak dijumpai atau tiada lampiran.');
+            return;
+        }
+        
+        let idxToDelete = -1;
+        // Cari by id, url, atau filename
+        targetRec.fields[ctx.fieldName].forEach((att, i)=>{
+            if(idxToDelete !== -1) return;
+            if(ctx.attachmentId && att.id === ctx.attachmentId) idxToDelete = i;
+            else if(ctx.fileUrl && att.url === ctx.fileUrl) idxToDelete = i;
+            else if(ctx.filename && att.filename === ctx.filename) idxToDelete = i;
+        });
+        
+        if(idxToDelete === -1){
+            // fallback cari by filename contains
+            targetRec.fields[ctx.fieldName].forEach((att, i)=>{
+                if(idxToDelete !== -1) return;
+                if(att.filename && fileName && att.filename.toLowerCase() === fileName.toLowerCase()) idxToDelete = i;
+            });
+        }
+
+        if(idxToDelete === -1){
+            alert('Fail tidak dijumpai dalam senarai. Cuba refresh.');
+            return;
+        }
+
+        // Show loading di button delete
+        const delBtn = document.getElementById('deleteAttachmentBtn');
+        let originalHTML = '';
+        if(delBtn){
+            originalHTML = delBtn.innerHTML;
+            delBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Memadam...';
+            delBtn.disabled = true;
+        }
+
+        // Panggil function delete sedia ada dengan index
+        // Kita override untuk handle async dengan proper close
+        (async ()=>{
+            try{
+                const updatedList = targetRec.fields[ctx.fieldName].filter((_, idx) => idx !== idxToDelete);
+                const airtableUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/DATA%20JEMAAH%20UMRAH/${ctx.recordId}`;
+                const res = await fetch(airtableUrl, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${AIRTABLE_PAT}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        fields: {
+                            [ctx.fieldName]: updatedList
+                        }
+                    })
+                });
+
+                if(res.ok){
+                    const result = await res.json();
+                    targetRec.fields[ctx.fieldName] = result.fields[ctx.fieldName] || updatedList;
+                    closePreviewModal();
+                    if(typeof filterAndRenderJemaahGrid === 'function') filterAndRenderJemaahGrid();
+                    alert(`✅ Fail "${fileName}" berjaya dipadam.`);
+                } else {
+                    const txt = await res.text();
+                    console.error('Delete failed', txt);
+                    alert('❌ Gagal memadam fail. Sila cuba lagi.');
+                }
+            }catch(e){
+                console.error('Delete exception', e);
+                alert('❌ Ralat rangkaian semasa memadam.');
+            }finally{
+                if(delBtn){
+                    delBtn.innerHTML = originalHTML;
+                    delBtn.disabled = false;
+                }
+            }
+        })();
+
+    }catch(e){
+        console.error(e);
+        alert('Ralat semasa cuba padam.');
+    }
+}
+
 
 /**
  * Menutup Modal Preview dan mengosongkan sumber fail
@@ -3975,7 +4148,10 @@ function closePreviewModal() {
 
     if (modal) {
         modal.classList.add('hidden');
+        modal.style.display = 'none';
     }
+    // Reset context
+    currentPreviewContext = null;
 }
 
 // 🎯 TUTUP MODAL BILA KLIK LUAR KOTAK (CLICK OUTSIDE BACKDROP)
@@ -4240,7 +4416,6 @@ document.addEventListener('click', function(e){
 
 
 
-
 // FIX a: Single guarded hook for openAddJemaahModal - elak double binding
 (function(){
     if(window.__jemaahModalHooked) return;
@@ -4285,3 +4460,4 @@ document.addEventListener('click', function(e){
     if(typeof closeAllCellDropdowns === 'function') closeAllCellDropdowns();
   }
 });
+
