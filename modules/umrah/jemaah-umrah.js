@@ -32,7 +32,7 @@ let hiddenColumns = JSON.parse(localStorage.getItem('jemaahHiddenColumns')) || {
 let currentSortField = 'NAME';
 let currentSortDir = 'asc';
 
-// Default Column Order - FIXED v3: AGE & DOB before DOB FOREIGNER by default (request user)
+// Default Column Order - FIXED v2: susunan logik ikut screenshot + flow dokumen
 const DEFAULT_COLUMN_ORDER = [
     'col-idx', 'col-name', 'col-picture', 'col-ic', 'col-passport', 
     'col-gender', 'col-age', 'col-dob', 'col-dobf', 'col-nat', 
@@ -72,94 +72,78 @@ const defaultColumnWidths = {
 
 let columnWidths = JSON.parse(localStorage.getItem('jemaahColWidths')) || { ...defaultColumnWidths };
 
-// === FIX a-e: Security & Performance Utilities ===
-function escapeHtml(str){
-    if(!str) return '';
-    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
-}
-function escapeAttr(str){
-    return escapeHtml(str).replace(/`/g,'&#96;');
-}
-// Normalize column order - ensure AGE & DOB before DOB FOREIGNER
-function normalizeJemaahColumnOrder(savedOrder){
-    let base = Array.isArray(savedOrder) ? [...savedOrder] : [...DEFAULT_COLUMN_ORDER];
-    // buang duplicate & legacy
-    base = [...new Set(base.filter(k=> DEFAULT_COLUMN_ORDER.includes(k)))];
-    // paksa keluarkan age/dob dari posisi lama (mungkin di hujung)
-    base = base.filter(k=> k!=='col-age' && k!=='col-dob');
-    // cari posisi gender
-    const genderIdx = base.indexOf('col-gender');
-    const dobfIdx = base.indexOf('col-dobf');
-    if(genderIdx !== -1){
-        // masukkan selepas gender
-        base.splice(genderIdx+1, 0, 'col-age', 'col-dob');
-    } else if(dobfIdx !== -1){
-        base.splice(dobfIdx, 0, 'col-age', 'col-dob');
-    } else {
-        // fallback selepas col-passport (idx 4)
-        const fallback = Math.min(5, base.length);
-        base.splice(fallback, 0, 'col-age', 'col-dob');
-    }
-    // tambah yang missing dari default
-    DEFAULT_COLUMN_ORDER.forEach(k=>{
-        if(!base.includes(k)) base.push(k);
-    });
-    return base;
-}
-
-
-
 // === FIX V2: File Picker Binding untuk Add Jemaah Modal ===
 let addModalFiles = { 'PICTURE': [], 'PASSPORT_COPY': [], 'VISA_COPY': [], 'MOFABIO': [], 'INSURAN_DOC': [] };
 
 function setupAddModalFilePickers(){
     const fileFields = ['PICTURE','PASSPORT_COPY','VISA_COPY','MOFABIO'];
+    // alias mapping untuk id yang pakai underscore
+    const idMap = {
+        'PICTURE': 'PICTURE',
+        'PASSPORT_COPY': 'PASSPORT_COPY',
+        'VISA_COPY': 'VISA_COPY',
+        'MOFABIO': 'MOFABIO'
+    };
+    
     fileFields.forEach(field=>{
         const dropId = `addModalDropzone-${field}`;
         const inputId = `addModalFileInput-${field}`;
+        const previewId = `addModalPreview-${field}`;
         const dropzone = document.getElementById(dropId);
         const fileInput = document.getElementById(inputId);
         if(!dropzone || !fileInput) return;
+        
+        // Reset
         addModalFiles[field] = addModalFiles[field] || [];
-        // FIX a: Elak cloneNode berulang - guna flag dan remove listener lama secara proper
-        if(dropzone.dataset.pickerBound === '1') return;
-        // Buang clone approach lama - kita attach sekali sahaja
-        const onClick = (e)=>{
-            if(e.target.closest('button')) return;
+        
+        const openPicker = (e)=>{
+            if(e) e.stopPropagation();
             fileInput.click();
         };
-        const onDragOver = (e)=>{
+        
+        // Hapus listener lama dengan clone (simple)
+        const newDrop = dropzone.cloneNode(true);
+        dropzone.parentNode.replaceChild(newDrop, dropzone);
+        const dz = document.getElementById(dropId);
+        const fi = document.getElementById(inputId);
+        const previewEl = document.getElementById(previewId);
+        
+        if(!dz || !fi) return;
+        
+        dz.addEventListener('click', (e)=>{
+            // jangan trigger kalau klik pada preview delete button
+            if(e.target.closest('button')) return;
+            fi.click();
+        });
+        
+        dz.addEventListener('dragover', (e)=>{
             e.preventDefault();
-            dropzone.classList.add('border-brand-maroon','bg-rose-50','scale-[1.02]');
-            dropzone.classList.remove('border-slate-300','bg-slate-50');
-        };
-        const onDragLeave = (e)=>{
+            dz.classList.add('border-brand-maroon','bg-rose-50','scale-[1.02]');
+            dz.classList.remove('border-slate-300','bg-slate-50');
+        });
+        
+        dz.addEventListener('dragleave', (e)=>{
             e.preventDefault();
-            dropzone.classList.remove('border-brand-maroon','bg-rose-50','scale-[1.02]');
-            dropzone.classList.add('border-slate-300','bg-slate-50');
-        };
-        const onDrop = (e)=>{
+            dz.classList.remove('border-brand-maroon','bg-rose-50','scale-[1.02]');
+            dz.classList.add('border-slate-300','bg-slate-50');
+        });
+        
+        dz.addEventListener('drop', (e)=>{
             e.preventDefault();
-            dropzone.classList.remove('border-brand-maroon','bg-rose-50','scale-[1.02]');
-            dropzone.classList.add('border-slate-300','bg-slate-50');
+            dz.classList.remove('border-brand-maroon','bg-rose-50','scale-[1.02]');
+            dz.classList.add('border-slate-300','bg-slate-50');
             if(e.dataTransfer.files && e.dataTransfer.files.length){
                 handleAddModalFiles(field, e.dataTransfer.files);
             }
-        };
-        const onChange = (e)=>{
+        });
+        
+        fi.addEventListener('change', (e)=>{
             if(e.target.files && e.target.files.length){
                 handleAddModalFiles(field, e.target.files);
+                // reset value supaya boleh pilih file sama lagi
                 e.target.value = '';
             }
-        };
-        dropzone.addEventListener('click', onClick);
-        dropzone.addEventListener('dragover', onDragOver);
-        dropzone.addEventListener('dragleave', onDragLeave);
-        dropzone.addEventListener('drop', onDrop);
-        fileInput.addEventListener('change', onChange);
-        dropzone.dataset.pickerBound = '1';
-        // simpan refs untuk cleanup jika perlu
-        dropzone._pickerHandlers = { onClick, onDragOver, onDragLeave, onDrop, onChange };
+        });
     });
 }
 
@@ -167,28 +151,30 @@ function handleAddModalFiles(field, fileList){
     const files = Array.from(fileList);
     if(!files.length) return;
     addModalFiles[field] = addModalFiles[field] || [];
+    
+    // Validate
     const validFiles = files.filter(f=>{
         const isValidType = f.type.startsWith('image/') || f.type==='application/pdf' || f.name.toLowerCase().endsWith('.pdf');
         const isValidSize = f.size <= 10*1024*1024;
-        if(!isValidType) alert(`File ${escapeHtml(f.name)}: format tak disokong. Guna JPG/PNG/PDF`);
-        if(!isValidSize) alert(`File ${escapeHtml(f.name)}: lebih 10MB`);
+        if(!isValidType) alert(`File ${f.name}: format tak disokong. Guna JPG/PNG/PDF`);
+        if(!isValidSize) alert(`File ${f.name}: lebih 10MB`);
         return isValidType && isValidSize;
     });
+    
     addModalFiles[field].push(...validFiles);
+    
+    // Update preview
     const previewId = `addModalPreview-${field}`;
     const previewEl = document.getElementById(previewId);
     if(previewEl){
-        previewEl.innerHTML = addModalFiles[field].map((f,i)=>{
-            const safeName = escapeHtml(f.name);
-            const safeField = escapeAttr(field);
-            return `
+        previewEl.innerHTML = addModalFiles[field].map((f,i)=>`
             <div class="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1 text-[11px]">
                 <i class="fa-solid ${f.type.includes('pdf')?'fa-file-pdf text-red-500':'fa-file-image text-blue-500'}"></i>
-                <span class="max-w-[120px] truncate font-bold" title="${safeName}">${safeName}</span>
+                <span class="max-w-[120px] truncate font-bold">${f.name}</span>
                 <span class="text-[10px] text-slate-400">${(f.size/1024).toFixed(0)}KB</span>
-                <button type="button" onclick="removeAddModalFile('${safeField}',${i})" class="w-5 h-5 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200"><i class="fa-solid fa-xmark text-[10px]"></i></button>
+                <button type="button" onclick="removeAddModalFile('${field}',${i})" class="w-5 h-5 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200"><i class="fa-solid fa-xmark text-[10px]"></i></button>
             </div>
-        `}).join('');
+        `).join('');
     }
 }
 
@@ -201,17 +187,14 @@ function removeAddModalFile(field, idx){
             if(addModalFiles[field].length===0){
                 previewEl.innerHTML = '';
             } else {
-                previewEl.innerHTML = addModalFiles[field].map((f,i)=>{
-                    const safeName = escapeHtml(f.name);
-                    const safeField = escapeAttr(field);
-                    return `
+                previewEl.innerHTML = addModalFiles[field].map((f,i)=>`
                     <div class="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1 text-[11px]">
                         <i class="fa-solid ${f.type.includes('pdf')?'fa-file-pdf text-red-500':'fa-file-image text-blue-500'}"></i>
-                        <span class="max-w-[120px] truncate font-bold" title="${safeName}">${safeName}</span>
+                        <span class="max-w-[120px] truncate font-bold">${f.name}</span>
                         <span class="text-[10px] text-slate-400">${(f.size/1024).toFixed(0)}KB</span>
-                        <button type="button" onclick="removeAddModalFile('${safeField}',${i})" class="w-5 h-5 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200"><i class="fa-solid fa-xmark text-[10px]"></i></button>
+                        <button type="button" onclick="removeAddModalFile('${field}',${i})" class="w-5 h-5 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200"><i class="fa-solid fa-xmark text-[10px]"></i></button>
                     </div>
-                `}).join('');
+                `).join('');
             }
         }
     }
@@ -249,6 +232,43 @@ function cleanTripName(raw){
   style.textContent='.bg-brand-maroon{background:#800020}.text-brand-maroon{color:#800020}.hover\\:bg-rose-900:hover{background:#600018}';
   document.head.appendChild(style);
 
+// Hook setup after openAddJemaahModal original
+(function(){
+    const _origOpenAdd = window.openAddJemaahModal;
+    if(_origOpenAdd){
+        const original = _origOpenAdd;
+        window.openAddJemaahModal = function(){
+            original.apply(this, arguments);
+            setTimeout(()=>{
+                const modal = document.getElementById('expandRecordModal');
+                if(modal){
+                    modal.classList.remove('hidden');
+                    modal.style.display='flex';
+                }
+                setupAddModalFilePickers();
+            }, 100);
+        };
+    } else {
+        // if not yet defined, patch via event
+        document.addEventListener('DOMContentLoaded', ()=>{
+            const orig = window.openAddJemaahModal;
+            if(orig){
+                window.openAddJemaahModal = function(){
+                    orig.apply(this, arguments);
+                    setTimeout(()=>{
+                        const modal = document.getElementById('expandRecordModal');
+                        if(modal){
+                            modal.classList.remove('hidden');
+                            modal.style.display='flex';
+                        }
+                        setupAddModalFilePickers();
+                    }, 100);
+                };
+            }
+        });
+    }
+})();
+
 })();
 
 
@@ -258,31 +278,25 @@ document.addEventListener('DOMContentLoaded', () => {
         currentSortField = savedSort.field || 'NAME';
         currentSortDir = savedSort.dir || 'asc';
     }
-    // FIX c & request: Normalize column order - paksa AGE & DOB sebelum DOB FOREIGNER
     let savedOrder = JSON.parse(localStorage.getItem('jemaahColOrder'));
-    // Jika ada saved order lama, migrasi untuk betulkan posisi AGE/DOB
+    try{ if(savedOrder && (!savedOrder.includes('col-age') || !savedOrder.includes('col-dob'))){ localStorage.removeItem('jemaahColOrder'); savedOrder = null; console.log('Migrating columnOrder to include AGE/DOB'); } }catch(e){}
     if (savedOrder && Array.isArray(savedOrder)) {
-        // Detect old order where age/dob at end (from screenshot)
-        const hasAgeAtEnd = savedOrder.indexOf('col-age') > savedOrder.indexOf('col-dobf') || savedOrder.indexOf('col-age') > 15;
-        const hasDobAtEnd = savedOrder.indexOf('col-dob') > savedOrder.indexOf('col-dobf') || savedOrder.indexOf('col-dob') > 15;
-        if(hasAgeAtEnd || hasDobAtEnd || !savedOrder.includes('col-age') || !savedOrder.includes('col-dob')){
-            console.log('Migrating columnOrder: moving AGE/DOB before DOB FOREIGNER');
-            columnOrder = normalizeJemaahColumnOrder(savedOrder);
-            localStorage.setItem('jemaahColOrder', JSON.stringify(columnOrder));
-        } else {
-            // Normal cleaning
-            let cleaned = [...new Set(savedOrder.filter(k=> DEFAULT_COLUMN_ORDER.includes(k)))];
-            // tetap paksa posisi betul
-            cleaned = normalizeJemaahColumnOrder(cleaned);
-            columnOrder = cleaned.length>0 ? cleaned : [...DEFAULT_COLUMN_ORDER];
-            localStorage.setItem('jemaahColOrder', JSON.stringify(columnOrder));
+        // FIX: validate, buang legacy col-age/dob, buang duplikat, pastikan semua default ada
+        let cleaned = [...new Set(savedOrder.filter(k=> k!=='col-age' && k!=='col-dob' && DEFAULT_COLUMN_ORDER.includes(k)))];
+        // tambah yang missing dari default supaya tak hilang
+        DEFAULT_COLUMN_ORDER.forEach(k=>{
+            if(!cleaned.includes(k)) cleaned.push(k);
+        });
+        columnOrder = cleaned.length>0 ? cleaned : [...DEFAULT_COLUMN_ORDER];
+        if(columnOrder.length===0){
+            columnOrder = [...DEFAULT_COLUMN_ORDER];
         }
+        localStorage.setItem('jemaahColOrder', JSON.stringify(columnOrder));
     } else {
         columnOrder = [...DEFAULT_COLUMN_ORDER];
-        localStorage.setItem('jemaahColOrder', JSON.stringify(columnOrder));
     }
     const savedHidden = JSON.parse(localStorage.getItem('jemaahHiddenColumns')) || {};
-    // FIX: jangan hide AGE/DOB, paksa show sebelah GENDER (default visible)
+    // FIX v4: jangan hide AGE/DOB, paksa show sebelah GENDER
     if(savedHidden['col-age']) delete savedHidden['col-age'];
     if(savedHidden['col-dob']) delete savedHidden['col-dob'];
     localStorage.setItem('jemaahHiddenColumns', JSON.stringify(savedHidden));
@@ -514,7 +528,7 @@ function renderJemaahUmrahHTML() {
         </div>
 
         <div id="attachmentPreviewModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
-            <div id="previewModalContainer" class="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-700 animate-in fade-in zoom-in duration-150">
+            <div class="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-700 animate-in fade-in zoom-in duration-150">
                 <div class="bg-slate-900 text-white p-4 px-6 flex items-center justify-between">
                     <div class="flex items-center space-x-2">
                         <i class="fa-solid fa-file-image text-emerald-400"></i>
@@ -522,11 +536,8 @@ function renderJemaahUmrahHTML() {
                     </div>
                     <div class="flex items-center space-x-3">
                         <a id="downloadAttachmentBtn" href="#" target="_blank" download class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition flex items-center">
-                            <i class="fa-solid fa-download mr-1.5"></i> Muat Turun
+                            <i class="fa-solid fa-download mr-1.5"></i> Download
                         </a>
-                        <button id="deleteAttachmentBtn" onclick="deleteCurrentPreviewAttachment()" class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition flex items-center" title="Padam fail ini">
-                            <i class="fa-solid fa-trash-can mr-1.5"></i> Padam
-                        </button>
                         <button onclick="closePreviewModal()" class="text-slate-400 hover:text-white text-lg p-1">
                             <i class="fa-solid fa-xmark"></i>
                         </button>
@@ -914,23 +925,20 @@ async function cleanAllBlankOptions(){
   alert('Selesai clean blank options. Sila refresh.');
 }
 
-// FIX b: Auto-clean dimatikan - sebelum ni auto PATCH setiap load (bahaya race condition)
-// User perlu trigger manual via Settings atau kita clean hanya jika explicit flag
-// setTimeout auto-clean REMOVED untuk stability
-// Jika nak enable, set localStorage.setItem('effah_auto_clean_blank','1')
+// Auto-clean on load if blank detected
 setTimeout(async ()=>{
   try{
-    if(localStorage.getItem('effah_auto_clean_blank') !== '1') return;
+    // Check if any field has blank in jemaahFieldOptions
     for(let fieldName in jemaahFieldOptions){
       const opts = jemaahFieldOptions[fieldName]||[];
       const hasBlank = opts.some(o=> !o.name || o.name.trim()==='');
       if(hasBlank){
-        console.warn(`Blank detected in ${fieldName}, auto-cleaning (manual opt-in)...`);
+        console.warn(`Blank detected in ${fieldName}, auto-cleaning...`);
         await cleanBlankOptions(fieldName);
       }
     }
   }catch{}
-}, 5000);
+}, 3000);
 
 
 async function fetchJemaahMetaOptions(){
@@ -2128,29 +2136,28 @@ function renderJemaahRows(records) {
         tr.className = `hover:bg-slate-50 transition group ${isChecked ? 'bg-amber-50/60' : ''}`;
         tr.id = `jemaah-row-${id}`;
 
-        const safeId = escapeAttr(id);
         const cellRenderers = {
-            'col-idx': `<td class="p-2 border-r border-slate-300 text-center font-bold text-slate-500 bg-slate-50 sticky left-0 z-10 group-hover:bg-slate-100 col-idx idx-cell ${isChecked ? 'is-checked' : ''}"><span class="idx-num">${idx + 1}</span><div class="inline-flex items-center space-x-1"><input type="checkbox" ${isChecked ? 'checked' : ''} data-action="select-row" data-id="${safeId}" class="idx-check w-3.5 h-3.5 rounded border-slate-300 text-brand-maroon focus:ring-brand-maroon cursor-pointer"><button type="button" data-action="expand" data-id="${safeId}" class="idx-expand text-[10px] bg-white border border-slate-300 text-slate-600 rounded p-0.5 hover:bg-slate-100 shadow-2xs" title="Expand Record">⤢</button></div></td>`,
-            'col-name': `<td class="p-1 border-r border-slate-300 sticky left-[55px] z-10 ${isChecked ? 'bg-amber-50/80' : 'bg-white'} group-hover:bg-slate-50 col-name shadow-[3px_0_6px_-2px_rgba(0,0,0,0.15)]"><div class="flex items-center justify-between group/name"><input type="text" value="${escapeAttr(f['NAME'] || '')}" data-action="inline-edit" data-id="${safeId}" data-field="NAME" class="jemaah-inline-input w-full text-xs p-1.5 font-bold uppercase rounded-lg border border-transparent hover:border-slate-300 focus:border-brand-maroon focus:bg-white bg-transparent"><button data-action="expand" data-id="${safeId}" class="text-slate-400 hover:text-brand-maroon px-1 hidden group-hover/name:block" title="Buka Detail Modal"><i class="fa-solid fa-up-right-and-down-left-from-center text-[10px]"></i></button></div></td>`,
+            'col-idx': `<td class="p-2 border-r border-slate-300 text-center font-bold text-slate-500 bg-slate-50 sticky left-0 z-10 group-hover:bg-slate-100 col-idx idx-cell ${isChecked ? 'is-checked' : ''}"><span class="idx-num">${idx + 1}</span><div class="inline-flex items-center space-x-1"><input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleSelectJemaahRow('${id}', this.checked)" class="idx-check w-3.5 h-3.5 rounded border-slate-300 text-brand-maroon focus:ring-brand-maroon cursor-pointer"><button type="button" onclick="openExpandModal('${id}')" class="idx-expand text-[10px] bg-white border border-slate-300 text-slate-600 rounded p-0.5 hover:bg-slate-100 shadow-2xs" title="Expand Record">⤢</button></div></td>`,
+            'col-name': `<td class="p-1 border-r border-slate-300 sticky left-[55px] z-10 ${isChecked ? 'bg-amber-50/80' : 'bg-white'} group-hover:bg-slate-50 col-name shadow-[3px_0_6px_-2px_rgba(0,0,0,0.15)]"><div class="flex items-center justify-between group/name"><input type="text" value="${f['NAME'] || ''}" onchange="updateJemaahField('${id}', 'NAME', this.value)" class="w-full text-xs p-1.5 font-bold uppercase rounded-lg border border-transparent hover:border-slate-300 focus:border-brand-maroon focus:bg-white bg-transparent"><button onclick="openExpandModal('${id}')" class="text-slate-400 hover:text-brand-maroon px-1 hidden group-hover/name:block" title="Buka Detail Modal"><i class="fa-solid fa-up-right-and-down-left-from-center text-[10px]"></i></button></div></td>`,
             'col-picture': `<td class="p-2 border-r border-slate-300 text-center col-picture">${renderInlineUploadCell(id, 'PICTURE', pictureFiles, 'Pic')}</td>`,
-            'col-ic': `<td class="p-1 border-r border-slate-300 col-ic"><input type="text" value="${escapeAttr(f['IC NO.'] || '')}" data-action="inline-edit" data-id="${safeId}" data-field="IC NO." class="jemaah-inline-input w-full text-xs p-1.5 font-mono rounded-lg border border-transparent hover:border-slate-300 focus:border-brand-maroon focus:bg-white bg-transparent"></td>`,
-            'col-passport': `<td class="p-1 border-r border-slate-300 col-passport"><input type="text" value="${escapeAttr(f['PASSPORT NO.'] || '')}" data-action="inline-edit" data-id="${safeId}" data-field="PASSPORT NO." class="jemaah-inline-input w-full text-xs p-1.5 font-mono font-bold uppercase rounded-lg border border-transparent hover:border-slate-300 focus:border-brand-maroon focus:bg-white bg-transparent"></td>`,
-            'col-gender': `<td class="p-1 border-r border-slate-300 col-gender"><select data-action="inline-edit" data-id="${safeId}" data-field="GENDER" class="jemaah-inline-input w-full text-xs p-1.5 font-bold rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent"><option value="">--</option><option value="MALE" ${f['GENDER'] === 'MALE' ? 'selected' : ''}>MALE</option><option value="FEMALE" ${f['GENDER'] === 'FEMALE' ? 'selected' : ''}>FEMALE</option></select></td>`,
-            'col-age': `<td class="p-2.5 border-r border-slate-300 bg-white font-semibold text-slate-700 col-age" id="age-cell-${safeId}">${escapeHtml(f['AGE'] || '-')}</td>`,
-            'col-dob': `<td class="p-2.5 border-r border-slate-300 bg-white font-semibold text-slate-700 col-dob" id="dob-cell-${safeId}">${escapeHtml(f['DOB'] ? (f['DOB'].includes('/') ? f['DOB'] : new Date(f['DOB']).toLocaleDateString('en-GB')) : '-')}</td>`,
-            'col-dobf': `<td class="p-1 border-r border-slate-300 col-dobf"><input type="date" value="${escapeAttr(f['DOB (FOREIGNER)'] || '')}" data-action="inline-edit" data-id="${safeId}" data-field="DOB (FOREIGNER)" class="jemaah-inline-input w-full text-xs p-1.5 rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent"></td>`,
+            'col-ic': `<td class="p-1 border-r border-slate-300 col-ic"><input type="text" value="${f['IC NO.'] || ''}" onchange="updateJemaahField('${id}', 'IC NO.', this.value)" class="w-full text-xs p-1.5 font-mono rounded-lg border border-transparent hover:border-slate-300 focus:border-brand-maroon focus:bg-white bg-transparent"></td>`,
+            'col-passport': `<td class="p-1 border-r border-slate-300 col-passport"><input type="text" value="${f['PASSPORT NO.'] || ''}" onchange="updateJemaahField('${id}', 'PASSPORT NO.', this.value)" class="w-full text-xs p-1.5 font-mono font-bold uppercase rounded-lg border border-transparent hover:border-slate-300 focus:border-brand-maroon focus:bg-white bg-transparent"></td>`,
+            'col-gender': `<td class="p-1 border-r border-slate-300 col-gender"><select onchange="updateJemaahField('${id}', 'GENDER', this.value)" class="w-full text-xs p-1.5 font-bold rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent"><option value="">--</option><option value="MALE" ${f['GENDER'] === 'MALE' ? 'selected' : ''}>MALE</option><option value="FEMALE" ${f['GENDER'] === 'FEMALE' ? 'selected' : ''}>FEMALE</option></select></td>`,
+            'col-age': `<td class="p-2.5 border-r border-slate-300 bg-white font-semibold text-slate-700 col-age" id="age-cell-${id}">${f['AGE'] || '-'}</td>`,
+            'col-dob': `<td class="p-2.5 border-r border-slate-300 bg-white font-semibold text-slate-700 col-dob" id="dob-cell-${id}">${f['DOB'] ? (f['DOB'].includes('/') ? f['DOB'] : new Date(f['DOB']).toLocaleDateString('en-GB')) : '-'}</td>`,
+            'col-dobf': `<td class="p-1 border-r border-slate-300 col-dobf"><input type="date" value="${f['DOB (FOREIGNER)'] || ''}" onchange="updateJemaahField('${id}', 'DOB (FOREIGNER)', this.value)" class="w-full text-xs p-1.5 rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent"></td>`,
             'col-nat': `<td class="p-1 border-r border-slate-300 col-nat">${renderSingleSelectCell(id, 'NATIONALITY', f['NATIONALITY'])}</td>`,
             'col-visa': `<td class="p-1 border-r border-slate-300 col-visa">${renderSingleSelectCell(id, 'STATUS VISA', f['STATUS VISA'])}</td>`,
             'col-passcopy': `<td class="p-2 border-r border-slate-300 text-center col-passcopy">${renderInlineUploadCell(id, 'PASSPORT COPY', passCopyFiles, 'Passport')}</td>`,
             'col-visacopy': `<td class="p-2 border-r border-slate-300 text-center col-visacopy">${renderInlineUploadCell(id, 'VISA COPY', visaCopyFiles, 'Visa')}</td>`,
             'col-mofabio': `<td class="p-2 border-r border-slate-300 text-center col-mofabio">${renderInlineUploadCell(id, 'MOFABIO', mofabioFiles, 'Mofabio')}</td>`,
-            'col-fit': `<td class="p-2 border-r border-slate-300 text-center col-fit"><input type="checkbox" ${f['FIT TICKET'] ? 'checked' : ''} data-action="inline-edit-checkbox" data-id="${safeId}" data-field="FIT TICKET" class="jemaah-inline-input w-4 h-4 rounded text-brand-maroon focus:ring-brand-maroon"></td>`,
-            'col-trip': `<td class="p-2.5 border-r border-slate-300 font-bold text-brand-maroon col-trip">${escapeHtml(actualTripName)}</td>`,
-            'col-issue': `<td class="p-1 border-r border-slate-300 col-issue"><input type="date" value="${escapeAttr(f['DATE OF ISSUE'] || '')}" data-action="inline-edit" data-id="${safeId}" data-field="DATE OF ISSUE" class="jemaah-inline-input w-full text-xs p-1.5 rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent"></td>`,
-            'col-expire': `<td class="p-1 border-r border-slate-300 col-expire"><input type="date" value="${escapeAttr(f['DATE OF EXPIRE'] || '')}" data-action="inline-edit" data-id="${safeId}" data-field="DATE OF EXPIRE" class="jemaah-inline-input w-full text-xs p-1.5 rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent"></td>`,
-            'col-notes': `<td class="p-1 border-r border-slate-300 col-notes"><input type="text" value="${escapeAttr(f['Notes'] || '')}" data-action="inline-edit" data-id="${safeId}" data-field="Notes" class="jemaah-inline-input w-full text-xs p-1.5 rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent"></td>`,
+            'col-fit': `<td class="p-2 border-r border-slate-300 text-center col-fit"><input type="checkbox" ${f['FIT TICKET'] ? 'checked' : ''} onchange="updateJemaahField('${id}', 'FIT TICKET', this.checked)" class="w-4 h-4 rounded text-brand-maroon focus:ring-brand-maroon"></td>`,
+            'col-trip': `<td class="p-2.5 border-r border-slate-300 font-bold text-brand-maroon col-trip">${actualTripName}</td>`,
+            'col-issue': `<td class="p-1 border-r border-slate-300 col-issue"><input type="date" value="${f['DATE OF ISSUE'] || ''}" onchange="updateJemaahField('${id}', 'DATE OF ISSUE', this.value)" class="w-full text-xs p-1.5 rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent"></td>`,
+            'col-expire': `<td class="p-1 border-r border-slate-300 col-expire"><input type="date" value="${f['DATE OF EXPIRE'] || ''}" onchange="updateJemaahField('${id}', 'DATE OF EXPIRE', this.value)" class="w-full text-xs p-1.5 rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent"></td>`,
+            'col-notes': `<td class="p-1 border-r border-slate-300 col-notes"><input type="text" value="${f['Notes'] || ''}" onchange="updateJemaahField('${id}', 'Notes', this.value)" class="w-full text-xs p-1.5 rounded-lg border border-transparent hover:border-slate-300 focus:bg-white bg-transparent"></td>`,
             'col-board': `<td class="p-1 border-r border-slate-300 col-board">${renderMultiSelectCell(id, 'BOARD BASIS', f['BOARD BASIS'])}</td>`,
-            'col-train': `<td class="p-2 border-r border-slate-300 text-center col-train"><input type="checkbox" ${f['TRAIN'] ? 'checked' : ''} data-action="inline-edit-checkbox" data-id="${safeId}" data-field="TRAIN" class="jemaah-inline-input w-4 h-4 rounded text-brand-maroon focus:ring-brand-maroon"></td>`,
+            'col-train': `<td class="p-2 border-r border-slate-300 text-center col-train"><input type="checkbox" ${f['TRAIN'] ? 'checked' : ''} onchange="updateJemaahField('${id}', 'TRAIN', this.checked)" class="w-4 h-4 rounded text-brand-maroon focus:ring-brand-maroon"></td>`,
             'col-insuran': `<td class="p-1 border-r border-slate-300 col-insuran">${renderMultiSelectCell(id, 'INSURAN', f['INSURAN'])}</td>`,
             'col-pakej': `<td class="p-1 border-r border-slate-300 col-pakej">${renderSingleSelectCell(id, 'PAKEJ', f['PAKEJ'])}</td>`,
             'col-ejen': `<td class="p-1 col-ejen">${renderEjenCell(id, f['EJEN'])}</td>`
@@ -2168,115 +2175,53 @@ function renderJemaahRows(records) {
     applyHiddenColumns();
     applySavedColumnWidths();
     updateBulkActionBar();
-    initJemaahTableDelegation();
 }
-
-// FIX d: Event delegation untuk table - ganti 400+ inline handlers dengan 1 listener
-function initJemaahTableDelegation(){
-    const tbody = document.getElementById('jemaahTableBody');
-    if(!tbody || tbody.dataset.delegated === '1') return;
-    tbody.addEventListener('change', (e)=>{
-        const target = e.target;
-        if(!target.dataset) return;
-        const action = target.dataset.action;
-        const recId = target.dataset.id;
-        const field = target.dataset.field;
-        if(!recId || !field) return;
-        if(action === 'inline-edit'){
-            updateJemaahField(recId, field, target.value);
-        } else if(action === 'inline-edit-checkbox'){
-            updateJemaahField(recId, field, target.checked);
-        } else if(action === 'select-row'){
-            if(typeof toggleSelectJemaahRow === 'function') toggleSelectJemaahRow(recId, target.checked);
-        }
-    });
-    tbody.addEventListener('click', (e)=>{
-        const btn = e.target.closest('[data-action="expand"]');
-        if(btn && btn.dataset.id){
-            if(typeof openExpandModal === 'function') openExpandModal(btn.dataset.id);
-        }
-        const upBtn = e.target.closest('[data-action="trigger-upload"]');
-        if(upBtn){
-            const recId = upBtn.dataset.recId;
-            const field = upBtn.dataset.field;
-            if(typeof triggerInlineUpload === 'function') triggerInlineUpload(recId, field);
-        }
-    });
-    tbody.dataset.delegated = '1';
-}
-
 
 // 📁 RENDER CELL UNTUK DIRECT INLINE MULTIPLE UPLOAD WITH ANIMATED LOADING INDICATOR
 function renderInlineUploadCell(recId, fieldName, fileList, labelName) {
     const files = Array.isArray(fileList) ? fileList : [];
-    const safeRecId = escapeAttr(recId);
-    const safeField = escapeAttr(fieldName);
-    const safeLabel = escapeHtml(labelName);
     const cellBoxId = `cell-upload-${recId}-${fieldName.replace(/\s+/g, '_')}`;
-    const safeCellBoxId = escapeAttr(cellBoxId);
 
     let filesListHtml = '';
     if (files.length > 0) {
         filesListHtml = files.map((fileObj, idx) => {
-            const fileUrl = fileObj.url || '';
+            const fileUrl = fileObj.url;
             const fileName = fileObj.filename || `${labelName} ${idx + 1}`;
             const fileId = fileObj.id || '';
-            const safeFileName = escapeHtml(fileName);
-            const safeFileNameAttr = escapeAttr(fileName);
-            const safeUrl = escapeAttr(fileUrl);
-            const safeFileId = escapeAttr(fileId);
+            const safeFileName = fileName.replace(/'/g, "\\'");
             const isPdf = fileUrl && (fileUrl.toLowerCase().includes('.pdf') || fileName.toLowerCase().includes('.pdf'));
+
             return `
                 <div class="flex items-center space-x-1 my-0.5">
                     ${isPdf ? `
-                        <button onclick="openPreviewModal('${safeUrl}', '${safeFileNameAttr}', {recordId:'${safeRecId}', fieldName:'${safeField}', attachmentId:'${safeFileId}', filename:'${safeFileNameAttr}', fileUrl:'${safeUrl}'})" class="bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold px-1.5 py-0.5 rounded text-[10px] border border-rose-200 truncate max-w-[70px]" title="${safeFileName}">PDF</button>
+                        <button onclick="openPreviewModal('${fileUrl}', '${safeFileName}', {recordId:'${recId}', fieldName:'${fieldName}', attachmentId:'${fileId}', filename:'${safeFileName}'})" class="bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold px-1.5 py-0.5 rounded text-[10px] border border-rose-200 truncate max-w-[70px]" title="${fileName}">PDF</button>
                     ` : `
-                        <img src="${safeUrl}" onclick="openPreviewModal('${safeUrl}', '${safeFileNameAttr}', {recordId:'${safeRecId}', fieldName:'${safeField}', attachmentId:'${safeFileId}', filename:'${safeFileNameAttr}', fileUrl:'${safeUrl}'})" class="w-6 h-6 rounded object-cover border border-slate-300 cursor-pointer hover:scale-110 transition" title="${safeFileName}">
+                        <img src="${fileUrl}" onclick="openPreviewModal('${fileUrl}', '${safeFileName}', {recordId:'${recId}', fieldName:'${fieldName}', attachmentId:'${fileId}', filename:'${safeFileName}'})" class="w-6 h-6 rounded object-cover border border-slate-300 cursor-pointer hover:scale-110 transition" title="${fileName}">
                     `}
+                    <button onclick="confirmDeleteAttachment('${recId}', '${fieldName}', ${idx})" class="text-slate-400 hover:text-rose-600 p-0.5" title="Padam Fail Ini"><i class="fa-solid fa-xmark text-[10px]"></i></button>
                 </div>
             `;
         }).join('');
     }
-    const uploadBtn = `<button type="button" onclick="triggerInlineUpload('${safeRecId}', '${safeField}')" data-action="trigger-upload" data-rec-id="${safeRecId}" data-field="${safeField}" class="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 border border-slate-300 flex items-center justify-center text-[10px] text-slate-500" title="Upload ${safeLabel}"><i class="fa-solid fa-plus"></i></button>`;
-    return `<div id="${safeCellBoxId}" class="flex items-center justify-center gap-1 flex-wrap min-h-[28px] p-0.5 rounded hover:bg-slate-50 transition" ondrop="handleCellDrop(event, '${safeRecId}', '${safeField}', '${safeCellBoxId}')" ondragover="event.preventDefault(); this.classList.add('bg-rose-50','ring-1','ring-rose-300')" ondragleave="this.classList.remove('bg-rose-50','ring-1','ring-rose-300')">${filesListHtml}${uploadBtn}</div>`;
+
+    return `
+        <div id="${cellBoxId}" class="inline-flex flex-wrap items-center justify-center gap-1 w-full group/cell relative p-1 rounded-lg transition" 
+             ondragover="event.preventDefault(); this.classList.add('bg-rose-50', 'border-brand-maroon');" 
+             ondragleave="this.classList.remove('bg-rose-50', 'border-brand-maroon');"
+             ondrop="event.preventDefault(); this.classList.remove('bg-rose-50', 'border-brand-maroon'); if(event.dataTransfer.files) handleInlineFileUpload('${recId}', '${fieldName}', event.dataTransfer.files, '${cellBoxId}')">
+            
+            ${filesListHtml}
+
+            <label class="cursor-pointer bg-slate-100 hover:bg-brand-maroon hover:text-white text-slate-600 px-2 py-1 rounded text-[10px] font-bold transition flex items-center shadow-2xs" title="Klik atau Drop fail banyak di sini">
+                <i class="fa-solid fa-cloud-arrow-up ${files.length > 0 ? 'mr-0' : 'mr-1'}"></i>
+                <span class="${files.length > 0 ? 'hidden' : 'inline'}">Upload</span>
+                <input type="file" multiple class="hidden" accept="image/*,application/pdf" onchange="if(this.files.length) handleInlineFileUpload('${recId}', '${fieldName}', this.files, '${cellBoxId}')">
+            </label>
+        </div>
+    `;
 }
 
-function triggerInlineUpload(recId, fieldName){
-    try{
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.multiple = true;
-        input.accept = 'image/*,application/pdf,.pdf,.jpg,.jpeg,.png';
-        input.style.display = 'none';
-        document.body.appendChild(input);
-        input.onchange = (e)=>{
-            const files = e.target.files;
-            if(!files || !files.length) { document.body.removeChild(input); return; }
-            const cellBoxId = `cell-upload-${recId}-${fieldName.replace(/\s+/g, '_')}`;
-            if(typeof handleInlineFileUpload === 'function'){
-                handleInlineFileUpload(recId, fieldName, files, cellBoxId);
-            }
-            document.body.removeChild(input);
-        };
-        input.click();
-    }catch(err){
-        console.error('triggerInlineUpload error', err);
-    }
-}
-
-function handleCellDrop(e, recId, fieldName, cellBoxId){
-    try{
-        e.preventDefault();
-        if(e.currentTarget) e.currentTarget.classList.remove('bg-rose-50','ring-1','ring-rose-300');
-        if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length){
-            if(typeof handleInlineFileUpload === 'function'){
-                handleInlineFileUpload(recId, fieldName, e.dataTransfer.files, cellBoxId);
-            }
-        }
-    }catch(err){ console.error('handleCellDrop', err); }
-}
-
-
+// 📤 PROSES UPLOAD BANYAK FAIL TERUS DARI TABLE WITH CELL LOADING INDICATOR
 async function handleInlineFileUpload(recId, fieldName, fileList, cellBoxId) {
     const files = Array.from(fileList);
     if (files.length === 0) return;
@@ -3208,6 +3153,43 @@ function openAddJemaahModal() {
         }
         return html;
     
+// Hook setup after openAddJemaahModal original
+(function(){
+    const _origOpenAdd = window.openAddJemaahModal;
+    if(_origOpenAdd){
+        const original = _origOpenAdd;
+        window.openAddJemaahModal = function(){
+            original.apply(this, arguments);
+            setTimeout(()=>{
+                const modal = document.getElementById('expandRecordModal');
+                if(modal){
+                    modal.classList.remove('hidden');
+                    modal.style.display='flex';
+                }
+                setupAddModalFilePickers();
+            }, 100);
+        };
+    } else {
+        // if not yet defined, patch via event
+        document.addEventListener('DOMContentLoaded', ()=>{
+            const orig = window.openAddJemaahModal;
+            if(orig){
+                window.openAddJemaahModal = function(){
+                    orig.apply(this, arguments);
+                    setTimeout(()=>{
+                        const modal = document.getElementById('expandRecordModal');
+                        if(modal){
+                            modal.classList.remove('hidden');
+                            modal.style.display='flex';
+                        }
+                        setupAddModalFilePickers();
+                    }, 100);
+                };
+            }
+        });
+    }
+})();
+
 })();
 
     // V91: Board Basis multi - filter blank + Add option
@@ -3890,8 +3872,13 @@ function filterFieldsList(){
 
 function resetFieldsToDefault(){
   hiddenColumns = {};
-  // FIX: default must include AGE & DOB before DOB FOREIGNER
-  columnOrder = [...DEFAULT_COLUMN_ORDER];
+  columnOrder = [
+    'col-idx', 'col-name', 'col-picture', 'col-ic', 'col-passport', 
+    'col-gender', 'col-dobf', 'col-nat', 
+    'col-visa', 'col-passcopy', 'col-visacopy', 'col-mofabio', 
+    'col-fit', 'col-trip', 'col-issue', 'col-expire', 'col-notes',
+    'col-board', 'col-train', 'col-insuran', 'col-pakej', 'col-ejen'
+  ];
   localStorage.setItem('jemaahColOrder', JSON.stringify(columnOrder));
   localStorage.setItem('jemaahHiddenColumns', JSON.stringify(hiddenColumns));
   renderTableHeader();
@@ -3945,41 +3932,27 @@ function getAttachmentArray(attachmentField) {
 // 👁️ MODAL PREVIEW PDF & IMAGE (FIXED CLOSE & OUTSIDE CLICK)
 // ==========================================
 
-let currentPreviewContext = null;
-
-function openPreviewModal(fileUrl, title, context = null) {
+function openPreviewModal(fileUrl, title) {
     const modal = document.getElementById('attachmentPreviewModal');
     const imgEl = document.getElementById('previewImage');
     const pdfEl = document.getElementById('previewPdf');
     const titleEl = document.getElementById('previewTitle');
     const downloadBtn = document.getElementById('downloadAttachmentBtn');
-    const deleteBtn = document.getElementById('deleteAttachmentBtn');
 
     if (!modal || !fileUrl) {
         console.error("Modal atau URL fail tidak dijumpai!");
         return;
     }
 
-    currentPreviewContext = context || { fileUrl, filename: title, recordId: null, fieldName: null, attachmentId: null };
-    if(!currentPreviewContext.fileUrl) currentPreviewContext.fileUrl = fileUrl;
-    if(!currentPreviewContext.filename) currentPreviewContext.filename = title;
-
-    if (titleEl) titleEl.textContent = title || currentPreviewContext.filename || 'Pratonton Lampiran';
+    // Setkan Tajuk dan Pautan Muat Turun
+    if (titleEl) titleEl.textContent = title || 'Pratonton Lampiran';
     if (downloadBtn) {
         downloadBtn.href = fileUrl;
-        downloadBtn.setAttribute('download', title || currentPreviewContext.filename || 'fail_lampiran');
+        downloadBtn.setAttribute('download', title || 'fail_lampiran');
         downloadBtn.setAttribute('target', '_blank');
     }
 
-    if(deleteBtn){
-        if(currentPreviewContext && currentPreviewContext.recordId && currentPreviewContext.fieldName){
-            deleteBtn.classList.remove('hidden');
-            deleteBtn.style.display = 'flex';
-        } else {
-            deleteBtn.style.display = 'flex';
-        }
-    }
-
+    // Semak sama ada fail ini PDF atau Gambar
     const lowerUrl = fileUrl.toLowerCase();
     const lowerTitle = (title || '').toLowerCase();
     
@@ -4009,135 +3982,26 @@ function openPreviewModal(fileUrl, title, context = null) {
         }
     }
 
+    // Paparkan Modal
     modal.classList.remove('hidden');
-    modal.style.display = 'flex';
 }
 
-function deleteCurrentPreviewAttachment(){
-    if(!currentPreviewContext){
-        alert('Tiada maklumat fail untuk dipadam.');
-        return;
-    }
-    const ctx = currentPreviewContext;
-    const fileName = ctx.filename || ctx.fileUrl || 'fail ini';
-    
-    const confirmMsg = `⚠️ PADAM FAIL?
-
-Anda pasti mahu memadam:
-"${fileName}"
-
-Tindakan ini akan buang fail dari rekod jemaah dan tidak boleh undur.
-
-Teruskan?`;
-    
-    if(!confirm(confirmMsg)){
-        return;
-    }
-    
-    const secondConfirm = confirm(`Sahkan sekali lagi:
-Padam "${fileName}" dari ${ctx.fieldName || 'attachment'}?`);
-    if(!secondConfirm) return;
-
-    if(!ctx.recordId || !ctx.fieldName){
-        alert('Tidak dapat padam: maklumat rekod tidak lengkap.');
-        return;
-    }
-
-    try{
-        const targetRec = allJemaahUmrahRecords.find(r => r.id === ctx.recordId);
-        if(!targetRec || !targetRec.fields[ctx.fieldName] || !Array.isArray(targetRec.fields[ctx.fieldName])){
-            alert('Rekod tidak dijumpai atau tiada lampiran.');
-            return;
-        }
-        
-        let idxToDelete = -1;
-        targetRec.fields[ctx.fieldName].forEach((att, i)=>{
-            if(idxToDelete !== -1) return;
-            if(ctx.attachmentId && att.id === ctx.attachmentId) idxToDelete = i;
-            else if(ctx.fileUrl && att.url === ctx.fileUrl) idxToDelete = i;
-            else if(ctx.filename && att.filename === ctx.filename) idxToDelete = i;
-        });
-        
-        if(idxToDelete === -1){
-            targetRec.fields[ctx.fieldName].forEach((att, i)=>{
-                if(idxToDelete !== -1) return;
-                if(att.filename && fileName && att.filename.toLowerCase() === fileName.toLowerCase()) idxToDelete = i;
-            });
-        }
-
-        if(idxToDelete === -1){
-            alert('Fail tidak dijumpai dalam senarai. Cuba refresh.');
-            return;
-        }
-
-        const delBtn = document.getElementById('deleteAttachmentBtn');
-        let originalHTML = '';
-        if(delBtn){
-            originalHTML = delBtn.innerHTML;
-            delBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Memadam...';
-            delBtn.disabled = true;
-        }
-
-        (async ()=>{
-            try{
-                const updatedList = targetRec.fields[ctx.fieldName].filter((_, idx) => idx !== idxToDelete);
-                const airtableUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/DATA%20JEMAAH%20UMRAH/${ctx.recordId}`;
-                const res = await fetch(airtableUrl, {
-                    method: 'PATCH',
-                    headers: {
-                        'Authorization': `Bearer ${AIRTABLE_PAT}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        fields: {
-                            [ctx.fieldName]: updatedList
-                        }
-                    })
-                });
-
-                if(res.ok){
-                    const result = await res.json();
-                    targetRec.fields[ctx.fieldName] = result.fields[ctx.fieldName] || updatedList;
-                    closePreviewModal();
-                    if(typeof filterAndRenderJemaahGrid === 'function') filterAndRenderJemaahGrid();
-                    alert(`✅ Fail "${fileName}" berjaya dipadam.`);
-                } else {
-                    const txt = await res.text();
-                    console.error('Delete failed', txt);
-                    alert('❌ Gagal memadam fail. Sila cuba lagi.');
-                }
-            }catch(e){
-                console.error('Delete exception', e);
-                alert('❌ Ralat rangkaian semasa memadam.');
-            }finally{
-                const delBtn2 = document.getElementById('deleteAttachmentBtn');
-                if(delBtn2){
-                    delBtn2.innerHTML = originalHTML;
-                    delBtn2.disabled = false;
-                }
-            }
-        })();
-
-    }catch(e){
-        console.error(e);
-        alert('Ralat semasa cuba padam.');
-    }
-}
-
+/**
+ * Menutup Modal Preview dan mengosongkan sumber fail
+ */
 function closePreviewModal() {
     const modal = document.getElementById('attachmentPreviewModal');
     const imgEl = document.getElementById('previewImage');
     const pdfEl = document.getElementById('previewPdf');
+
+    // Resetkan src supaya fail/PDF berhenti dimuatkan
     if (pdfEl) pdfEl.src = '';
     if (imgEl) imgEl.src = '';
+
     if (modal) {
         modal.classList.add('hidden');
-        modal.style.display = 'none';
     }
-    currentPreviewContext = null;
 }
-
-
 
 // 🎯 TUTUP MODAL BILA KLIK LUAR KOTAK (CLICK OUTSIDE BACKDROP)
 document.addEventListener('click', function (event) {
@@ -4239,6 +4103,43 @@ function filterJemaahTable() {
   `;
   document.head.appendChild(style);
 
+// Hook setup after openAddJemaahModal original
+(function(){
+    const _origOpenAdd = window.openAddJemaahModal;
+    if(_origOpenAdd){
+        const original = _origOpenAdd;
+        window.openAddJemaahModal = function(){
+            original.apply(this, arguments);
+            setTimeout(()=>{
+                const modal = document.getElementById('expandRecordModal');
+                if(modal){
+                    modal.classList.remove('hidden');
+                    modal.style.display='flex';
+                }
+                setupAddModalFilePickers();
+            }, 100);
+        };
+    } else {
+        // if not yet defined, patch via event
+        document.addEventListener('DOMContentLoaded', ()=>{
+            const orig = window.openAddJemaahModal;
+            if(orig){
+                window.openAddJemaahModal = function(){
+                    orig.apply(this, arguments);
+                    setTimeout(()=>{
+                        const modal = document.getElementById('expandRecordModal');
+                        if(modal){
+                            modal.classList.remove('hidden');
+                            modal.style.display='flex';
+                        }
+                        setupAddModalFilePickers();
+                    }, 100);
+                };
+            }
+        });
+    }
+})();
+
 })();
 
 
@@ -4261,6 +4162,43 @@ function filterJemaahTable() {
       fetchJemaahUmrahData();
     }
   },500);
+
+// Hook setup after openAddJemaahModal original
+(function(){
+    const _origOpenAdd = window.openAddJemaahModal;
+    if(_origOpenAdd){
+        const original = _origOpenAdd;
+        window.openAddJemaahModal = function(){
+            original.apply(this, arguments);
+            setTimeout(()=>{
+                const modal = document.getElementById('expandRecordModal');
+                if(modal){
+                    modal.classList.remove('hidden');
+                    modal.style.display='flex';
+                }
+                setupAddModalFilePickers();
+            }, 100);
+        };
+    } else {
+        // if not yet defined, patch via event
+        document.addEventListener('DOMContentLoaded', ()=>{
+            const orig = window.openAddJemaahModal;
+            if(orig){
+                window.openAddJemaahModal = function(){
+                    orig.apply(this, arguments);
+                    setTimeout(()=>{
+                        const modal = document.getElementById('expandRecordModal');
+                        if(modal){
+                            modal.classList.remove('hidden');
+                            modal.style.display='flex';
+                        }
+                        setupAddModalFilePickers();
+                    }, 100);
+                };
+            }
+        });
+    }
+})();
 
 })();
 
@@ -4299,7 +4237,6 @@ function filterJemaahTable() {
     modal.classList.remove('hidden');
     modal.style.display='flex';
   };
-})();
 
 // V54: Auto-close dropdowns when clicking outside - fix image_c96f0e.png double dropdown overlap
 document.addEventListener('click', function(e){
@@ -4396,34 +4333,27 @@ document.addEventListener('click', function(e){
     }
   });
 
-})();
-
-
-
-
-// FIX a: Single guarded hook for openAddJemaahModal - elak double binding
+// Hook setup after openAddJemaahModal original
 (function(){
-    if(window.__jemaahModalHooked) return;
-    window.__jemaahModalHooked = true;
-    const _orig = window.openAddJemaahModal;
-    function wrappedOpen(){
-        if(_orig) _orig.apply(this, arguments);
-        setTimeout(()=>{
-            const modal = document.getElementById('expandRecordModal');
-            if(modal){
-                modal.classList.remove('hidden');
-                modal.style.display='flex';
-            }
-            if(typeof setupAddModalFilePickers === 'function') setupAddModalFilePickers();
-        }, 100);
-    }
-    if(_orig){
-        window.openAddJemaahModal = wrappedOpen;
+    const _origOpenAdd = window.openAddJemaahModal;
+    if(_origOpenAdd){
+        const original = _origOpenAdd;
+        window.openAddJemaahModal = function(){
+            original.apply(this, arguments);
+            setTimeout(()=>{
+                const modal = document.getElementById('expandRecordModal');
+                if(modal){
+                    modal.classList.remove('hidden');
+                    modal.style.display='flex';
+                }
+                setupAddModalFilePickers();
+            }, 100);
+        };
     } else {
+        // if not yet defined, patch via event
         document.addEventListener('DOMContentLoaded', ()=>{
             const orig = window.openAddJemaahModal;
-            if(orig && !window.__jemaahModalHooked2){
-                window.__jemaahModalHooked2 = true;
+            if(orig){
                 window.openAddJemaahModal = function(){
                     orig.apply(this, arguments);
                     setTimeout(()=>{
@@ -4432,7 +4362,7 @@ document.addEventListener('click', function(e){
                             modal.classList.remove('hidden');
                             modal.style.display='flex';
                         }
-                        if(typeof setupAddModalFilePickers === 'function') setupAddModalFilePickers();
+                        setupAddModalFilePickers();
                     }, 100);
                 };
             }
@@ -4440,9 +4370,53 @@ document.addEventListener('click', function(e){
     }
 })();
 
+})();
+
+
+
 document.addEventListener('click', function(e){
   if(!e.target.closest('[data-cell-dropdown]') && !e.target.closest('.cell-dropdown-wrapper')){
     if(typeof closeAllCellDropdowns === 'function') closeAllCellDropdowns();
   }
 });
 
+
+
+// Hook setup after openAddJemaahModal original
+(function(){
+    const _origOpenAdd = window.openAddJemaahModal;
+    if(_origOpenAdd){
+        const original = _origOpenAdd;
+        window.openAddJemaahModal = function(){
+            original.apply(this, arguments);
+            setTimeout(()=>{
+                const modal = document.getElementById('expandRecordModal');
+                if(modal){
+                    modal.classList.remove('hidden');
+                    modal.style.display='flex';
+                }
+                setupAddModalFilePickers();
+            }, 100);
+        };
+    } else {
+        // if not yet defined, patch via event
+        document.addEventListener('DOMContentLoaded', ()=>{
+            const orig = window.openAddJemaahModal;
+            if(orig){
+                window.openAddJemaahModal = function(){
+                    orig.apply(this, arguments);
+                    setTimeout(()=>{
+                        const modal = document.getElementById('expandRecordModal');
+                        if(modal){
+                            modal.classList.remove('hidden');
+                            modal.style.display='flex';
+                        }
+                        setupAddModalFilePickers();
+                    }, 100);
+                };
+            }
+        });
+    }
+})();
+
+})();
