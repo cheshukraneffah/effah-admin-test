@@ -1314,12 +1314,6 @@ function renderLocationTabs(){
   container.innerHTML=html;
 }
 
-
-
-
-
-
-
 async function fetchWithTimeout(url, opts={}, timeoutMs=12000){
   const controller = new AbortController();
   const id = setTimeout(()=>controller.abort(), timeoutMs);
@@ -1479,7 +1473,7 @@ async function fetchRoomingData(forceReload=false){
     console.log('FETCH ROOMING START untuk trip', tripId);
     
     // CUBA FILTER OPTIMIZED DULU - 1 formula paling reliable
-    const filterFormula = `FIND("${tripId}", ARRAYJOIN({TRIP} & ""))`;
+    const filterFormula = `SEARCH("," & "${tripId}" & ",", "," & ARRAYJOIN({TRIP} & "") & ",")`; // exact match pakai delimiter koma untuk elak trip lain yang ID hampir sama
     console.log('Cuba optimized filter:', filterFormula);
 
     let allRooms=null, allJems=null, allStaffRaw=null;
@@ -1572,7 +1566,6 @@ async function fetchRoomingData(forceReload=false){
     try{ hideRoomingLoading(); }catch(e){}
   }
 }
-
 
 
 function hideRoomingLoading(){
@@ -1696,6 +1689,7 @@ function renderNamelist(){
         return false;
       });
     } else {
+      // Legacy pakej filter
       const upper = filterVal.toUpperCase();
       filtered=filtered.filter(r=>getPakejVal(r.fields).toUpperCase()===upper);
     }
@@ -1708,7 +1702,8 @@ function renderNamelist(){
       else return nameB.localeCompare(nameA);
     });
   }
-  // OPTIMIZED: Pre-compute assigned sets O(n+m) bukan O(n*m)
+  const total=allRoomingJemaah.length;
+  // OPTIMIZED V119: precompute assigned sets O(n+m) bukan O(n*m)
   const assignedAnySet = new Set();
   const assignedInLocSet = new Set();
   const assignedTanpaInLocSet = new Set();
@@ -1727,16 +1722,12 @@ function renderNamelist(){
         if(recLoc===locUpper) assignedTanpaInLocSet.add(id);
       }
     }
-  }catch(e){ console.warn('precompute assigned fail', e); }
-
-  const total=allRoomingJemaah.length;
+  }catch(e){ console.warn('precompute fail', e); }
   const belumGlobal = total - assignedAnySet.size;
-  // belumInLoc = yang tak ada di location semasa
   let belumInLoc = 0;
   for(const r of allRoomingJemaah){
     if(!assignedInLocSet.has(r.id) && !assignedTanpaInLocSet.has(r.id)) belumInLoc++;
   }
-
   const totalEl=document.getElementById('totalJemaahBadge'); if(totalEl) { totalEl.textContent=total+' Jumlah'; totalEl.style.display='none'; }
   const belumEl=document.getElementById('belumAssignBadge'); if(belumEl) { belumEl.textContent=belumInLoc+' Belum Ditetapkan di '+activeLocation; belumEl.style.display='none'; }
   const topBelum=document.getElementById('belumAssignTop'); if(topBelum) { topBelum.textContent=belumGlobal+' Belum Ditetapkan'; topBelum.style.display='none'; }
@@ -1745,30 +1736,112 @@ function renderNamelist(){
   const topAssignedBadge=document.getElementById('topAssignedBadge'); if(topAssignedBadge) topAssignedBadge.style.display='none';
   if(total===0){ cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400">Tiada jemaah untuk trip ini</div>'; return; }
   cont.innerHTML=filtered.map((r,i)=>{
-    const name=getJemaahName(r.fields);
-    const assignedNormalInLoc=assignedInLocSet.has(r.id);
-    const assignedTanpaInLoc=assignedTanpaInLocSet.has(r.id);
+        const name=getJemaahName(r.fields);
+    // guna Set yang dah precompute kalau ada, fallback ke function lama
+    const assignedNormalInLoc = (typeof assignedInLocSet!=='undefined' && assignedInLocSet.has) ? assignedInLocSet.has(r.id) : isJemaahAssignedInLocation(r.id, activeLocation);
+    const assignedTanpaInLoc = (typeof assignedTanpaInLocSet!=='undefined' && assignedTanpaInLocSet.has) ? assignedTanpaInLocSet.has(r.id) : allRoomingRecords.some(rec=> (rec.fields['LOKASI / CITY']||'MEKAH').toUpperCase()===activeLocation.toUpperCase() && ((rec.fields['JEMAAH TANPA KATIL']||[]).includes(r.id)));
     const assignedInLoc = assignedNormalInLoc || assignedTanpaInLoc;
-    const assignedGlobal=assignedAnySet.has(r.id);
+    const assignedGlobal = (typeof assignedAnySet!=='undefined' && assignedAnySet.has) ? assignedAnySet.has(r.id) : isJemaahAssignedAny(r.id);
+    // FIX ghost dropdown: jangan guna opacity-60 sebab child dropdown ikut transparent, guna bg saja
     const rowCls=assignedInLoc?'bg-slate-100 text-slate-500':'hover:bg-slate-50';
     const drag=assignedInLoc?'':`onclick="selectJemaahForAssign('${r.id}')" data-jemaah-id="${r.id}" style="cursor:pointer;"`;
     let statusIcon = assignedInLoc? `<button onclick="removeJemaahFromCurrentLoc('${r.id}')" class="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-[10px]" title="Keluarkan dari ${activeLocation}">✕</button>` : `<button onclick="quickAssign('${r.id}')" class="w-5 h-5 rounded-full border bg-slate-100 hover:bg-slate-200 text-[10px]">+</button>`;
     if(!assignedInLoc && assignedGlobal) statusIcon = `<button onclick="quickAssign('${r.id}')" class="w-5 h-5 rounded-full border bg-amber-100 hover:bg-amber-200 text-[10px]" title="Sudah ada di lokasi lain, boleh tambah di ${activeLocation} juga">+</button>`;
     const fbArr = getBoardArray(r.fields);
-    const fb = fbArr.length>0 ? fbArr.join(', ') : '-';
-    const insArr = (typeof getInsuranArrayV2==='function' ? getInsuranArrayV2(r.fields) : getInsuranArray(r.fields));
-    const ins = insArr.length>0 ? insArr.join(', ') : '-';
-    const pakej = getPakejVal(r.fields)||'-';
-    const visa = getVisaVal(r.fields)||'-';
-    const train = isTrainChecked(r.fields) ? '✓' : '-';
-    return `<div class="flex items-center justify-between px-3 py-2 border-b border-slate-100 text-[11px] ${rowCls}" ${drag}>
-      <div class="flex-1 min-w-0">
-        <div class="font-bold truncate">${name}</div>
-        <div class="text-[9px] text-slate-500 truncate">${pakej} • ${fb} • ${visa}</div>
+    const fb = fbArr[0] || '-';
+    const fbDisplay = fbArr.length ? fbArr.join(', ') : '-';
+    const pk = getPakejVal(r.fields) || '-';
+    const trChecked = isTrainChecked(r.fields);
+    const insArr = getInsuranArray(r.fields);
+    let fbCls = 'bg-white border-slate-200';
+    // Determine class based on first or combined
+    if(fbArr.some(x=>x.includes('MEKAH'))) fbCls='bg-orange-100 border-orange-200 text-orange-800';
+    else if(fbArr.some(x=>x.includes('MADINAH'))) fbCls='bg-blue-100 border-blue-200 text-blue-800';
+    else if(fbArr.includes('FULLBOARD')) fbCls='bg-emerald-100 border-emerald-200 text-emerald-800';
+    else if(fbArr.length===0) fbCls='bg-white border-dashed border-slate-300 text-slate-400';
+    const boardOptions = (roomingFieldOptions['BOARD BASIS'] && roomingFieldOptions['BOARD BASIS'].length>0) ? roomingFieldOptions['BOARD BASIS'] : ([]);
+    const boardOptionsWithAdd = boardOptions; // dynamic
+    const boardCheckboxes = boardOptionsWithAdd.map(opt=>{
+      const checked = fbArr.includes(opt);
+      return `<label class="flex items-center gap-1.5 px-2 py-1 hover:bg-slate-50 rounded text-[10px] cursor-pointer"><input type="checkbox" ${checked?'checked':''} onchange="toggleBoardMulti('${r.id}','${opt}')" class="w-3 h-3 accent-[#7A0C2E]"> ${opt}</label>`;
+    }).join('');
+    
+
+    const insArr2 = getInsuranArrayV2 ? getInsuranArrayV2(r.fields) : getInsuranArray(r.fields);
+      const insDisplay = insArr2.length ? insArr2.join(', ') : '- INSURAN';
+      const insCls = insArr2.length ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-slate-200 text-slate-400';
+      const insuranOptions = (roomingFieldOptions['INSURAN'] && roomingFieldOptions['INSURAN'].length>0) ? roomingFieldOptions['INSURAN'] : ([]);
+      const insCheckboxes = insuranOptions.map(opt=>{
+        const checked = insArr2.includes(opt);
+        return `<label class="flex items-center gap-1.5 px-2 py-1.5 hover:bg-slate-50 rounded text-[10px] cursor-pointer"><input type="checkbox" ${checked?'checked':''} onchange="toggleInsuranMulti('${r.id}','${opt}')" class="w-3.5 h-3.5 accent-[#7A0C2E]"> <span class="px-1.5 py-0.5 rounded-full text-[8px] ${opt==='TAKAFUL'?'bg-emerald-100':opt==='ETIQA'?'bg-amber-100':'bg-blue-100'}">${opt}</span></label>`;
+      }).join('');
+      const insToggle = `<div class="relative w-full">
+        <button onclick="event.stopPropagation(); toggleInsuranDropdown('${r.id}')" class="text-[7px] border rounded-full px-2 py-0.5 font-bold ${insCls} outline-none w-full truncate text-left flex items-center justify-between bg-white opacity-100" style="opacity:1;" title="INSURAN - klik untuk pilih">
+          <span class="truncate">${insDisplay}</span><span class="ml-1">▼</span>
+        </button>
+        <div id="insuranDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1" style="background:#ffffff !important; opacity:1 !important;">
+          ${insCheckboxes}
+          <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('INSURAN', '${r.id}')" class="w-full text-left px-2 py-1 text-[8px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded mb-1">+ Tambah Pilihan</button></div>
+          <div class="border-t border-slate-100 mt-1 pt-1 flex justify-between">
+            <button onclick="clearInsuranMulti('${r.id}'); closeInsuranDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-slate-100">Padam</button>
+            <button onclick="closeInsuranDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-[#7A0C2E] text-white">OK</button>
+          </div>
+        </div>
+      </div>`;
+
+        return `<div ${drag} class="grid grid-cols-12 items-center px-1.5 py-1.5 text-[11px] border-b border-slate-50 ${rowCls}">
+      <div class="col-span-1 text-slate-400 text-[10px]">${String(i+1).padStart(2,'0')}</div>
+      <div class="col-span-3 font-medium truncate text-[10px] ${assignedInLoc?'text-slate-500 italic':''}" title="${name}">${name}</div>
+      <div class="col-span-2 flex items-center gap-0.5 relative">
+        <div class="relative w-full">
+          <button onclick="event.stopPropagation(); toggleBoardDropdown('${r.id}')" class="text-[7px] border rounded-full px-2 py-0.5 font-bold ${fbCls} outline-none w-full truncate text-left flex items-center justify-between bg-white opacity-100" style="opacity:1; isolation:isolate;" title="BOARD BASIS - klik untuk pilih 2">
+            <span class="truncate">${fbDisplay}</span><span class="ml-1">▼</span>
+          </button>
+          <div id="boardDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1" style="background:#ffffff !important; opacity:1 !important; isolation:isolate;">
+            ${boardCheckboxes}
+            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('BOARD BASIS', '${r.id}')" class="w-full text-left px-2 py-1 text-[8px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded mb-1">+ Tambah Pilihan</button></div>
+            <div class="border-t border-slate-100 mt-1 pt-1 flex justify-between">
+              <button onclick="clearBoardMulti('${r.id}'); closeBoardDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-slate-100">Padam</button>
+              <button onclick="closeBoardDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-[#7A0C2E] text-white">OK</button>
+            </div>
+            <div class="text-[7px] text-slate-400 px-2 mt-1">Boleh pilih 2: BB (MEKAH) + FB (MADINAH)</div>
+          </div>
+        </div>
       </div>
-      <div class="flex items-center gap-2 ml-2">${statusIcon}</div>
+      <div class="col-span-1 text-center">
+        <input type="checkbox" ${trChecked?'checked':''} onchange="updateJemaahCheckbox('${r.id}','TRAIN',this.checked)" class="w-3.5 h-3.5 accent-[#7A0C2E] rounded" title="TRAIN">
+      </div>
+      <div class="col-span-2 flex items-center gap-0.5 flex-wrap justify-center">
+        ${insToggle}
+      </div>
+      <div class="col-span-1 flex items-center gap-0.5 relative">
+        <div class="relative w-full cell-dropdown-wrapper">
+          <button onclick="event.stopPropagation(); toggleCellDropdown('pakejDrop-${r.id}')" class="text-[7px] border border-slate-200 rounded-full px-2 py-0.5 bg-white w-full max-w-[70px] truncate font-bold text-[7px] text-left flex items-center justify-between ${pk==='-'?'text-slate-400':'text-slate-700'}" title="PAKEJ">
+            <span class="truncate">${pk||'-'}</span><span class="ml-1">▼</span>
+          </button>
+          <div id="pakejDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[180px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1 max-h-60 overflow-y-auto">
+            ${(roomingFieldOptions['PAKEJ']||[]).map(o=>`<button onclick="event.stopPropagation(); updateJemaahField('${r.id}','PAKEJ','${o}'); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${pk===o?'bg-slate-900 text-white font-bold':''}">${o}</button>`).join('')}
+            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('PAKEJ', '${r.id}')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Tambah Pilihan</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-span-2 flex items-center justify-center relative">
+        <div class="relative w-full cell-dropdown-wrapper">
+          <button onclick="event.stopPropagation(); toggleCellDropdown('visaDrop-${r.id}')" class="text-[7px] border border-slate-300 rounded-full px-2 py-0.5 bg-white w-full max-w-[70px] truncate font-bold text-[7px] ${getVisaClass(getVisaVal(r.fields))} text-left flex items-center justify-between" title="STATUS VISA">
+            <span class="truncate">${getVisaVal(r.fields)||'- VISA'}</span><span class="ml-1">▼</span>
+          </button>
+          <div id="visaDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1 max-h-60 overflow-y-auto">
+            <button onclick="event.stopPropagation(); updateJemaahField('${r.id}','STATUS VISA',''); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${!getVisaVal(r.fields)?'bg-slate-900 text-white font-bold':''}">- VISA</button>
+            ${(roomingFieldOptions['STATUS VISA']||[]).map(o=>`<button onclick="event.stopPropagation(); updateJemaahField('${r.id}','STATUS VISA','${o}'); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${getVisaVal(r.fields)===o?'bg-slate-900 text-white font-bold':''}">${o}</button>`).join('')}
+            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('STATUS VISA', '${r.id}')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Tambah Pilihan</button></div>
+          </div>
+        </div>
+      </div>
     </div>`;
   }).join('');
+  makeNamelistSticky();
+  const sortIconEl=document.getElementById('sortIcon');
+  if(sortIconEl) sortIconEl.textContent = roomingSortActive ? (roomingSortDir==='asc'?'↑ A-Z':'↓ Z-A') : '↕';
 }
 
 
