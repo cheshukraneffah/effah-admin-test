@@ -1348,28 +1348,46 @@ function getTripNameForFilter(tripId){
   return '';
 }
 
-async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100){
+
+async function fetchWithTimeout(url, opts={}, timeoutMs=15000){
+  const controller = new AbortController();
+  const id = setTimeout(()=>controller.abort(), timeoutMs);
+  try{
+    const res = await fetch(url, {...opts, signal: controller.signal});
+    clearTimeout(id);
+    return res;
+  }catch(e){
+    clearTimeout(id);
+    throw e;
+  }
+}
+
+async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100, fields=null){
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); 
   const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
   if(!base||!pat) return [];
   let all=[], offset='';
   let retries=0;
   const encodedTable = encodeURIComponent(tableName);
+  let fieldsParam = '';
+  if(fields && fields.length>0){
+    fieldsParam = fields.map(f=>`&fields%5B%5D=${encodeURIComponent(f)}`).join('');
+  }
   do{
-    let url = `https://api.airtable.com/v0/${base}/${encodedTable}?pageSize=${pageSize}${offset?`&offset=${offset}`:''}`;
+    let url = `https://api.airtable.com/v0/${base}/${encodedTable}?pageSize=${pageSize}${offset?`&offset=${offset}`:''}${fieldsParam}`;
     if(filterFormula){
       url += `&filterByFormula=${encodeURIComponent(filterFormula)}`;
     }
     try{
-      const res = await fetchWithTimeout(url, {headers:{Authorization:`Bearer ${pat}`}}, 25000);
+      const res = await fetchWithTimeout(url, {headers:{Authorization:`Bearer ${pat}`}}, 15000);
       if(!res.ok){
-        const t = await res.text().then(s=>s.substring(0,800)).catch(()=>'');
+        const t = await res.text().then(s=>s.substring(0,500)).catch(()=>'');
         if(res.status===429){
           await new Promise(r=>setTimeout(r, 2000));
           continue;
         }
         if(res.status===422){
-          console.warn('422 filter formula invalid untuk', tableName, filterFormula, t);
+          console.warn('422 filter invalid untuk', tableName, filterFormula, t);
           return null;
         }
         console.warn(`Gagal fetch ${tableName} ${res.status}`, t);
@@ -1382,24 +1400,67 @@ async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100){
     }catch(e){
       console.error(`fetch ${tableName} error`, e.name);
       if(e.name==='AbortError'){
-        console.warn('Timeout, retry sekali lagi');
-        if(retries<1){
-          retries++;
-          await new Promise(r=>setTimeout(r, 1500));
-          continue;
-        }
+        if(retries<1){ retries++; await new Promise(r=>setTimeout(r, 1500)); continue; }
         break;
       }
-      if(retries<2){
-        retries++;
-        await new Promise(r=>setTimeout(r, 1000));
-        continue;
-      }
+      if(retries<2){ retries++; await new Promise(r=>setTimeout(r, 1000)); continue; }
       break;
     }
   }while(offset);
   return all;
 }
+
+async function fetchAirtableAll(tableName, pageSize=100, fields=null){
+  const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); 
+  const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
+  if(!base||!pat) return [];
+  let all=[], offset='';
+  let attempts=0;
+  const encodedTable = encodeURIComponent(tableName);
+  let fieldsParam = '';
+  if(fields && fields.length>0){
+    fieldsParam = fields.map(f=>`&fields%5B%5D=${encodeURIComponent(f)}`).join('');
+  }
+  do{
+    const url = `https://api.airtable.com/v0/${base}/${encodedTable}?pageSize=${pageSize}${offset?`&offset=${offset}`:''}${fieldsParam}`;
+    try{
+      const res = await fetchWithTimeout(url, {headers:{Authorization:`Bearer ${pat}`}}, 15000);
+      if(!res.ok){
+        if(res.status===429){ await new Promise(r=>setTimeout(r, 2000)); continue; }
+        break;
+      }
+      const data = await res.json();
+      if(data.records) all = all.concat(data.records);
+      offset = data.offset||'';
+      attempts=0;
+    }catch(e){
+      if(e.name==='AbortError') break;
+      if(attempts<2){ attempts++; await new Promise(r=>setTimeout(r, 1000)); continue; }
+      break;
+    }
+  }while(offset);
+  return all;
+}
+
+function getTripNameForFilter(tripId){
+  try{
+    if(window.selectedTripRecord && window.selectedTripRecord.fields){
+      const f = window.selectedTripRecord.fields;
+      return f['Trip'] || f['NAME'] || '';
+    }
+    const allTrips = window.allTripUmrahRecords||window.allTripRecords||window.allTrips||[];
+    const found = allTrips.find(t=>t.id===tripId);
+    if(found && found.fields){
+      return found.fields['Trip'] || found.fields['NAME'] || '';
+    }
+    const sel=document.getElementById('roomingTripSelect');
+    if(sel && sel.selectedOptions && sel.selectedOptions[0]){
+      return sel.selectedOptions[0].textContent.trim() || '';
+    }
+  }catch(e){}
+  return '';
+}
+
 
 async function fetchAirtableAll(tableName, pageSize=100){
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); 
@@ -1435,6 +1496,7 @@ async function fetchAirtableAll(tableName, pageSize=100){
   }while(offset);
   return all;
 }
+
 
 async function fetchRoomingData(forceReload=false){
   try{
@@ -1480,7 +1542,7 @@ async function fetchRoomingData(forceReload=false){
         if(cached){
           const parsed = JSON.parse(cached);
           const age = now - (parsed._time||0);
-          if(age < 300000 && parsed.jemaah && parsed.rooms){
+          if(age < 300000 && parsed.jemaah && parsed.rooms && (parsed.jemaah.length>0 || parsed.rooms.length>0)){
             console.log('LOCALSTORAGE CACHE HIT umur', Math.round(age/1000)+'s');
             allRoomingRecords = parsed.rooms;
             allRoomingJemaah = parsed.jemaah;
@@ -1500,6 +1562,8 @@ async function fetchRoomingData(forceReload=false){
             try{ hideRoomingLoading(); }catch(e){}
             _roomingIsLoading=false;
             return;
+          } else if(parsed.jemaah && parsed.jemaah.length===0){
+            localStorage.removeItem('effah_rooming_cache_'+tripId);
           }
         }
       }catch(e){}
@@ -1508,25 +1572,7 @@ async function fetchRoomingData(forceReload=false){
     _roomingIsLoading = true;
     showRoomingLoading(); 
     try{ populateRoomingTripDropdown(); }catch(e){}
-    if(!tripId){
-      const sel=document.getElementById('roomingTripSelect');
-      if(sel && sel.value) tripId=sel.value;
-    }
-    if(!tripId){
-      console.log('Tiada trip dipilih - papar placeholder Sila pilih trip');
-      const cont=document.getElementById('namelistContainer');
-      if(cont) cont.innerHTML='<div class="p-8 text-center"><div class="text-[13px] font-bold text-slate-700 mb-1">Sila pilih trip</div><div class="text-[11px] text-slate-400">Pilih trip dari dropdown di atas untuk papar senarai jemaah</div></div>';
-      const grid=document.getElementById('roomingGrid');
-      if(grid) grid.innerHTML='<div class="col-span-2 p-8 text-center border border-dashed rounded-2xl bg-white"><div class="text-[11px] text-slate-400">Sila pilih trip dahulu</div></div>';
-      try{ hideRoomingLoading(); }catch(e){}
-      _roomingIsLoading=false;
-      return;
-    }
-    if(!tripId){ 
-      hideRoomingLoading();
-      _roomingIsLoading=false;
-      return; 
-    }
+
     const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); 
     const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
     if(!base||!pat){ 
@@ -1537,6 +1583,7 @@ async function fetchRoomingData(forceReload=false){
     console.log('FETCH ROOMING START', tripId);
     let allRooms=null, allJems=null, allStaffRaw=null;
     let optimizedSuccess = false;
+
     const tripName = getTripNameForFilter(tripId);
     const formulaIdExact = `SEARCH("," & "${tripId}" & ",", "," & ARRAYJOIN({TRIP} & "") & ",")`;
     let formulaName = null;
@@ -1546,6 +1593,7 @@ async function fetchRoomingData(forceReload=false){
     }
     const formulasToTry = [formulaIdExact];
     if(formulaName) formulasToTry.push(formulaName);
+
     for(let formula of formulasToTry){
       console.log('Cuba filter:', formula);
       try{
@@ -1564,27 +1612,70 @@ async function fetchRoomingData(forceReload=false){
         [allRooms, allJems, allStaffRaw] = results;
       }catch(e){ console.warn('filter error', e); }
     }
+
     if(!optimizedSuccess || !allJems || allJems.length===0){
-      console.warn('FALLBACK fetchAll + client filter');
+      console.warn('FALLBACK 2-step cepat: fetch TRIP sahaja dulu (ringan)');
       try{
-        const [roomsAll, jemsAll, staffAll] = await Promise.all([
-          fetchAirtableAll('ROOMING LIST', 100),
-          fetchAirtableAll('DATA JEMAAH UMRAH', 100),
-          fetchAirtableAll('STAFF LIST (ROOMING)', 100)
+        // Step 1: fetch hanya field TRIP (ringan, laju) untuk semua rekod
+        const [roomsAllLight, jemsAllLight, staffAllLight] = await Promise.all([
+          fetchAirtableAll('ROOMING LIST', 100, ['TRIP']),
+          fetchAirtableAll('DATA JEMAAH UMRAH', 100, ['TRIP']),
+          fetchAirtableAll('STAFF LIST (ROOMING)', 100, ['TRIP'])
         ]);
-        console.log('Fallback total:', roomsAll.length, 'rooms,', jemsAll.length, 'jemaah');
-        allRooms = roomsAll.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
-        allJems = jemsAll.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
-        allStaffRaw = staffAll.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
-        console.log('Filtered:', allRooms.length, 'rooms,', allJems.length, 'jemaah');
+        console.log('Step1 light fetch:', roomsAllLight.length, 'rooms,', jemsAllLight.length, 'jemaah');
+
+        // Filter client-side untuk dapat IDs
+        const roomIds = roomsAllLight.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); }).map(r=>r.id);
+        const jemIds = jemsAllLight.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); }).map(r=>r.id);
+        const staffIds = staffAllLight.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); }).map(r=>r.id);
+
+        console.log('Filtered IDs:', roomIds.length, 'rooms,', jemIds.length, 'jemaah');
+
+        if(jemIds.length>0 || roomIds.length>0){
+          // Step 2: fetch full data hanya untuk IDs yang match (cepat, hanya 16-40 rekod)
+          // Guna filterByFormula dengan OR(RECORD_ID()='rec1', RECORD_ID()='rec2', ...)
+          const chunkSize = 25; // Airtable limit untuk OR
+          const fetchByIds = async (table, ids)=>{
+            if(ids.length===0) return [];
+            let all=[];
+            for(let i=0;i<ids.length;i+=chunkSize){
+              const chunk = ids.slice(i,i+chunkSize);
+              const formula = `OR(${chunk.map(id=>`RECORD_ID()='${id}'`).join(',')})`;
+              const res = await fetchAirtableWithFilter(table, formula, 100);
+              if(res && res.length>0) all = all.concat(res);
+            }
+            return all;
+          };
+          const [roomsFull, jemsFull, staffFull] = await Promise.all([
+            fetchByIds('ROOMING LIST', roomIds),
+            fetchByIds('DATA JEMAAH UMRAH', jemIds),
+            fetchByIds('STAFF LIST (ROOMING)', staffIds)
+          ]);
+          console.log('Step2 full fetch:', roomsFull.length, 'rooms,', jemsFull.length, 'jemaah');
+          allRooms = roomsFull;
+          allJems = jemsFull;
+          allStaffRaw = staffFull;
+        } else {
+          // Kalau masih 0, fallback terakhir fetch semua full (lambat tapi pasti)
+          console.warn('2-step dapat 0, fallback full fetch');
+          const [roomsAll, jemsAll, staffAll] = await Promise.all([
+            fetchAirtableAll('ROOMING LIST', 100),
+            fetchAirtableAll('DATA JEMAAH UMRAH', 100),
+            fetchAirtableAll('STAFF LIST (ROOMING)', 100)
+          ]);
+          allRooms = roomsAll.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
+          allJems = jemsAll.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
+          allStaffRaw = staffAll.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
+        }
       }catch(e){
         console.error('Fallback error', e);
         allRooms = allRooms||[]; allJems = allJems||[]; allStaffRaw = allStaffRaw||[];
       }
     }
+
     allRoomingRecords = allRooms||[];
     allRoomingJemaah = allJems||[];
-    // Jangan cache kalau kosong - elak blank cache
+
     if(allRoomingJemaah.length>0 || allRoomingRecords.length>0){
       _roomingLastTripId = tripId;
       _roomingCacheTime = Date.now();
@@ -1592,14 +1683,17 @@ async function fetchRoomingData(forceReload=false){
       window._roomingLastTripId = _roomingLastTripId;
       window._roomingCacheTime = _roomingCacheTime;
       window._roomingFirstLoadDone = true;
-      
+      try{
+        // Cache tanpa attachments berat untuk elak quota exceed - simpan full tapi cuba
+        localStorage.setItem('effah_rooming_cache_'+tripId, JSON.stringify({_time:_roomingCacheTime, rooms:allRoomingRecords, jemaah:allRoomingJemaah, staff:allStaffRaw}));
+      }catch(e){ console.warn('Cache save fail', e); }
     } else {
       console.warn('Hasil kosong, tidak cache');
       _roomingLastTripId = tripId;
       _roomingCacheTime = Date.now();
       _roomingFirstLoadDone = true;
     }
-    
+
     try{
       if(allStaffRaw && allStaffRaw[0] && allStaffRaw[0].fields){
         staffList = allStaffRaw.map(r=>({
@@ -1634,6 +1728,7 @@ async function fetchRoomingData(forceReload=false){
 
 
 
+
 function hideRoomingLoading(){
   const el=document.querySelector('.rooming-loading, #roomingLoading');
   if(el) el.style.display='none';
@@ -1656,7 +1751,6 @@ function populateRoomingTripDropdown(){
   }
   try{ renderRoomingHijriTabs(); }catch(e){}
 
-  // Blank on refresh - hanya guna selectedTripRecord dalam memory, jangan auto-load dari localStorage
   const currentId=window.selectedTripRecord?.id||'';
   if(trips.length===0){
     sel.innerHTML='<option value="">Sila pilih trip</option><option value="" disabled>Sedang memuatkan senarai trip...</option>';
@@ -2215,7 +2309,7 @@ function renderStaffList(){
 
 
 
-function setActiveLocation(loc){ activeLocation=loc.toUpperCase(); localStorage.setItem('effah_active_location',activeLocation); const el=document.getElementById('copyTargetLoc'); if(el) el.textContent=activeLocation; renderLocationTabs(); renderRoomingGrid(); renderNamelist(); renderStaffList(); try{ updateVisaCountBadge(); }catch(e){} }
+function setActiveLocation(loc){ activeLocation=loc.toUpperCase(); localStorage.setItem('effah_active_location',activeLocation); const el=document.getElementById('copyTargetLoc'); if(el) el.textContent=activeLocation; renderLocationTabs(); renderRoomingGrid(); renderNamelist(); renderStaffList(); }
 function _stopAutoScroll(){ if(_autoScrollInterval){ clearInterval(_autoScrollInterval); _autoScrollInterval=null; } }
 function _startAutoScroll(){
   if(_autoScrollInterval) return;
@@ -4205,11 +4299,7 @@ async function downloadAllPassports(){
 }
 
 async function _downloadAllDocs(fieldName, label){
-
-  const btn=document.getElementById('btnDownloadVisas');
-  const originalText=btn?.innerHTML;
   try{
-    // FIX: guna getFieldAttachments fuzzy search, bukan exact field name - supaya count & download sync
     const visaNames=['VISA COPY','VISA','VISA_COPY','VISA SCAN','VISA_DOCUMENT','VISA FILE'];
     const passNames=['PASSPORT COPY','PASSPORT','PASSPORT_COPY','PASSPORT SCAN','PASSPORT_DOCUMENT','PASSPORT FRONT','PASSPORT FILE','PASSPORT COPY - FRONT','IC & PASSPORT'];
     const searchNames = fieldName.includes('VISA') ? visaNames : passNames;
@@ -4219,7 +4309,6 @@ async function _downloadAllDocs(fieldName, label){
       return atts && atts.length>0;
     });
     
-    // Kalau ada lokasi aktif, filter hanya untuk lokasi tu
     try{
       const locUpper = (typeof activeLocation!=='undefined' && activeLocation) ? activeLocation.toUpperCase() : 'MEKAH';
       const roomsInLoc = (allRoomingRecords||[]).filter(r=> (r.fields['LOKASI / CITY']||'MEKAH').toUpperCase()===locUpper);
@@ -4230,183 +4319,55 @@ async function _downloadAllDocs(fieldName, label){
       });
       if(jIdsInLoc.size>0){
         const filtered = withDocs.filter(j=> jIdsInLoc.has(j.id));
-        // Kalau dalam lokasi ada dokumen, guna filtered, kalau takde, guna semua
         if(filtered.length>0) withDocs = filtered;
       }
     }catch(e){}
 
     if(withDocs.length===0){
-      alert(`Tiada ${fieldName} dalam trip ini.\n\nPastikan field ${fieldName} ada attachment PDF/Image.\n\nChecked fields: ${searchNames.join(', ')}`);
+      alert(`Tiada ${fieldName} dalam trip ini.\nPastikan field ${fieldName} ada attachment.`);
       return;
     }
-    // Sort by NAMA
-    withDocs = withDocs.sort((a,b)=>{
-      const na=getJemaahName(a.fields).toUpperCase();
-      const nb=getJemaahName(b.fields).toUpperCase();
-      return na.localeCompare(nb);
-    });
-
-    // Create progress modal
-    window._visaDownloadCancelled=false;
-    window._visaAbortController=new AbortController();
-    let modal=document.getElementById('visaDownloadModal');
-    if(!modal){
-      modal=document.createElement('div');
-      modal.id='visaDownloadModal';
-      modal.className='fixed inset-0 bg-black/60 z-[99999] flex items-center justify-center p-4';
-      modal.innerHTML=`
-        <div class="bg-white rounded-2xl p-5 max-w-md w-full shadow-2xl">
-          <div class="flex justify-between items-center mb-3">
-            <h3 class="font-bold text-[13px]" id="visaModalTitle">Downloading ${label}...</h3>
-            <button id="visaCancelBtn" onclick="cancelVisaDownload()" class="px-3 py-1 bg-red-50 border border-red-200 text-red-600 rounded-full text-[10px] font-bold hover:bg-red-100">✕ Cancel</button>
-          </div>
-          <div class="w-full bg-slate-100 rounded-full h-3 mb-3 overflow-hidden"><div id="visaProgressBar" class="h-3 bg-emerald-600 rounded-full transition-all" style="width:0%"></div></div>
-          <div id="visaProgressText" class="text-[11px] text-slate-600 mb-1">0 / 0</div>
-          <div id="visaProgressName" class="text-[10px] text-slate-500 truncate">-</div>
-          <div id="visaProgressLog" class="mt-3 max-h-[15vh] overflow-y-auto text-[9px] text-slate-400 space-y-0.5"></div>
-          <div class="flex gap-2 mt-4">
-            <button id="visaCancelBtn2" onclick="cancelVisaDownload()" class="flex-1 py-2 bg-slate-100 border border-slate-200 rounded-xl font-bold text-[11px] hover:bg-slate-200">Cancel Download</button>
-            <button id="visaCloseBtn" onclick="closeVisaModal()" class="flex-1 py-2 bg-[#064E3B] text-white rounded-xl font-bold text-[11px] hidden">Close</button>
-          </div>
-        </div>
-      `;
-      document.body.appendChild(modal);
-    } else {
-      modal.classList.remove('hidden');
-      window._visaDownloadCancelled=false;
-      window._visaAbortController=new AbortController();
-      const cancelBtn=document.getElementById('visaCancelBtn');
-      const cancelBtn2=document.getElementById('visaCancelBtn2');
-      const closeBtn=document.getElementById('visaCloseBtn');
-      if(cancelBtn) cancelBtn.classList.remove('hidden');
-      if(cancelBtn2) cancelBtn2.classList.remove('hidden');
-      if(closeBtn) closeBtn.classList.add('hidden');
-      document.getElementById('visaProgressLog').innerHTML='';
-      document.getElementById('visaProgressBar').style.width='0%';
-      const titleEl=document.getElementById('visaModalTitle'); if(titleEl) titleEl.textContent=`Downloading ${label}...`;
-    }
-
-    const updateProgress=(curr,total,name,log)=>{
-      const pct=Math.round(curr/total*100);
-      document.getElementById('visaProgressBar').style.width=pct+'%';
-      document.getElementById('visaProgressText').textContent=curr+' / '+total+' ('+pct+'%)';
-      document.getElementById('visaProgressName').textContent=name||'-';
-      if(log){
-        const logEl=document.getElementById('visaProgressLog');
-        const div=document.createElement('div');
-        div.textContent=log;
-        logEl.appendChild(div);
-        logEl.scrollTop=logEl.scrollHeight;
-      }
-    };
-
-    if(btn){ btn.setAttribute('data-original', btn.innerHTML); btn.disabled=true; btn.innerHTML='⏳ Loading pdf-lib...'; }
+    withDocs = withDocs.sort((a,b)=> getJemaahName(a.fields).toUpperCase().localeCompare(getJemaahName(b.fields).toUpperCase()));
 
     const pdfLib=await loadPdfLib();
     const {PDFDocument}=pdfLib;
     const mergedPdf=await PDFDocument.create();
 
-    let successCount=0;
-    let failList=[];
-
-    for(let i=0;i<withDocs.length;i++){
-      if(window._visaDownloadCancelled){ throw new Error('Cancelled by user'); }
-      const jRec=withDocs[i];
-      const nama=getJemaahName(jRec.fields);
-      const mId=jRec.fields['M_ID']||jRec.fields['NO KP']||'';
-      updateProgress(i, withDocs.length, nama, `Fetching: ${nama}`);
-
-      const attachments=getFieldAttachments(jRec.fields, searchNames)||[];
-      for(let attIdx=0; attIdx<attachments.length; attIdx++){
-        const att=attachments[attIdx];
-        if(!att||!att.url) continue;
-        const url=att.url;
-        const filename=att.filename||'';
-        const isPdf = filename.toLowerCase().endsWith('.pdf') || (att.type && att.type.includes('pdf'));
-
+    for(let jRec of withDocs){
+      const atts=getFieldAttachments(jRec.fields, searchNames)||[];
+      for(let att of atts){
+        if(!att.url) continue;
         try{
-          if(btn) btn.innerHTML=`⏳ ${i+1}/${withDocs.length} ${nama.substring(0,12)}...`;
-          const buffer=await fetchWithRetry(url);
-          
+          const buffer=await fetchWithRetry(att.url);
+          const isPdf = (att.filename||'').toLowerCase().endsWith('.pdf') || (att.type||'').includes('pdf');
           if(isPdf){
-            try{
-              const srcPdf=await PDFDocument.load(buffer, {ignoreEncryption:true});
-              const srcPages = srcPdf.getPages();
-              const A4_WIDTH = 595.28;
-              const A4_HEIGHT = 841.89;
-              
-              for(let pIdx=0; pIdx<srcPdf.getPageCount(); pIdx++){
-                const srcPage = srcPages[pIdx];
-                const {width: origW, height: origH} = srcPage.getSize();
-                const [copiedPage] = await mergedPdf.copyPages(srcPdf, [pIdx]);
-                const newPage = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT]);
-                const scale = Math.min(A4_WIDTH/origW, A4_HEIGHT/origH) * 0.95;
-                const scaledW = origW * scale;
-                const scaledH = origH * scale;
-                const x = (A4_WIDTH - scaledW)/2;
-                const y = (A4_HEIGHT - scaledH)/2;
-                const embeddedPage = await mergedPdf.embedPage(copiedPage);
-                newPage.drawPage(embeddedPage, {x, y, width: scaledW, height: scaledH});
-              }
-              successCount++;
-            }catch(e){
-              console.warn('PDF merge fail', nama, e);
-              failList.push(nama);
-            }
+            const srcPdf=await PDFDocument.load(buffer, {ignoreEncryption:true});
+            const pages = await mergedPdf.copyPages(srcPdf, srcPdf.getPageIndices());
+            pages.forEach(p=> mergedPdf.addPage(p));
           } else {
-            try{
-              let img;
-              if(filename.toLowerCase().endsWith('.png')){
-                img = await mergedPdf.embedPng(buffer);
-              } else {
-                img = await mergedPdf.embedJpg(buffer);
-              }
-              const page = mergedPdf.addPage([595.28, 841.89]);
-              const {width, height} = img.scale(1);
-              const scale = Math.min(595.28/width, 841.89/height) * 0.95;
-              page.drawImage(img, {x:(595.28-width*scale)/2, y:(841.89-height*scale)/2, width:width*scale, height:height*scale});
-              successCount++;
-            }catch(e){
-              console.warn('Image embed fail', nama, e);
-              failList.push(nama);
-            }
+            let img;
+            if((att.filename||'').toLowerCase().endsWith('.png')) img = await mergedPdf.embedPng(buffer);
+            else img = await mergedPdf.embedJpg(buffer);
+            const page = mergedPdf.addPage([595.28, 841.89]);
+            const {width, height} = img.scale(1);
+            const scale = Math.min(595.28/width, 841.89/height) * 0.95;
+            page.drawImage(img, {x:(595.28-width*scale)/2, y:(841.89-height*scale)/2, width:width*scale, height:height*scale});
           }
-        }catch(e){
-          console.warn('Fetch fail', nama, e);
-          failList.push(nama);
-        }
+        }catch(e){ console.warn('embed fail', e); }
       }
     }
-
-    updateProgress(withDocs.length, withDocs.length, 'Selesai', `Berjaya: ${successCount}, Gagal: ${failList.length}`);
 
     const pdfBytes = await mergedPdf.save();
     const blob = new Blob([pdfBytes], {type:'application/pdf'});
     const url = URL.createObjectURL(blob);
     const a=document.createElement('a');
     a.href=url;
-    a.download=`${label}_${(activeLocation||'MEKAH')}_${new Date().toISOString().slice(0,10)}.pdf`;
-    document.body.appendChild(a);
+    a.download=`${label}_${activeLocation||'MEKAH'}.pdf`;
     a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-
-    if(btn){ btn.disabled=false; btn.innerHTML=originalText||`⬇ Download ${label} (<span id="${fieldName.includes('VISA')?'visaCountBadge':'passportCountBadge'}">${withDocs.length}</span>)`; }
-
-    const closeBtn=document.getElementById('visaCloseBtn');
-    if(closeBtn) closeBtn.classList.remove('hidden');
-    const cancelBtn=document.getElementById('visaCancelBtn');
-    const cancelBtn2=document.getElementById('visaCancelBtn2');
-    if(cancelBtn) cancelBtn.classList.add('hidden');
-    if(cancelBtn2) cancelBtn2.classList.add('hidden');
-
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
   }catch(e){
     console.error('_downloadAllDocs error', e);
-    if(e.message!=='Cancelled by user'){
-      alert('Ralat download: '+e.message);
-    }
-    const btn=document.getElementById('btnDownloadVisas');
-    if(btn){ btn.disabled=false; btn.innerHTML=btn.getAttribute('data-original')||`⬇ Download ${label}`; }
+    alert('Ralat download: '+e.message);
   }
 }
 
@@ -4644,7 +4605,6 @@ function getFieldAttachments(jFields, names){
   return null;
 }
 
-
 function updateVisaCountBadge(){
   try{
     const visaNames=['VISA COPY','VISA','VISA_COPY','VISA SCAN','VISA_DOCUMENT','VISA FILE'];
@@ -4652,13 +4612,11 @@ function updateVisaCountBadge(){
     let visaCount=0, passCount=0;
     let visaCountLoc=0, passCountLoc=0;
 
-    // Count total untuk trip - kira yang ada attachment BETUL-BETUL
     (allRoomingJemaah||[]).forEach(j=>{
       if(getFieldAttachments(j.fields||{}, visaNames)) visaCount++;
       if(getFieldAttachments(j.fields||{}, passNames)) passCount++;
     });
 
-    // Count untuk lokasi aktif - kira dokumen yang ada dalam lokasi tu sahaja
     try{
       const locUpper = (typeof activeLocation!=='undefined' && activeLocation) ? activeLocation.toUpperCase() : 'MEKAH';
       const roomsInLoc = (allRoomingRecords||[]).filter(r=>{
@@ -4670,7 +4628,6 @@ function updateVisaCountBadge(){
         (r.fields['JEMAAH']||[]).forEach(id=>jIdsInLoc.add(id));
         (r.fields['JEMAAH TANPA KATIL']||[]).forEach(id=>jIdsInLoc.add(id));
       });
-      // Kalau ada bilik assign, kira hanya yang dalam lokasi tu, kalau belum assign kira semua trip
       const jemaahToCheck = jIdsInLoc.size>0 ? (allRoomingJemaah||[]).filter(j=>jIdsInLoc.has(j.id)) : (allRoomingJemaah||[]);
       jemaahToCheck.forEach(j=>{
         if(getFieldAttachments(j.fields||{}, visaNames)) visaCountLoc++;
@@ -4681,13 +4638,10 @@ function updateVisaCountBadge(){
       passCountLoc = passCount;
     }
 
-    console.log(`Badge count - Total Jemaah:${allRoomingJemaah?.length} Visa doc:${visaCount} Passport doc:${passCount} | Loc ${typeof activeLocation!=='undefined'?activeLocation:'?'} Visa doc:${visaCountLoc} Passport doc:${passCountLoc}`);
+    console.log(`Badge count - Total:${allRoomingJemaah?.length} Visa doc:${visaCount} Passport doc:${passCount} | Loc ${typeof activeLocation!=='undefined'?activeLocation:'?'} Visa:${visaCountLoc} Passport:${passCountLoc}`);
 
     const vBadge=document.getElementById('visaCountBadge');
     const pBadge=document.getElementById('passportCountBadge');
-    
-    // FIX: count ikut dokumen sebenar dalam column PASSPORT COPY / VISA COPY
-    // Kalau Airtable ada 16 doc, portal pun 16 - bukan ikut bilangan jemaah 40
     const finalVisa = visaCountLoc;
     const finalPass = passCountLoc;
 
@@ -4709,7 +4663,6 @@ function updateVisaCountBadge(){
     
   }catch(e){ console.error('updateVisaCountBadge error', e); }
 }
-
 
 async function updatePassportCountFromDirectFetch(){
   try{
