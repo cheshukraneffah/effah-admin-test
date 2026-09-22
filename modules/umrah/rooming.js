@@ -1438,7 +1438,7 @@ async function fetchAirtableAll(tableName, pageSize=100){
 
 async function fetchRoomingData(forceReload=false){
   try{
-    let tripId=window.selectedTripRecord?.id||'';
+    let tripId=window.selectedTripRecord?.id||localStorage.getItem('effah_active_trip_id')||localStorage.getItem('effah_last_selected_trip')||localStorage.getItem('selectedTripId')||'';
     if(!tripId){
       const sel=document.getElementById('roomingTripSelect');
       if(sel && sel.value) tripId=sel.value;
@@ -1617,48 +1617,25 @@ function hideRoomingLoading(){
   }
 }
 
-
 function populateRoomingTripDropdown(){
   const sel=document.getElementById('roomingTripSelect'); if(!sel) return;
   let trips=[...(window.allTripUmrahRecords||window.allTripRecords||window.allTrips||(typeof allTripUmrahRecords!=='undefined'?allTripUmrahRecords:[]))];
+  // Filter by hijri if selected
   if(selectedRoomingHijriFilter){
     trips=trips.filter(t=> getTripHijriForRooming(t)===selectedRoomingHijriFilter);
   }
   try{ renderRoomingHijriTabs(); }catch(e){}
 
-  // Blank on refresh - hanya guna selectedTripRecord dalam memory, jangan auto-load dari localStorage
-  const currentId=window.selectedTripRecord?.id||'';
+  const currentId=window.selectedTripRecord?.id||localStorage.getItem('effah_active_trip_id')||localStorage.getItem('effah_last_selected_trip')||localStorage.getItem('selectedTripId')||'';
   if(trips.length===0){
-    sel.innerHTML='<option value="">Sila pilih trip</option><option value="" disabled>Sedang memuatkan senarai trip...</option>';
+    sel.innerHTML='<option value="">Sedang memuatkan senarai trip...</option>';
     let retries=parseInt(sel.dataset.retries||'0'); if(retries<10){ sel.dataset.retries=retries+1; setTimeout(()=>{ if(typeof fetchTripUmrahData==='function') fetchTripUmrahData(); populateRoomingTripDropdown(); }, 900); }
     return;
   }
   trips.sort((a,b)=>(a.fields?.['Mula Pakej']||'').localeCompare(b.fields?.['Mula Pakej']||''));
-  const placeholderOpt = '<option value="">Sila pilih trip</option>';
-  const options = trips.map(t=>{ const raw=t.fields?.Trip||t.fields?.['TRIP NAME']||t.id; const clean=cleanTripNameForRooming(raw); return `<option value="${t.id}" ${t.id===currentId?'selected':''}>${clean}</option>`; }).join('');
-  sel.innerHTML=placeholderOpt+options;
-  if(currentId){
-    const exists = trips.some(t=>t.id===currentId);
-    if(exists){
-      sel.value=currentId;
-    } else {
-      sel.value="";
-      const cont=document.getElementById('namelistContainer');
-      if(cont) cont.innerHTML='<div class="p-8 text-center"><div class="text-[13px] font-bold text-slate-700 mb-1">Sila pilih trip</div><div class="text-[11px] text-slate-400">Trip sebelum ini tidak ditemui, sila pilih trip baru</div></div>';
-    }
-  } else {
-    sel.value="";
-    const cont=document.getElementById('namelistContainer');
-    if(cont && !cont.innerHTML.includes('Sila pilih trip')){
-      cont.innerHTML='<div class="p-8 text-center"><div class="text-[13px] font-bold text-slate-700 mb-1">Sila pilih trip</div><div class="text-[11px] text-slate-400">Pilih trip dari dropdown di atas untuk papar senarai jemaah</div></div>';
-    }
-    const grid=document.getElementById('roomingGrid');
-    if(grid) grid.innerHTML='<div class="col-span-2 p-8 text-center border border-dashed rounded-2xl bg-white"><div class="text-[11px] text-slate-400">Sila pilih trip dahulu</div></div>';
-    const bilikEl=document.getElementById('roomingBiliks'); if(bilikEl) bilikEl.textContent='0 Bilik';
-    const occEl=document.getElementById('roomingOccupancy'); if(occEl) occEl.textContent='Sila pilih trip';
-  }
+  sel.innerHTML='<option value="">Pilih Trip...</option>'+trips.map(t=>{ const raw=t.fields?.Trip||t.fields?.['TRIP NAME']||t.id; const clean=cleanTripNameForRooming(raw); return `<option value="${t.id}" ${t.id===currentId?'selected':''}>${clean}</option>`; }).join('');
+  if(currentId) sel.value=currentId; else if(trips.length>0){ sel.value=trips[0].id; onRoomingTripChange(trips[0].id); }
 }
-
 function onRoomingTripChange(tripId){ if(!tripId) return; const trips=window.allTripUmrahRecords||window.allTripRecords||[]; const found=trips.find(t=>t.id===tripId); if(found) window.selectedTripRecord=found; localStorage.setItem('effah_active_trip_id',tripId); localStorage.setItem('selectedTripId',tripId); localStorage.setItem('effah_last_selected_trip',tripId); fetchRoomingData(true); }
 function isJemaahAssignedInLocation(jId, location){
   const loc = (location||activeLocation).toUpperCase();
@@ -4665,65 +4642,30 @@ function getFieldAttachments(jFields, names){
   }
   return null;
 }
-
 function updateVisaCountBadge(){
   try{
-    const visaNames=['VISA COPY','VISA','VISA_COPY','VISA SCAN','VISA_DOCUMENT'];
-    const passNames=['PASSPORT COPY','PASSPORT','PASSPORT_COPY','PASSPORT SCAN','PASSPORT_DOCUMENT','PASSPORT FRONT'];
+    const visaNames=['VISA COPY','VISA','VISA_COPY'];
+    const passNames=['PASSPORT COPY','PASSPORT','PASSPORT_COPY','PASSPORT SCAN'];
     let visaCount=0, passCount=0;
-    let visaCountLoc=0, passCountLoc=0;
-    
     (allRoomingJemaah||[]).forEach(j=>{
       if(getFieldAttachments(j.fields||{}, visaNames)) visaCount++;
       if(getFieldAttachments(j.fields||{}, passNames)) passCount++;
     });
-    
-    try{
-      const locUpper = (typeof activeLocation!=='undefined' && activeLocation) ? activeLocation.toUpperCase() : 'MEKAH';
-      const roomsInLoc = (allRoomingRecords||[]).filter(r=>{
-        const l = (r.fields['LOKASI / CITY']||'MEKAH').toUpperCase();
-        return l===locUpper;
-      });
-      const jIdsInLoc = new Set();
-      roomsInLoc.forEach(r=>{
-        (r.fields['JEMAAH']||[]).forEach(id=>jIdsInLoc.add(id));
-        (r.fields['JEMAAH TANPA KATIL']||[]).forEach(id=>jIdsInLoc.add(id));
-      });
-      const jemaahToCheck = jIdsInLoc.size>0 ? (allRoomingJemaah||[]).filter(j=>jIdsInLoc.has(j.id)) : (allRoomingJemaah||[]);
-      jemaahToCheck.forEach(j=>{
-        if(getFieldAttachments(j.fields||{}, visaNames)) visaCountLoc++;
-        if(getFieldAttachments(j.fields||{}, passNames)) passCountLoc++;
-      });
-    }catch(e){ 
-      visaCountLoc = visaCount;
-      passCountLoc = passCount;
+    console.log(`Badge count - allRoomingJemaah: ${allRoomingJemaah?.length} Visa:${visaCount} Passport:${passCount}`);
+    // Also check direct if available
+    if(window._allJemaahDirect && window._allJemaahDirect.length>0){
+      const dv = window._allJemaahDirect.filter(r=> getFieldAttachments(r.fields||{}, visaNames)).length;
+      const dp = window._allJemaahDirect.filter(r=> getFieldAttachments(r.fields||{}, passNames)).length;
+      console.log(`Badge direct: ${window._allJemaahDirect.length} Visa:${dv} Passport:${dp}`);
+      if(dv>visaCount) visaCount=dv;
+      if(dp>passCount) passCount=dp;
     }
-    
-    console.log(`Badge count - Total: ${allRoomingJemaah?.length} Visa:${visaCount} Passport:${passCount} | Loc ${typeof activeLocation!=='undefined'?activeLocation:'?'} Visa:${visaCountLoc} Passport:${passCountLoc}`);
-    
     const vBadge=document.getElementById('visaCountBadge');
     const pBadge=document.getElementById('passportCountBadge');
-    const finalVisa = visaCountLoc>0 ? visaCountLoc : visaCount;
-    const finalPass = passCountLoc>0 ? passCountLoc : passCount;
-    if(vBadge) vBadge.textContent=finalVisa;
-    if(pBadge) pBadge.textContent=finalPass;
-    
-    try{
-      const visaBtn = document.getElementById('btnDownloadVisas');
-      if(visaBtn){
-        const span = visaBtn.querySelector('#visaCountBadge');
-        if(span) span.textContent = finalVisa;
-      }
-      const passBtn = document.getElementById('btnDownloadPassports');
-      if(passBtn){
-        const span = passBtn.querySelector('#passportCountBadge');
-        if(span) span.textContent = finalPass;
-      }
-    }catch(e){}
-    
+    if(vBadge) vBadge.textContent=visaCount;
+    if(pBadge) pBadge.textContent=passCount;
   }catch(e){ console.error('updateVisaCountBadge error', e); }
 }
-
 async function updatePassportCountFromDirectFetch(){
   try{
     const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
