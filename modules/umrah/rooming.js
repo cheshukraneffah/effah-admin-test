@@ -1316,7 +1316,7 @@ function renderLocationTabs(){
 
 
 
-async function fetchWithTimeout(url, opts={}, timeoutMs=25000){
+async function fetchWithTimeout(url, opts={}, timeoutMs=60000){
   const controller = new AbortController();
   const id = setTimeout(()=>controller.abort(), timeoutMs);
   try{
@@ -1329,7 +1329,8 @@ async function fetchWithTimeout(url, opts={}, timeoutMs=25000){
   }
 }
 
-function getTripNameForFilter(tripId){
+function getTripNameForFilter(tripId){ return ''; /* DISABLE nama filter sebab slash buat 422 */ }
+function _orig_getTripNameForFilter(tripId){
   try{
     if(window.selectedTripRecord && window.selectedTripRecord.fields){
       const f = window.selectedTripRecord.fields;
@@ -1361,15 +1362,16 @@ async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100){
       url += `&filterByFormula=${encodeURIComponent(filterFormula)}`;
     }
     try{
-      const res = await fetchWithTimeout(url, {headers:{Authorization:`Bearer ${pat}`}}, 25000);
+      const res = await fetchWithTimeout(url, {headers:{Authorization:`Bearer ${pat}`}}, 60000);
       if(!res.ok){
         const t = await res.text().then(s=>s.substring(0,800)).catch(()=>'');
         if(res.status===429){
-          await new Promise(r=>setTimeout(r, 2000));
+          console.warn('429 rate limit, tunggu 3s', tableName);
+          await new Promise(r=>setTimeout(r, 3000));
           continue;
         }
         if(res.status===422){
-          console.warn('422 filter formula invalid untuk', tableName, filterFormula, t);
+          console.warn('422 filter invalid untuk', tableName, filterFormula, t);
           return null;
         }
         console.warn(`Gagal fetch ${tableName} ${res.status}`, t);
@@ -1380,19 +1382,19 @@ async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100){
       offset = data.offset||'';
       retries=0;
     }catch(e){
-      console.error(`fetch ${tableName} error`, e.name);
+      console.error(`fetch ${tableName} error`, e.name, e.message);
       if(e.name==='AbortError'){
-        console.warn('Timeout, retry sekali lagi');
-        if(retries<1){
+        console.warn('Timeout AbortError', tableName, 'retry', retries);
+        if(retries<3){
           retries++;
-          await new Promise(r=>setTimeout(r, 1500));
+          await new Promise(r=>setTimeout(r, 2000));
           continue;
         }
         break;
       }
-      if(retries<2){
+      if(retries<3){
         retries++;
-        await new Promise(r=>setTimeout(r, 1000));
+        await new Promise(r=>setTimeout(r, 1500));
         continue;
       }
       break;
@@ -1460,6 +1462,7 @@ async function fetchRoomingData(forceReload=false){
       try{ renderStaffList(); }catch(e){}
       try{ renderRoomingGrid(); }catch(e){}
       try{ renderLocationTabs(); }catch(e){}
+      try{ updateVisaCountBadge(); }catch(e){}
       try{ hideRoomingLoading(); }catch(e){}
       return;
     }
@@ -1485,6 +1488,7 @@ async function fetchRoomingData(forceReload=false){
             try{ renderStaffList(); }catch(e){}
             try{ renderRoomingGrid(); }catch(e){}
             try{ renderLocationTabs(); }catch(e){}
+            try{ updateVisaCountBadge(); }catch(e){}
             try{ hideRoomingLoading(); }catch(e){}
             _roomingIsLoading=false;
             return;
@@ -1515,15 +1519,8 @@ async function fetchRoomingData(forceReload=false){
     console.log('FETCH ROOMING START', tripId);
     let allRooms=null, allJems=null, allStaffRaw=null;
     let optimizedSuccess = false;
-    const tripName = getTripNameForFilter(tripId);
     const formulaIdExact = `SEARCH("," & "${tripId}" & ",", "," & ARRAYJOIN({TRIP} & "") & ",")`;
-    let formulaName = null;
-    if(tripName){
-      const safeName = tripName.replace(/"/g, '\\"').substring(0,60);
-      formulaName = `SEARCH("${safeName}", ARRAYJOIN({TRIP}))`;
-    }
     const formulasToTry = [formulaIdExact];
-    if(formulaName) formulasToTry.push(formulaName);
     for(let formula of formulasToTry){
       console.log('Cuba filter:', formula);
       try{
@@ -1618,6 +1615,7 @@ function hideRoomingLoading(){
 }
 
 
+
 function populateRoomingTripDropdown(){
   const sel=document.getElementById('roomingTripSelect'); if(!sel) return;
   let trips=[...(window.allTripUmrahRecords||window.allTripRecords||window.allTrips||[])];
@@ -1641,11 +1639,11 @@ function populateRoomingTripDropdown(){
     if(grid) grid.innerHTML='<div class="col-span-2 p-8 text-center border border-dashed rounded-2xl bg-white"><div class="text-[11px] text-slate-400">Sila pilih trip dahulu</div></div>';
     const bilikEl=document.getElementById('roomingBiliks'); if(bilikEl) bilikEl.textContent='0 Bilik';
     const occEl=document.getElementById('roomingOccupancy'); if(occEl) occEl.textContent='Sila pilih trip';
-    // Reset count bila blank
     document.querySelectorAll('#visaCountBadge').forEach(el=> el.textContent='0');
     document.querySelectorAll('#passportCountBadge').forEach(el=> el.textContent='0');
   }
 }
+
 
 function onRoomingTripChange(tripId){ if(!tripId) return; const trips=window.allTripUmrahRecords||window.allTripRecords||[]; const found=trips.find(t=>t.id===tripId); if(found) window.selectedTripRecord=found; localStorage.setItem('effah_active_trip_id',tripId); localStorage.setItem('selectedTripId',tripId); localStorage.setItem('effah_last_selected_trip',tripId); fetchRoomingData(true); }
 function isJemaahAssignedInLocation(jId, location){
@@ -2173,7 +2171,7 @@ function renderStaffList(){
 
 
 
-function setActiveLocation(loc){ activeLocation=loc.toUpperCase(); localStorage.setItem('effah_active_location',activeLocation); const el=document.getElementById('copyTargetLoc'); if(el) el.textContent=activeLocation; renderLocationTabs(); renderRoomingGrid(); renderNamelist(); renderStaffList(); }
+function setActiveLocation(loc){ activeLocation=loc.toUpperCase(); localStorage.setItem('effah_active_location',activeLocation); const el=document.getElementById('copyTargetLoc'); if(el) el.textContent=activeLocation; renderLocationTabs(); renderRoomingGrid(); renderNamelist(); renderStaffList(); try{ updateVisaCountBadge(); }catch(e){} }
 function _stopAutoScroll(){ if(_autoScrollInterval){ clearInterval(_autoScrollInterval); _autoScrollInterval=null; } }
 function _startAutoScroll(){
   if(_autoScrollInterval) return;
@@ -4552,37 +4550,28 @@ function getFieldAttachments(jFields, names){
   return null;
 }
 
+
 function updateVisaCountBadge(){
   try{
-    // Count dari Airtable DATA JEMAAH UMRAH column PASSPORT COPY / VISA COPY je
-    // Sama je MEKAH/MADINAH/TAIF, total trip - fetch sekali masa load selected trip
+    // Count dari DATA JEMAAH UMRAH column PASSPORT COPY / VISA COPY je - sama untuk semua lokasi
     let visaCount=0, passCount=0;
-    
     if(allRoomingJemaah && allRoomingJemaah.length>0){
-      // Direct check field exact name
       visaCount = allRoomingJemaah.filter(j=>{
         const f=j.fields||{};
-        if(f['VISA COPY'] && Array.isArray(f['VISA COPY']) && f['VISA COPY'].length>0) return true;
-        if(f['VISA'] && Array.isArray(f['VISA']) && f['VISA'].length>0) return true;
-        return getFieldAttachments(f, ['VISA COPY']) ? true : false;
+        return (f['VISA COPY'] && Array.isArray(f['VISA COPY']) && f['VISA COPY'].length>0) || getFieldAttachments(f, ['VISA COPY']);
       }).length;
-      
       passCount = allRoomingJemaah.filter(j=>{
         const f=j.fields||{};
-        if(f['PASSPORT COPY'] && Array.isArray(f['PASSPORT COPY']) && f['PASSPORT COPY'].length>0) return true;
-        if(f['PASSPORT'] && Array.isArray(f['PASSPORT']) && f['PASSPORT'].length>0) return true;
-        return getFieldAttachments(f, ['PASSPORT COPY']) ? true : false;
+        return (f['PASSPORT COPY'] && Array.isArray(f['PASSPORT COPY']) && f['PASSPORT COPY'].length>0) || getFieldAttachments(f, ['PASSPORT COPY']);
       }).length;
-      
-      console.log(`Badge count - allRoomingJemaah:${allRoomingJemaah.length} Visa:${visaCount} Passport:${passCount} (same for all locations)`);
+      console.log(`Badge count - allRoomingJemaah:${allRoomingJemaah.length} Visa:${visaCount} Passport:${passCount} (same all locations)`);
     }
-
-    // Update UI - semua badge
+    // Update badge terus, jangan biar Loading...
     document.querySelectorAll('#visaCountBadge').forEach(el=> el.textContent=visaCount);
     document.querySelectorAll('#passportCountBadge').forEach(el=> el.textContent=passCount);
-
   }catch(e){ console.error('updateVisaCountBadge error', e); }
 }
+
 
 // Auto retry kalau masih 0 lepas load (elak race condition)
 (function(){
