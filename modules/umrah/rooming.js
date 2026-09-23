@@ -281,11 +281,18 @@ async function handleAddNewRoomingOption(fieldName, jemaahId=null){
 function buildRoomingFieldOptionsFromRecords(){
   try{
     const fieldsToBuild = ['BOARD BASIS','INSURAN','PAKEJ','STATUS VISA'];
-    // V110 FIX: If meta already has options, don't override, but fill missing ones from records
+    // FIX: Boleh edit maklumat jemaah walaupun tiada bilik - jangan block dropdown
     const hasSomeMeta = _roomingMetaCache && Object.values(roomingFieldOptions).some(arr=>arr && arr.length>0);
     if(hasSomeMeta){
       console.log('V110: Cache metadata wujud, hanya mengisi medan yang masih kosong daripada rekod');
     }
+    // Fallback defaults kalau meta takde dan tiada bilik lagi - supaya boleh edit terus
+    const fallbackDefaults = {
+      'BOARD BASIS': ['BB (MEKAH)', 'BB (MADINAH)', 'FULLBOARD', 'HALFBOARD', 'BB SAHAJA'],
+      'INSURAN': ['TAKAFUL', 'ETIQA', 'AL-KHAIRI'],
+      'PAKEJ': ['EKONOMI', 'STANDARD', 'PREMIUM', 'VIP'],
+      'STATUS VISA': ['TOURIST', 'UMRAH', 'VISA', 'PROSES', 'LULUS']
+    };
     fieldsToBuild.forEach(fieldName=>{
       if(roomingFieldOptions[fieldName] && roomingFieldOptions[fieldName].length>0) {
         // Already has meta options, keep it - this is the full list from Airtable
@@ -322,6 +329,11 @@ function buildRoomingFieldOptionsFromRecords(){
         roomingFieldOptions[fieldName] = Array.from(values).filter(Boolean).sort();
         if(fieldName==='STATUS VISA') roomingFieldOptions['VISA'] = roomingFieldOptions[fieldName];
         console.log(`V110: Dibina ${fieldName} daripada rekod:`, roomingFieldOptions[fieldName]);
+      } else if(!roomingFieldOptions[fieldName] || roomingFieldOptions[fieldName].length===0){
+        // Tiada bilik lagi tapi boleh edit - guna fallback defaults supaya dropdown tak kosong
+        roomingFieldOptions[fieldName] = fallbackDefaults[fieldName] || [];
+        if(fieldName==='STATUS VISA') roomingFieldOptions['VISA'] = roomingFieldOptions[fieldName];
+        console.log(`V110: Guna fallback defaults untuk ${fieldName} (tiada bilik lagi):`, roomingFieldOptions[fieldName]);
       }
     });
     window.roomingFieldOptions = roomingFieldOptions;
@@ -1111,7 +1123,7 @@ function getRoomOrderKey(){ const tripId=window.selectedTripRecord?.id||localSto
 function getRoomOrderedList(rooms){
   try{
     if(!rooms || rooms.length===0){
-      console.log('getRoomOrderedList: no rooms for location', activeLocation);
+      // Jangan spam console bila tiada bilik - patut boleh edit maklumat jemaah dulu
       return [];
     }
     const key=getRoomOrderKey(); 
@@ -1329,8 +1341,8 @@ async function fetchWithTimeout(url, opts={}, timeoutMs=60000){
   }
 }
 
-function getTripNameForFilter(tripId){ return ''; /* DISABLE nama filter sebab slash buat 422 */ }
-function _orig_getTripNameForFilter(tripId){
+function getTripNameForFilter(tripId){ return ''; /* DISABLE name filter slash causes 422 */ }
+function _orig_getTripNameForFilter_DISABLED(tripId){
   try{
     if(window.selectedTripRecord && window.selectedTripRecord.fields){
       const f = window.selectedTripRecord.fields;
@@ -1366,12 +1378,11 @@ async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100){
       if(!res.ok){
         const t = await res.text().then(s=>s.substring(0,800)).catch(()=>'');
         if(res.status===429){
-          console.warn('429 rate limit, tunggu 3s', tableName);
-          await new Promise(r=>setTimeout(r, 3000));
+          await new Promise(r=>setTimeout(r, 2000));
           continue;
         }
         if(res.status===422){
-          console.warn('422 filter invalid untuk', tableName, filterFormula, t);
+          console.warn('422 filter formula invalid untuk', tableName, filterFormula, t);
           return null;
         }
         console.warn(`Gagal fetch ${tableName} ${res.status}`, t);
@@ -1387,7 +1398,7 @@ async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100){
         console.warn('Timeout AbortError', tableName, 'retry', retries);
         if(retries<3){
           retries++;
-          await new Promise(r=>setTimeout(r, 2000));
+          await new Promise(r=>setTimeout(r, 1500));
           continue;
         }
         break;
@@ -1440,7 +1451,7 @@ async function fetchAirtableAll(tableName, pageSize=100){
 
 async function fetchRoomingData(forceReload=false){
   try{
-    let tripId=window.selectedTripRecord?.id||localStorage.getItem('effah_active_trip_id')||localStorage.getItem('effah_last_selected_trip')||localStorage.getItem('selectedTripId')||'';
+    let tripId=window.selectedTripRecord?.id||'';
     if(!tripId){
       const sel=document.getElementById('roomingTripSelect');
       if(sel && sel.value) tripId=sel.value;
@@ -1517,6 +1528,8 @@ async function fetchRoomingData(forceReload=false){
       return;
     }
     console.log('FETCH ROOMING START', tripId);
+    // FIX: Load field options dari meta dulu walaupun tiada bilik, supaya dropdown boleh edit
+    try{ if(typeof fetchRoomingFieldOptionsFromMeta==='function') fetchRoomingFieldOptionsFromMeta(); }catch(e){}
     let allRooms=null, allJems=null, allStaffRaw=null;
     let optimizedSuccess = false;
     const formulaIdExact = `SEARCH("," & "${tripId}" & ",", "," & ARRAYJOIN({TRIP} & "") & ",")`;
@@ -1615,7 +1628,6 @@ function hideRoomingLoading(){
 }
 
 
-
 function populateRoomingTripDropdown(){
   const sel=document.getElementById('roomingTripSelect'); if(!sel) return;
   let trips=[...(window.allTripUmrahRecords||window.allTripRecords||window.allTrips||[])];
@@ -1643,7 +1655,6 @@ function populateRoomingTripDropdown(){
     document.querySelectorAll('#passportCountBadge').forEach(el=> el.textContent='0');
   }
 }
-
 
 function onRoomingTripChange(tripId){ if(!tripId) return; const trips=window.allTripUmrahRecords||window.allTripRecords||[]; const found=trips.find(t=>t.id===tripId); if(found) window.selectedTripRecord=found; localStorage.setItem('effah_active_trip_id',tripId); localStorage.setItem('selectedTripId',tripId); localStorage.setItem('effah_last_selected_trip',tripId); fetchRoomingData(true); }
 function isJemaahAssignedInLocation(jId, location){
@@ -4169,15 +4180,11 @@ async function _downloadAllDocs(fieldName, label){
       const atts = getFieldAttachments(f, searchNames);
       return atts && atts.length>0;
     });
-
     if(withDocs.length===0){
       alert(`Tiada ${fieldName} dalam trip ini. Total jemaah: ${allRoomingJemaah.length}`);
       return;
     }
-
     withDocs = withDocs.sort((a,b)=> getJemaahName(a.fields).toUpperCase().localeCompare(getJemaahName(b.fields).toUpperCase()));
-
-    // Modal dengan cancel button
     window._visaDownloadCancelled=false;
     let modal=document.getElementById('visaDownloadModal');
     if(!modal){
@@ -4213,7 +4220,6 @@ async function _downloadAllDocs(fieldName, label){
       document.getElementById('visaProgressLog').innerHTML='';
       document.getElementById('visaProgressBar').style.width='0%';
     }
-
     const updateProgress=(curr,total,name,log)=>{
       const pct=Math.round(curr/total*100);
       const bar=document.getElementById('visaProgressBar');
@@ -4232,13 +4238,10 @@ async function _downloadAllDocs(fieldName, label){
         }
       }
     };
-
-    // REMOVE loading/progress kat button atas - progress dalam modal je
     const pdfLib=await loadPdfLib();
     const {PDFDocument}=pdfLib;
     const mergedPdf=await PDFDocument.create();
     let successCount=0;
-
     for(let i=0;i<withDocs.length;i++){
       if(window._visaDownloadCancelled) throw new Error('Cancelled by user');
       const jRec=withDocs[i];
@@ -4268,12 +4271,10 @@ async function _downloadAllDocs(fieldName, label){
         }catch(e){ console.warn('fail', e); }
       }
     }
-
     if(successCount===0){
       alert('PDF kosong - attachment gagal');
       return;
     }
-
     const pdfBytes=await mergedPdf.save();
     const blob=new Blob([pdfBytes], {type:'application/pdf'});
     const url=URL.createObjectURL(blob);
@@ -4284,13 +4285,11 @@ async function _downloadAllDocs(fieldName, label){
     a.click();
     document.body.removeChild(a);
     setTimeout(()=>URL.revokeObjectURL(url), 5000);
-
     updateProgress(withDocs.length, withDocs.length, 'Done!', `Saved ${successCount} files`);
     setTimeout(()=>{
       const m=document.getElementById('visaDownloadModal');
       if(m) m.classList.add('hidden');
     }, 3000);
-
     try{ updateVisaCountBadge(); }catch(e){}
   }catch(e){
     console.error(e);
@@ -4299,20 +4298,17 @@ async function _downloadAllDocs(fieldName, label){
     if(m) m.classList.add('hidden');
   }
 }
-
 function cancelVisaDownload(){
   window._visaDownloadCancelled=true;
   try{ window._visaAbortController?.abort(); }catch(e){}
   const m=document.getElementById('visaDownloadModal');
   if(m) m.classList.add('hidden');
 }
-
 function closeVisaModal(){
   const m=document.getElementById('visaDownloadModal');
   if(m) m.classList.add('hidden');
   window._visaDownloadCancelled=false;
 }
-
 function downloadAllVisas(){ return _downloadAllDocs('VISA COPY', 'Visas'); }
 function downloadAllPassports(){ return _downloadAllDocs('PASSPORT COPY', 'Passports'); }
 
@@ -4550,10 +4546,8 @@ function getFieldAttachments(jFields, names){
   return null;
 }
 
-
 function updateVisaCountBadge(){
   try{
-    // Count dari DATA JEMAAH UMRAH column PASSPORT COPY / VISA COPY je - sama untuk semua lokasi
     let visaCount=0, passCount=0;
     if(allRoomingJemaah && allRoomingJemaah.length>0){
       visaCount = allRoomingJemaah.filter(j=>{
@@ -4566,32 +4560,10 @@ function updateVisaCountBadge(){
       }).length;
       console.log(`Badge count - allRoomingJemaah:${allRoomingJemaah.length} Visa:${visaCount} Passport:${passCount} (same all locations)`);
     }
-    // Update badge terus, jangan biar Loading...
     document.querySelectorAll('#visaCountBadge').forEach(el=> el.textContent=visaCount);
     document.querySelectorAll('#passportCountBadge').forEach(el=> el.textContent=passCount);
   }catch(e){ console.error('updateVisaCountBadge error', e); }
 }
-
-
-// Auto retry kalau masih 0 lepas load (elak race condition)
-(function(){
-  let tries=0;
-  const iv=setInterval(()=>{
-    try{
-      if(allRoomingJemaah && allRoomingJemaah.length>0){
-        const v = allRoomingJemaah.filter(j=> j.fields && ((j.fields['VISA COPY'] && j.fields['VISA COPY'].length>0) || (j.fields['VISA'] && j.fields['VISA'].length>0))).length;
-        const p = allRoomingJemaah.filter(j=> j.fields && ((j.fields['PASSPORT COPY'] && j.fields['PASSPORT COPY'].length>0) || (j.fields['PASSPORT'] && j.fields['PASSPORT'].length>0))).length;
-        if((v>0 || p>0 || tries>=3) && (document.getElementById('visaCountBadge')?.textContent==='0')){
-          console.log('Retry badge update', v, p);
-          updateVisaCountBadge();
-        }
-        tries++;
-        if(tries>=8) clearInterval(iv);
-      }
-    }catch(e){}
-  }, 1200);
-  setTimeout(()=>clearInterval(iv), 10000);
-})();
 
 async function updatePassportCountFromDirectFetch(){
   try{
