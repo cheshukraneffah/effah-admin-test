@@ -4162,8 +4162,6 @@ async function downloadAllPassports(){
 }
 
 async function _downloadAllDocs(fieldName, label){
-  const btn = fieldName.includes('VISA') ? document.getElementById('btnDownloadVisas') : document.getElementById('btnDownloadPassports');
-  const originalText = btn?.innerHTML;
   try{
     const searchNames = fieldName.includes('VISA') ? ['VISA COPY'] : ['PASSPORT COPY'];
     let withDocs = allRoomingJemaah.filter(j=>{
@@ -4172,20 +4170,6 @@ async function _downloadAllDocs(fieldName, label){
       const atts = getFieldAttachments(f, searchNames);
       return atts && atts.length>0;
     });
-    
-    try{
-      const locUpper = (typeof activeLocation!=='undefined' && activeLocation) ? activeLocation.toUpperCase() : 'MEKAH';
-      const roomsInLoc = (allRoomingRecords||[]).filter(r=> (r.fields['LOKASI / CITY']||'MEKAH').toUpperCase()===locUpper);
-      const jIdsInLoc = new Set();
-      roomsInLoc.forEach(r=>{
-        (r.fields['JEMAAH']||[]).forEach(id=>jIdsInLoc.add(id));
-        (r.fields['JEMAAH TANPA KATIL']||[]).forEach(id=>jIdsInLoc.add(id));
-      });
-      if(jIdsInLoc.size>0){
-        const filtered = withDocs.filter(j=> jIdsInLoc.has(j.id));
-        if(filtered.length>0) withDocs = filtered;
-      }
-    }catch(e){}
 
     if(withDocs.length===0){
       alert(`Tiada ${fieldName} dalam trip ini. Total jemaah: ${allRoomingJemaah.length}`);
@@ -4194,7 +4178,7 @@ async function _downloadAllDocs(fieldName, label){
 
     withDocs = withDocs.sort((a,b)=> getJemaahName(a.fields).toUpperCase().localeCompare(getJemaahName(b.fields).toUpperCase()));
 
-    // Modal dengan cancel button
+    // Modal progress dengan cancel button
     window._visaDownloadCancelled=false;
     window._visaAbortController=new AbortController();
     let modal=document.getElementById('visaDownloadModal');
@@ -4251,8 +4235,7 @@ async function _downloadAllDocs(fieldName, label){
       }
     };
 
-    if(btn){ btn.disabled=true; btn.innerHTML='⏳ Loading...'; }
-
+    // REMOVE loading/progress kat button atas - button stay je, progress dalam modal je
     const pdfLib=await loadPdfLib();
     const {PDFDocument}=pdfLib;
     const mergedPdf=await PDFDocument.create();
@@ -4290,7 +4273,6 @@ async function _downloadAllDocs(fieldName, label){
 
     if(successCount===0){
       alert('PDF kosong - attachment gagal');
-      if(btn){ btn.disabled=false; btn.innerHTML=originalText||`Download ${label}`; }
       return;
     }
 
@@ -4311,14 +4293,12 @@ async function _downloadAllDocs(fieldName, label){
       if(m) m.classList.add('hidden');
     }, 3000);
 
-    if(btn){ btn.disabled=false; btn.innerHTML=originalText||`Download ${label} ( ${withDocs.length} )`; }
     try{ updateVisaCountBadge(); }catch(e){}
   }catch(e){
     console.error(e);
     alert('Ralat: '+e.message);
     const m=document.getElementById('visaDownloadModal');
     if(m) m.classList.add('hidden');
-    if(btn){ btn.disabled=false; }
   }
 }
 
@@ -4327,15 +4307,12 @@ function cancelVisaDownload(){
   try{ window._visaAbortController?.abort(); }catch(e){}
   const m=document.getElementById('visaDownloadModal');
   if(m) m.classList.add('hidden');
-  const btnV=document.getElementById('btnDownloadVisas');
-  const btnP=document.getElementById('btnDownloadPassports');
-  if(btnV) btnV.disabled=false;
-  if(btnP) btnP.disabled=false;
 }
 
 function closeVisaModal(){
   const m=document.getElementById('visaDownloadModal');
   if(m) m.classList.add('hidden');
+  window._visaDownloadCancelled=false;
 }
 
 function downloadAllVisas(){ return _downloadAllDocs('VISA COPY', 'Visas'); }
@@ -4577,94 +4554,33 @@ function getFieldAttachments(jFields, names){
 
 function updateVisaCountBadge(){
   try{
-    const visaNames=['VISA COPY'];
-    const passNames=['PASSPORT COPY'];
+    // Count dari Airtable DATA JEMAAH UMRAH column PASSPORT COPY / VISA COPY je - ikut screenshot
+    // Sama je mana2 lokasi MEKAH/MADINAH/TAIF pun, total trip
     let visaCount=0, passCount=0;
-    let visaCountLoc=0, passCountLoc=0;
-
-    // Count dari column PASSPORT COPY / VISA COPY terus (screenshot Airtable)
-    visaCount = (allRoomingJemaah||[]).filter(j=>{
-      const f=j.fields||{};
-      return (f['VISA COPY'] && Array.isArray(f['VISA COPY']) && f['VISA COPY'].length>0) || getFieldAttachments(f, visaNames);
-    }).length;
-    passCount = (allRoomingJemaah||[]).filter(j=>{
-      const f=j.fields||{};
-      return (f['PASSPORT COPY'] && Array.isArray(f['PASSPORT COPY']) && f['PASSPORT COPY'].length>0) || getFieldAttachments(f, passNames);
-    }).length;
-
-    // Ikut lokasi aktif MEKAH/MADINAH/TAIF
-    try{
-      const locUpper = (typeof activeLocation!=='undefined' && activeLocation) ? activeLocation.toUpperCase() : 'MEKAH';
-      const roomsInLoc = (allRoomingRecords||[]).filter(r=>{
-        const l = (r.fields['LOKASI / CITY']||'MEKAH').toUpperCase();
-        return l===locUpper;
-      });
-      const jIdsInLoc = new Set();
-      roomsInLoc.forEach(r=>{
-        (r.fields['JEMAAH']||[]).forEach(id=>jIdsInLoc.add(id));
-        (r.fields['JEMAAH TANPA KATIL']||[]).forEach(id=>jIdsInLoc.add(id));
-      });
-      const jemaahToCheck = jIdsInLoc.size>0 ? (allRoomingJemaah||[]).filter(j=>jIdsInLoc.has(j.id)) : (allRoomingJemaah||[]);
-      visaCountLoc = jemaahToCheck.filter(j=>{
-        const f=j.fields||{};
-        return (f['VISA COPY'] && Array.isArray(f['VISA COPY']) && f['VISA COPY'].length>0) || getFieldAttachments(f, visaNames);
-      }).length;
-      passCountLoc = jemaahToCheck.filter(j=>{
-        const f=j.fields||{};
-        return (f['PASSPORT COPY'] && Array.isArray(f['PASSPORT COPY']) && f['PASSPORT COPY'].length>0) || getFieldAttachments(f, passNames);
-      }).length;
-      if(jIdsInLoc.size===0){
-        visaCountLoc = visaCount;
-        passCountLoc = passCount;
-      }
-    }catch(e){
-      visaCountLoc = visaCount;
-      passCountLoc = passCount;
-    }
-
-    console.log(`Badge count - Total:${allRoomingJemaah?.length} Visa:${visaCount} Passport:${passCount} | Loc ${typeof activeLocation!=='undefined'?activeLocation:'?'} Visa:${visaCountLoc} Passport:${passCountLoc}`);
-
-    // Update semua badge
-    document.querySelectorAll('#visaCountBadge').forEach(el=> el.textContent=visaCountLoc);
-    document.querySelectorAll('#passportCountBadge').forEach(el=> el.textContent=passCountLoc);
     
-    // Update button text juga
-    const vBtn = document.getElementById('btnDownloadVisas');
-    const pBtn = document.getElementById('btnDownloadPassports');
-    if(vBtn){
-      // Kalau ada span badge dalam button, update span, kalau takde, replace text
-      const span = vBtn.querySelector('#visaCountBadge');
-      if(span) span.textContent = visaCountLoc;
-      // Update text Download Visas ( X )
-      if(vBtn.textContent.includes('Download Visas')){
-        vBtn.innerHTML = `Download Visas ( ${visaCountLoc} )`;
-      }
+    // Fetch dari field PASSPORT COPY / VISA COPY terus
+    (allRoomingJemaah||[]).forEach(j=>{
+      const f=j.fields||{};
+      if(f['VISA COPY'] && Array.isArray(f['VISA COPY']) && f['VISA COPY'].length>0) visaCount++;
+      if(f['PASSPORT COPY'] && Array.isArray(f['PASSPORT COPY']) && f['PASSPORT COPY'].length>0) passCount++;
+    });
+    
+    // Fallback guna getFieldAttachments kalau field name ada space lain
+    if(visaCount===0){
+      visaCount = (allRoomingJemaah||[]).filter(j=> getFieldAttachments(j.fields||{}, ['VISA COPY'])).length;
     }
-    if(pBtn){
-      const span = pBtn.querySelector('#passportCountBadge');
-      if(span) span.textContent = passCountLoc;
-      if(pBtn.textContent.includes('Download Passports')){
-        pBtn.innerHTML = `Download Passports ( ${passCountLoc} )`;
-      }
+    if(passCount===0){
+      passCount = (allRoomingJemaah||[]).filter(j=> getFieldAttachments(j.fields||{}, ['PASSPORT COPY'])).length;
     }
 
+    console.log(`Badge count - Total jemaah:${allRoomingJemaah?.length} Visa:${visaCount} Passport:${passCount} (same for all locations)`);
+
+    // Update badge
+    document.querySelectorAll('#visaCountBadge').forEach(el=> el.textContent=visaCount);
+    document.querySelectorAll('#passportCountBadge').forEach(el=> el.textContent=passCount);
+    
   }catch(e){ console.error('updateVisaCountBadge error', e); }
 }
-
-// Tambah auto-update badge setiap 1s untuk 5s pertama lepas load (elak race condition 0)
-(function(){
-  let tries=0;
-  const iv=setInterval(()=>{
-    try{
-      if(allRoomingJemaah && allRoomingJemaah.length>0){
-        updateVisaCountBadge();
-        tries++;
-        if(tries>=5) clearInterval(iv);
-      }
-    }catch(e){}
-  }, 1000);
-  setTimeout(()=>clearInterval(iv), 6000);
-})();
 
 async function updatePassportCountFromDirectFetch(){
   try{
