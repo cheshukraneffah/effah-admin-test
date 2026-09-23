@@ -1457,6 +1457,18 @@ async function fetchRoomingData(forceReload=false){
       if(sel && sel.value) tripId=sel.value;
     }
     const now = Date.now();
+    // FIX trip mismatch: kalau trip bertukar, clear data lama terus supaya tak tunjuk namelist trip lain
+    if(tripId && _roomingLastTripId && tripId!==_roomingLastTripId){
+      console.log('TRIP CHANGED', _roomingLastTripId, '->', tripId, 'clear old data');
+      allRoomingRecords = [];
+      allRoomingJemaah = [];
+      try{
+        const cont=document.getElementById('namelistContainer');
+        if(cont) cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400">Memuat jemaah untuk trip baru...</div>';
+        const grid=document.getElementById('roomingGrid');
+        if(grid) grid.innerHTML='<div class="col-span-2 p-6 text-center text-[11px] text-slate-400">Memuat bilik...</div>';
+      }catch(e){}
+    }
     const cacheValid = (now - _roomingCacheTime) < 300000;
     const canUseCache = _roomingFirstLoadDone && !forceReload && tripId && tripId===_roomingLastTripId && allRoomingJemaah.length>0 && cacheValid && !_roomingIsLoading;
     if(canUseCache){
@@ -1569,6 +1581,14 @@ async function fetchRoomingData(forceReload=false){
         console.error('Fallback error', e);
         allRooms = allRooms||[]; allJems = allJems||[]; allStaffRaw = allStaffRaw||[];
       }
+    }
+    // FIX race condition: kalau user tukar trip lagi masa fetch, jangan guna data lama
+    const currentSel = document.getElementById('roomingTripSelect')?.value || window.selectedTripRecord?.id || '';
+    if(currentSel && currentSel!==tripId){
+      console.warn('TRIP CHANGED DURING FETCH, discard', tripId, 'current', currentSel);
+      _roomingIsLoading = false;
+      try{ hideRoomingLoading(); }catch(e){}
+      return;
     }
     allRoomingRecords = allRooms||[];
     allRoomingJemaah = allJems||[];
@@ -1800,7 +1820,9 @@ function renderNamelist(){
     const assignedGlobal = (typeof assignedAnySet!=='undefined' && assignedAnySet.has) ? assignedAnySet.has(r.id) : isJemaahAssignedAny(r.id);
     // FIX ghost dropdown: jangan guna opacity-60 sebab child dropdown ikut transparent, guna bg saja
     const rowCls=assignedInLoc?'bg-slate-100 text-slate-500':'hover:bg-slate-50';
-    const drag=assignedInLoc?'':`onclick="selectJemaahForAssign('${r.id}')" data-jemaah-id="${r.id}" style="cursor:pointer;"`;
+    // FIX: Boleh edit inline walaupun 0 bilik - kalau 0 bilik, jangan jadikan whole row clickable untuk assign, biar dropdown jadi focus
+    const hasRooms = (typeof allRoomingRecords!=='undefined' && allRoomingRecords.length>0);
+    const drag=assignedInLoc?'':(hasRooms?`onclick="selectJemaahForAssign('${r.id}')" data-jemaah-id="${r.id}" style="cursor:pointer;"`:`data-jemaah-id="${r.id}" style="cursor:default;"`);
     let statusIcon = assignedInLoc? `<button onclick="removeJemaahFromCurrentLoc('${r.id}')" class="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-[10px]" title="Keluarkan dari ${activeLocation}">✕</button>` : `<button onclick="quickAssign('${r.id}')" class="w-5 h-5 rounded-full border bg-slate-100 hover:bg-slate-200 text-[10px]">+</button>`;
     if(!assignedInLoc && assignedGlobal) statusIcon = `<button onclick="quickAssign('${r.id}')" class="w-5 h-5 rounded-full border bg-amber-100 hover:bg-amber-200 text-[10px]" title="Sudah ada di lokasi lain, boleh tambah di ${activeLocation} juga">+</button>`;
     const fbArr = getBoardArray(r.fields);
@@ -2052,7 +2074,13 @@ function renderRoomingGrid(){
   const totalStaff = staffFromText + staffFromLinked;
   const occEl=document.getElementById('roomingOccupancy'); if(occEl) occEl.textContent=`${totalJFull} Jemaah + ${totalStaff} Staff • ${activeLocation}`;
   renderRoomingOverview(rooms);
-  if(rooms.length===0){ grid.innerHTML=`<div class="col-span-2 p-6 text-center text-[11px] border border-dashed rounded-2xl bg-white">Tiada bilik untuk <b>${activeLocation}</b><br><button onclick="openNewRoomModal()" class="mt-2.5 px-3 py-1.5 bg-[#7A0C2E] text-white rounded-full text-[11px]">+ Bilik Baru untuk ${activeLocation}</button></div>`; return; }
+  if(rooms.length===0){ 
+    grid.innerHTML=`<div class="col-span-2 p-6 text-center text-[11px] border border-dashed rounded-2xl bg-white">Tiada bilik untuk <b>${activeLocation}</b><br><button onclick="openNewRoomModal()" class="mt-2.5 px-3 py-1.5 bg-[#7A0C2E] text-white rounded-full text-[11px]">+ Bilik Baru untuk ${activeLocation}</button><div class="mt-2 text-[10px] text-slate-400">Boleh edit maklumat jemaah di Namelist kiri walaupun tiada bilik lagi</div></div>`; 
+    // FIX: Walaupun 0 bilik, pastikan field options ada supaya inline edit boleh
+    try{ buildRoomingFieldOptionsFromRecords(); }catch(e){}
+    try{ renderNamelist(); }catch(e){}
+    return; 
+  }
   grid.innerHTML=rooms.map((rec, roomIdx)=>{
     const f=rec.fields; const roomId=f['Room ID / Nama Bilik']||generateRoomIdFromCap(f['KAPASITI']); const pakej=f['PAKEJ / HOTEL']||'EKONOMI'; const cap=f['KAPASITI']||4; const hotel=f['HOTEL NAME']||''; const staffForRoom=getStaffForRoom(rec.id); const staffArr=staffForRoom.map(s=>s.name); const jIds=f['JEMAAH']||[]; const count=jIds.length+staffArr.length;
     const jSlots=jIds.map(jId=>{ 
@@ -4718,10 +4746,9 @@ window.handleRoomSlotClick = function(roomId){
   }
 };
 
-// Re-override renderNamelist cleanly
+// Re-override renderNamelist - FIX inline edit when 0 bilik
 (function(){
   const orig = window.renderNamelist;
-  // Save original if not saved
   if(!window._origRenderNamelistV120 && typeof orig === 'function' && !orig.toString().includes('V120')){
     window._origRenderNamelistV120 = orig;
   }
@@ -4730,30 +4757,26 @@ window.handleRoomSlotClick = function(roomId){
       if(window._origRenderNamelistV120) window._origRenderNamelistV120();
       else if(typeof orig === 'function') orig();
     }catch(e){ console.error('orig renderNamelist error', e); }
+    // V31 FIX: Jangan override draggable lagi, biar inline dropdown jadi primary bila 0 bilik
     try{
       const cont = document.getElementById('namelistContainer');
       if(!cont) return;
-      cont.querySelectorAll('[draggable="true"]').forEach(el=>{
-        const dragAttr = el.getAttribute('ondragstart')||'';
-        if(!dragAttr) return;
-        const isStaff = dragAttr.includes('dragStaff');
-        const m = dragAttr.match(/'([^']+)'/);
-        if(!m) return;
-        const id = m[1];
-        el.removeAttribute('draggable');
-        el.removeAttribute('ondragstart');
-        el.removeAttribute('ondragend');
-        el.style.cursor='pointer';
-        // Highlight if selected
+      const hasRooms = (typeof allRoomingRecords!=='undefined' && allRoomingRecords.length>0);
+      if(!hasRooms){
+        // Bila 0 bilik, highlight selected untuk inline edit, bukan untuk assign
+        cont.querySelectorAll('[data-jemaah-id]').forEach(el=>{
+          el.style.cursor='default';
+        });
+        return;
+      }
+      // Bila ada bilik, baru enable click untuk assign
+      cont.querySelectorAll('[data-jemaah-id]').forEach(el=>{
+        const id = el.getAttribute('data-jemaah-id');
+        if(!id) return;
         if(window._selectedJemaahId === id || window._selectedStaffId === id){
           el.classList.add('ring-2','ring-emerald-500','bg-emerald-50');
           el.style.background='#ecfdf5';
         }
-        el.onclick = function(e){
-          e.preventDefault(); e.stopPropagation();
-          if(isStaff) selectStaffForAssign(id);
-          else selectJemaahForAssign(id);
-        };
       });
     }catch(e){ console.error('V120 namelist patch error', e); }
   };
