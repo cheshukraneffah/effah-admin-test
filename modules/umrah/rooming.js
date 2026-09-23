@@ -1355,25 +1355,16 @@ async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100){
 
 async function fetchRoomingData(forceReload=false){
   try{
-    let tripId=window.selectedTripRecord?.id||'';
+    let tripId=window.selectedTripRecord?.id||localStorage.getItem('effah_active_trip_id')||localStorage.getItem('effah_last_selected_trip')||localStorage.getItem('selectedTripId')||'';
     if(!tripId){
       const sel=document.getElementById('roomingTripSelect');
       if(sel && sel.value) tripId=sel.value;
     }
     const now = Date.now();
-    if(tripId && _roomingLastTripId && tripId!==_roomingLastTripId){
-      console.log('TRIP CHANGED', _roomingLastTripId, '->', tripId, 'clear old data');
-      allRoomingRecords = [];
-      // Jangan clear jemaah terus kalau ada cache, biar tunjuk loading dulu
-      const cont=document.getElementById('namelistContainer');
-      if(cont) cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuat jemaah untuk trip baru...</div>';
-      const grid=document.getElementById('roomingGrid');
-      if(grid) grid.innerHTML='<div class="col-span-2 p-6 text-center text-[11px] text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuatkan bilik...</div>';
-    }
     const cacheValid = (now - _roomingCacheTime) < 300000;
     const canUseCache = _roomingFirstLoadDone && !forceReload && tripId && tripId===_roomingLastTripId && allRoomingJemaah.length>0 && cacheValid && !_roomingIsLoading;
     if(canUseCache){
-      console.log('CACHE HIT - trip', tripId);
+      console.log('CACHE ROOMING DIGUNAKAN V103.28 - using cached data for trip', tripId);
       try{
         if((!staffList || staffList.length===0) && _staffCache[tripId] && _staffCache[tripId].length>0){
           staffList = _staffCache[tripId];
@@ -1386,176 +1377,90 @@ async function fetchRoomingData(forceReload=false){
       try{ renderStaffList(); }catch(e){}
       try{ renderRoomingGrid(); }catch(e){}
       try{ renderLocationTabs(); }catch(e){}
-      try{ updateVisaCountBadge(); }catch(e){}
       try{ hideRoomingLoading(); }catch(e){}
       return;
     }
-    if(!forceReload && tripId){
-      try{
-        const cached = localStorage.getItem('effah_rooming_cache_'+tripId);
-        if(cached){
-          const parsed = JSON.parse(cached);
-          const age = now - (parsed._time||0);
-          if(age < 300000 && parsed.jemaah && parsed.rooms){
-            console.log('LOCALSTORAGE CACHE HIT umur', Math.round(age/1000)+'s');
-            allRoomingRecords = parsed.rooms;
-            allRoomingJemaah = parsed.jemaah;
-            staffList = parsed.staff||[];
-            _roomingLastTripId = tripId;
-            _roomingCacheTime = parsed._time;
-            _roomingFirstLoadDone = true;
-            window._roomingLastTripId = _roomingLastTripId;
-            window._roomingCacheTime = _roomingCacheTime;
-            window._roomingFirstLoadDone = true;
-            try{ buildRoomingFieldOptionsFromRecords(); }catch(e){}
-            try{ renderNamelist(); }catch(e){}
-            try{ renderStaffList(); }catch(e){}
-            try{ renderRoomingGrid(); }catch(e){}
-            try{ renderLocationTabs(); }catch(e){}
-            try{ updateVisaCountBadge(); }catch(e){}
-            try{ hideRoomingLoading(); }catch(e){}
-            _roomingIsLoading=false;
-            return;
-          }
-        }
-      }catch(e){}
+    if(_roomingIsLoading && !forceReload){
+      console.log('Data rooming sedang dimuatkan, permintaan pendua diabaikan');
+      return;
     }
-    if(_roomingIsLoading && !forceReload) return;
     _roomingIsLoading = true;
     showRoomingLoading(); 
-    try{ populateRoomingTripDropdown(); }catch(e){}
+    populateRoomingTripDropdown();
     if(!tripId){
       const sel=document.getElementById('roomingTripSelect');
       if(sel && sel.value) tripId=sel.value;
     }
     if(!tripId){ 
-      hideRoomingLoading();
+      const cont=document.getElementById('namelistContainer');
+      if(cont) cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400">Sila pilih trip di atas.</div>'; 
+      if(typeof hideRoomingLoading==='function') hideRoomingLoading();
       _roomingIsLoading=false;
       return; 
     }
     const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); 
     const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
     if(!base||!pat){ 
-      hideRoomingLoading();
+      const cont=document.getElementById('namelistContainer');
+      if(cont) cont.innerHTML='<div class="p-6 text-center text-[11px] text-red-400">Konfigurasi Airtable tidak ditemui.</div>';
+      if(typeof hideRoomingLoading==='function') hideRoomingLoading();
       _roomingIsLoading=false;
       return;
     }
-    console.log('FETCH ROOMING START', tripId);
-    try{ if(typeof fetchRoomingFieldOptionsFromMeta==='function') fetchRoomingFieldOptionsFromMeta(); }catch(e){}
-    
-    const formulaIdExact = `SEARCH("," & "${tripId}" & ",", "," & ARRAYJOIN({TRIP} & "") & ",")`;
-    
-    // STAGE 1: Fetch JEMAAH dulu - paling penting untuk namelist, render terus
-    console.log('STAGE 1: Fetch JEMAAH dulu untuk trip', tripId);
-    let allJems = [];
-    try{
-      const jemsResult = await fetchAirtableWithFilter('DATA JEMAAH UMRAH', formulaIdExact, 100);
-      if(jemsResult && jemsResult.length>0){
-        allJems = jemsResult;
-        console.log('JEMAAH FETCH BERJAYA:', allJems.length, 'jemaah - render namelist dulu');
-        // Verify trip still same
-        const currentSel = document.getElementById('roomingTripSelect')?.value || window.selectedTripRecord?.id || '';
-        if(currentSel && currentSel!==tripId){
-          console.warn('TRIP CHANGED DURING JEMAAH FETCH, discard');
-          _roomingIsLoading = false;
-          try{ hideRoomingLoading(); }catch(e){}
-          return;
-        }
-        allRoomingJemaah = allJems;
-        _roomingLastTripId = tripId;
-        _roomingCacheTime = Date.now();
-        _roomingFirstLoadDone = true;
-        window._roomingLastTripId = _roomingLastTripId;
-        window._roomingCacheTime = _roomingCacheTime;
-        window._roomingFirstLoadDone = true;
-        try{ buildRoomingFieldOptionsFromRecords(); }catch(e){}
-        try{ renderNamelist(); }catch(e){ console.error(e); }
-        try{ renderStaffList(); }catch(e){}
-        try{ renderLocationTabs(); }catch(e){}
-        try{ updateVisaCountBadge(); }catch(e){}
-      } else {
-        console.warn('JEMAAH 0, cuba fallback');
-        allJems = [];
-      }
-    }catch(e){
-      console.warn('JEMAAH fetch error', e);
-      allJems = [];
-    }
 
-    // STAGE 2: Fetch BILIK + STAFF lepas namelist dah muncul
-    console.log('STAGE 2: Fetch BILIK + STAFF');
-    let allRooms = [];
-    let allStaffRaw = [];
-    try{
-      const [roomsResult, staffResult] = await Promise.all([
-        fetchAirtableWithFilter('ROOMING LIST', formulaIdExact, 100),
-        fetchAirtableWithFilter('STAFF LIST (ROOMING)', formulaIdExact, 100)
-      ]);
-      allRooms = roomsResult||[];
-      allStaffRaw = staffResult||[];
-      console.log('BILIK FETCH BERJAYA:', allRooms.length, 'bilik,', allStaffRaw.length, 'staff');
-    }catch(e){
-      console.warn('BILIK fetch error, cuba fallback', e);
-      try{
-        const [roomsAll, staffAll] = await Promise.all([
-          fetchAirtableAll('ROOMING LIST', 100),
-          fetchAirtableAll('STAFF LIST (ROOMING)', 100)
-        ]);
-        allRooms = roomsAll.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
-        allStaffRaw = staffAll.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
-      }catch(e2){
-        console.error('Fallback bilik error', e2);
-        allRooms = []; allStaffRaw = [];
-      }
-    }
+    // OPTIMIZED: guna filterByFormula terus di Airtable, bukan fetch semua
+    const filterFormula = `SEARCH("${tripId}", ARRAYJOIN({TRIP} & ""))`;
+    console.log('OPTIMIZED FETCH - filter', filterFormula);
 
-    // Final race check
-    const currentSelFinal = document.getElementById('roomingTripSelect')?.value || window.selectedTripRecord?.id || '';
-    if(currentSelFinal && currentSelFinal!==tripId){
-      console.warn('TRIP CHANGED DURING BILIK FETCH, discard', tripId, 'current', currentSelFinal);
-      _roomingIsLoading = false;
-      try{ hideRoomingLoading(); }catch(e){}
-      return;
-    }
+    // Fetch 3 table serentak (parallel) dengan filter - jauh lebih laju
+    const [allRooms, allJems, allStaffRaw] = await Promise.all([
+      fetchAirtableWithFilter('ROOMING LIST', filterFormula, 100),
+      fetchAirtableWithFilter('DATA JEMAAH UMRAH', filterFormula, 100),
+      fetchAirtableWithFilter('STAFF LIST (ROOMING)', filterFormula, 100)
+    ]);
 
-    allRoomingRecords = allRooms||[];
-    if(allJems && allJems.length>0) allRoomingJemaah = allJems;
+    console.log('OPTIMIZED fetch done: rooms', allRooms.length, 'jemaah', allJems.length, 'staffRaw', allStaffRaw.length);
+
+    allRoomingRecords = allRooms;
+    allRoomingJemaah = allJems;
+
     _roomingLastTripId = tripId;
     _roomingCacheTime = Date.now();
     _roomingFirstLoadDone = true;
     window._roomingLastTripId = _roomingLastTripId;
     window._roomingCacheTime = _roomingCacheTime;
     window._roomingFirstLoadDone = true;
+
+    // Process staff - mapping cepat
     try{
-      localStorage.setItem('effah_rooming_cache_'+tripId, JSON.stringify({_time:_roomingCacheTime, rooms:allRoomingRecords, jemaah:allRoomingJemaah, staff:allStaffRaw}));
-    }catch(e){}
-    try{
-      if(allStaffRaw && allStaffRaw[0] && allStaffRaw[0].fields){
-        staffList = allStaffRaw.map(r=>({
-          id:r.id,
-          airtableId:r.id,
-          name:r.fields['NAME']||'',
-          boardBasis:r.fields['BOARD BASIS']||'',
-          train:!!r.fields['TRAIN'],
-          sortNumber:r.fields['SORT NUMBER']||9999,
-          trip:r.fields['TRIP']||[],
-          roomIds: r.fields['ROOMING LIST'] || r.fields['ROOM'] || r.fields['BILIK'] || [],
-          roomLink: (r.fields['ROOMING LIST']||[])[0]||null
-        }));
-      } else staffList = allStaffRaw||[];
+      staffList = allStaffRaw.map(r=>({
+        id:r.id,
+        airtableId:r.id,
+        name:r.fields['NAME']||'',
+        boardBasis:r.fields['BOARD BASIS']||'',
+        train:!!r.fields['TRAIN'],
+        sortNumber:r.fields['SORT NUMBER']||9999,
+        trip:r.fields['TRIP']||[],
+        roomIds: r.fields['ROOMING LIST'] || r.fields['ROOM'] || r.fields['BILIK'] || [],
+        roomLink: (r.fields['ROOMING LIST']||[])[0]||null
+      }));
       staffList.sort((a,b)=>(a.sortNumber||9999)-(b.sortNumber||9999));
-      try{ _staffCache[tripId] = JSON.parse(JSON.stringify(staffList)); window._staffCache = _staffCache; }catch(e){}
-    }catch(e){}
-    try{ buildRoomingFieldOptionsFromRecords(); }catch(e){}
-    try{ renderNamelist(); }catch(e){ console.error(e); }
-    try{ renderStaffList(); }catch(e){}
-    try{ renderRoomingGrid(); }catch(e){}
-    try{ renderLocationTabs(); }catch(e){}
-  }catch(e){ 
-    console.error('fetchRoomingData fatal', e); 
-  }finally{
+      try{ const cacheKey = tripId || 'default'; _staffCache[cacheKey] = JSON.parse(JSON.stringify(staffList)); window._staffCache = _staffCache; }catch(e){}
+    }catch(e){ console.warn('staff mapping fail', e); }
+
+    try{ buildRoomingFieldOptionsFromRecords(); }catch(e){ console.warn('build options fail', e); }
+    renderNamelist(); 
+    renderStaffList();
+    renderRoomingGrid(); 
+    renderLocationTabs();
+    if(typeof hideRoomingLoading==='function') hideRoomingLoading();
     _roomingIsLoading = false;
-    try{ hideRoomingLoading(); }catch(e){}
+  }catch(e){ 
+    _roomingIsLoading = false;
+    console.error('fetchRoomingData fatal', e); 
+    const cont=document.getElementById('namelistContainer');
+    if(cont) cont.innerHTML='<div class="p-6 text-center text-[11px] text-red-400">Ralat: '+e.message+'<br><button onclick="fetchRoomingData(true)" class="mt-2 px-3 py-1 bg-[#7A0C2E] text-white rounded-full text-[10px]">Cuba Semula</button></div>';
+    if(typeof hideRoomingLoading==='function') hideRoomingLoading();
   }
 }
 
@@ -1728,7 +1633,14 @@ function renderNamelist(){
   const topAssign=document.getElementById('assignedTop'); if(topAssign) { topAssign.textContent=(total-belumGlobal)+' Telah Ditetapkan'; topAssign.style.display='none'; }
   const topUnassignedBadge=document.getElementById('topUnassignedBadge'); if(topUnassignedBadge) topUnassignedBadge.style.display='none';
   const topAssignedBadge=document.getElementById('topAssignedBadge'); if(topAssignedBadge) topAssignedBadge.style.display='none';
-  if(total===0){ cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400">Tiada jemaah untuk trip ini</div>'; return; }
+  if(total===0){ 
+    if(window._roomingIsLoading){
+      cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuat jemaah untuk trip ini...<br><span class="text-[10px]">Trip: '+(window.selectedTripRecord?.fields?.Trip||window.selectedTripRecord?.id||'').substring(0,50)+'</span></div>'; 
+    } else {
+      cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400">Tiada jemaah untuk trip ini<br><button onclick="fetchRoomingData(true)" class="mt-2 px-3 py-1 bg-[#7A0C2E] text-white rounded-full text-[10px]">Muat Semula</button><div class="mt-1 text-[9px] text-slate-300">Trip ID: '+(window.selectedTripRecord?.id||'').substring(0,20)+'</div></div>'; 
+    }
+    return; 
+  }
   cont.innerHTML=filtered.map((r,i)=>{
     const name=getJemaahName(r.fields);
     const assignedNormalInLoc=assignedInLocSet.has(r.id);

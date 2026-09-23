@@ -876,10 +876,6 @@ async function fetchJemaahMetaOptionsFromMeta(){
       }
     });
     console.log('✅ Jemaah V78 loaded', Object.keys(jemaahMetaFieldsByName).length, 'fields');
-    const p = jemaahMetaFieldsByName['PAKEJ'];
-    if(p) // removed sample log
-    const ins = jemaahMetaFieldsByName['INSURAN'];
-    if(ins) // removed sample log
     
     _jemaahMetaFetching=false;
     return jemaahFieldOptions;
