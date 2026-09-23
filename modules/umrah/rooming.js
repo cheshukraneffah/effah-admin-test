@@ -4172,15 +4172,29 @@ async function _downloadAllDocs(fieldName, label){
     });
 
     if(withDocs.length===0){
-      alert(`Tiada ${fieldName} dalam trip ini. Total jemaah: ${allRoomingJemaah.length}`);
-      return;
+      // Cuba fetch direct kalau allRoomingJemaah kosong
+      const tripId = window.selectedTripRecord?.id||'';
+      if(tripId){
+        try{
+          const formula = `SEARCH("," & "${tripId}" & ",", "," & ARRAYJOIN({TRIP} & "") & ",")`;
+          const recs = await fetchAirtableWithFilter('DATA JEMAAH UMRAH', formula, 100);
+          withDocs = recs.filter(r=>{
+            const f=r.fields||{};
+            return (f[fieldName] && Array.isArray(f[fieldName]) && f[fieldName].length>0);
+          });
+          if(withDocs.length>0) allRoomingJemaah = recs;
+        }catch(e){}
+      }
+      if(withDocs.length===0){
+        alert(`Tiada ${fieldName} dalam trip ini. Total jemaah: ${allRoomingJemaah.length}`);
+        return;
+      }
     }
 
     withDocs = withDocs.sort((a,b)=> getJemaahName(a.fields).toUpperCase().localeCompare(getJemaahName(b.fields).toUpperCase()));
 
-    // Modal progress dengan cancel button
+    // Modal dengan cancel button - keep
     window._visaDownloadCancelled=false;
-    window._visaAbortController=new AbortController();
     let modal=document.getElementById('visaDownloadModal');
     if(!modal){
       modal=document.createElement('div');
@@ -4554,33 +4568,73 @@ function getFieldAttachments(jFields, names){
 
 function updateVisaCountBadge(){
   try{
-    // Count dari Airtable DATA JEMAAH UMRAH column PASSPORT COPY / VISA COPY je - ikut screenshot
-    // Sama je mana2 lokasi MEKAH/MADINAH/TAIF pun, total trip
+    // Count dari Airtable DATA JEMAAH UMRAH column PASSPORT COPY / VISA COPY je - screenshot
+    // Sama je mana2 lokasi MEKAH/MADINAH/TAIF
     let visaCount=0, passCount=0;
     
-    // Fetch dari field PASSPORT COPY / VISA COPY terus
-    (allRoomingJemaah||[]).forEach(j=>{
-      const f=j.fields||{};
-      if(f['VISA COPY'] && Array.isArray(f['VISA COPY']) && f['VISA COPY'].length>0) visaCount++;
-      if(f['PASSPORT COPY'] && Array.isArray(f['PASSPORT COPY']) && f['PASSPORT COPY'].length>0) passCount++;
-    });
-    
-    // Fallback guna getFieldAttachments kalau field name ada space lain
-    if(visaCount===0){
-      visaCount = (allRoomingJemaah||[]).filter(j=> getFieldAttachments(j.fields||{}, ['VISA COPY'])).length;
-    }
-    if(passCount===0){
-      passCount = (allRoomingJemaah||[]).filter(j=> getFieldAttachments(j.fields||{}, ['PASSPORT COPY'])).length;
+    // Cuba dari allRoomingJemaah dulu (kalau dah fetch)
+    if(allRoomingJemaah && allRoomingJemaah.length>0){
+      visaCount = allRoomingJemaah.filter(j=>{
+        const f=j.fields||{};
+        return (f['VISA COPY'] && Array.isArray(f['VISA COPY']) && f['VISA COPY'].length>0) || getFieldAttachments(f, ['VISA COPY']);
+      }).length;
+      passCount = allRoomingJemaah.filter(j=>{
+        const f=j.fields||{};
+        return (f['PASSPORT COPY'] && Array.isArray(f['PASSPORT COPY']) && f['PASSPORT COPY'].length>0) || getFieldAttachments(f, ['PASSPORT COPY']);
+      }).length;
+      console.log(`Badge count from allRoomingJemaah - Total:${allRoomingJemaah.length} Visa:${visaCount} Passport:${passCount}`);
     }
 
-    console.log(`Badge count - Total jemaah:${allRoomingJemaah?.length} Visa:${visaCount} Passport:${passCount} (same for all locations)`);
-
-    // Update badge
+    // Update UI terus walaupun 0, jangan biar Loading...
     document.querySelectorAll('#visaCountBadge').forEach(el=> el.textContent=visaCount);
     document.querySelectorAll('#passportCountBadge').forEach(el=> el.textContent=passCount);
     
+    // Kalau count masih 0 tapi ada trip, cuba fetch direct dari Airtable (background)
+    if((visaCount===0 && passCount===0) && window.selectedTripRecord?.id){
+      const tripId = window.selectedTripRecord.id;
+      console.log('Count 0, cuba fetch direct dari Airtable untuk trip', tripId);
+      (async ()=>{
+        try{
+          const formula = `SEARCH("," & "${tripId}" & ",", "," & ARRAYJOIN({TRIP} & "") & ",")`;
+          const recs = await fetchAirtableWithFilter('DATA JEMAAH UMRAH', formula, 100);
+          if(recs && recs.length>0){
+            const v = recs.filter(r=> r.fields && r.fields['VISA COPY'] && Array.isArray(r.fields['VISA COPY']) && r.fields['VISA COPY'].length>0).length;
+            const p = recs.filter(r=> r.fields && r.fields['PASSPORT COPY'] && Array.isArray(r.fields['PASSPORT COPY']) && r.fields['PASSPORT COPY'].length>0).length;
+            console.log(`Direct fetch count - Total:${recs.length} Visa:${v} Passport:${p}`);
+            if(v>0 || p>0){
+              document.querySelectorAll('#visaCountBadge').forEach(el=> el.textContent=v);
+              document.querySelectorAll('#passportCountBadge').forEach(el=> el.textContent=p);
+              // Update allRoomingJemaah kalau kosong
+              if(!allRoomingJemaah || allRoomingJemaah.length===0){
+                allRoomingJemaah = recs;
+              }
+            }
+          }
+        }catch(e){ console.warn('Direct count fail', e); }
+      })();
+    }
+
   }catch(e){ console.error('updateVisaCountBadge error', e); }
 }
+
+// Auto update badge setiap 1s untuk 5s elak 0 race condition
+(function(){
+  let tries=0;
+  const iv=setInterval(()=>{
+    try{
+      if(allRoomingJemaah && allRoomingJemaah.length>0){
+        const v = allRoomingJemaah.filter(j=> j.fields && j.fields['VISA COPY'] && Array.isArray(j.fields['VISA COPY']) && j.fields['VISA COPY'].length>0).length;
+        const p = allRoomingJemaah.filter(j=> j.fields && j.fields['PASSPORT COPY'] && Array.isArray(j.fields['PASSPORT COPY']) && j.fields['PASSPORT COPY'].length>0).length;
+        if(v>0 || p>0 || tries>2){
+          updateVisaCountBadge();
+        }
+        tries++;
+        if(tries>=6) clearInterval(iv);
+      }
+    }catch(e){}
+  }, 1000);
+  setTimeout(()=>clearInterval(iv), 7000);
+})();
 
 async function updatePassportCountFromDirectFetch(){
   try{
