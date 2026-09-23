@@ -281,18 +281,11 @@ async function handleAddNewRoomingOption(fieldName, jemaahId=null){
 function buildRoomingFieldOptionsFromRecords(){
   try{
     const fieldsToBuild = ['BOARD BASIS','INSURAN','PAKEJ','STATUS VISA'];
-    // FIX: Boleh edit maklumat jemaah walaupun tiada bilik - jangan block dropdown
+    // V110 FIX: If meta already has options, don't override, but fill missing ones from records
     const hasSomeMeta = _roomingMetaCache && Object.values(roomingFieldOptions).some(arr=>arr && arr.length>0);
     if(hasSomeMeta){
       console.log('V110: Cache metadata wujud, hanya mengisi medan yang masih kosong daripada rekod');
     }
-    // Fallback defaults kalau meta takde dan tiada bilik lagi - supaya boleh edit terus
-    const fallbackDefaults = {
-      'BOARD BASIS': ['BB (MEKAH)', 'BB (MADINAH)', 'FULLBOARD', 'HALFBOARD', 'BB SAHAJA'],
-      'INSURAN': ['TAKAFUL', 'ETIQA', 'AL-KHAIRI'],
-      'PAKEJ': ['EKONOMI', 'STANDARD', 'PREMIUM', 'VIP'],
-      'STATUS VISA': ['TOURIST', 'UMRAH', 'VISA', 'PROSES', 'LULUS']
-    };
     fieldsToBuild.forEach(fieldName=>{
       if(roomingFieldOptions[fieldName] && roomingFieldOptions[fieldName].length>0) {
         // Already has meta options, keep it - this is the full list from Airtable
@@ -329,11 +322,6 @@ function buildRoomingFieldOptionsFromRecords(){
         roomingFieldOptions[fieldName] = Array.from(values).filter(Boolean).sort();
         if(fieldName==='STATUS VISA') roomingFieldOptions['VISA'] = roomingFieldOptions[fieldName];
         console.log(`V110: Dibina ${fieldName} daripada rekod:`, roomingFieldOptions[fieldName]);
-      } else if(!roomingFieldOptions[fieldName] || roomingFieldOptions[fieldName].length===0){
-        // Tiada bilik lagi tapi boleh edit - guna fallback defaults supaya dropdown tak kosong
-        roomingFieldOptions[fieldName] = fallbackDefaults[fieldName] || [];
-        if(fieldName==='STATUS VISA') roomingFieldOptions['VISA'] = roomingFieldOptions[fieldName];
-        console.log(`V110: Guna fallback defaults untuk ${fieldName} (tiada bilik lagi):`, roomingFieldOptions[fieldName]);
       }
     });
     window.roomingFieldOptions = roomingFieldOptions;
@@ -1123,7 +1111,7 @@ function getRoomOrderKey(){ const tripId=window.selectedTripRecord?.id||localSto
 function getRoomOrderedList(rooms){
   try{
     if(!rooms || rooms.length===0){
-      // Jangan spam console bila tiada bilik - patut boleh edit maklumat jemaah dulu
+      console.log('getRoomOrderedList: no rooms for location', activeLocation);
       return [];
     }
     const key=getRoomOrderKey(); 
@@ -1326,41 +1314,6 @@ function renderLocationTabs(){
   container.innerHTML=html;
 }
 
-
-
-async function fetchWithTimeout(url, opts={}, timeoutMs=60000){
-  const controller = new AbortController();
-  const id = setTimeout(()=>controller.abort(), timeoutMs);
-  try{
-    const res = await fetch(url, {...opts, signal: controller.signal});
-    clearTimeout(id);
-    return res;
-  }catch(e){
-    clearTimeout(id);
-    throw e;
-  }
-}
-
-function getTripNameForFilter(tripId){ return ''; /* DISABLE name filter slash causes 422 */ }
-function _orig_getTripNameForFilter_DISABLED(tripId){
-  try{
-    if(window.selectedTripRecord && window.selectedTripRecord.fields){
-      const f = window.selectedTripRecord.fields;
-      return f['Trip'] || f['NAME'] || '';
-    }
-    const allTrips = window.allTripUmrahRecords||window.allTripRecords||window.allTrips||[];
-    const found = allTrips.find(t=>t.id===tripId);
-    if(found && found.fields){
-      return found.fields['Trip'] || found.fields['NAME'] || '';
-    }
-    const sel=document.getElementById('roomingTripSelect');
-    if(sel && sel.selectedOptions && sel.selectedOptions[0]){
-      return sel.selectedOptions[0].textContent.trim() || '';
-    }
-  }catch(e){}
-  return '';
-}
-
 async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100){
   const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); 
   const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
@@ -1374,18 +1327,13 @@ async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100){
       url += `&filterByFormula=${encodeURIComponent(filterFormula)}`;
     }
     try{
-      const res = await fetchWithTimeout(url, {headers:{Authorization:`Bearer ${pat}`}}, 60000);
+      const res = await fetch(url, {headers:{Authorization:`Bearer ${pat}`}});
       if(!res.ok){
-        const t = await res.text().then(s=>s.substring(0,800)).catch(()=>'');
         if(res.status===429){
-          await new Promise(r=>setTimeout(r, 2000));
+          await new Promise(r=>setTimeout(r, 1500));
           continue;
         }
-        if(res.status===422){
-          console.warn('422 filter formula invalid untuk', tableName, filterFormula, t);
-          return null;
-        }
-        console.warn(`Gagal fetch ${tableName} ${res.status}`, t);
+        console.warn(`Gagal fetch ${tableName}`, res.status);
         break;
       }
       const data = await res.json();
@@ -1393,53 +1341,9 @@ async function fetchAirtableWithFilter(tableName, filterFormula, pageSize=100){
       offset = data.offset||'';
       retries=0;
     }catch(e){
-      console.error(`fetch ${tableName} error`, e.name, e.message);
-      if(e.name==='AbortError'){
-        console.warn('Timeout AbortError', tableName, 'retry', retries);
-        if(retries<3){
-          retries++;
-          await new Promise(r=>setTimeout(r, 1500));
-          continue;
-        }
-        break;
-      }
-      if(retries<3){
+      console.error(`fetch ${tableName} error`, e);
+      if(retries<2){
         retries++;
-        await new Promise(r=>setTimeout(r, 1500));
-        continue;
-      }
-      break;
-    }
-  }while(offset);
-  return all;
-}
-
-async function fetchAirtableAll(tableName, pageSize=100){
-  const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id'); 
-  const pat=window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
-  if(!base||!pat) return [];
-  let all=[], offset='';
-  let attempts=0;
-  const encodedTable = encodeURIComponent(tableName);
-  do{
-    const url = `https://api.airtable.com/v0/${base}/${encodedTable}?pageSize=${pageSize}${offset?`&offset=${offset}`:''}`;
-    try{
-      const res = await fetchWithTimeout(url, {headers:{Authorization:`Bearer ${pat}`}}, 25000);
-      if(!res.ok){
-        if(res.status===429){
-          await new Promise(r=>setTimeout(r, 2000));
-          continue;
-        }
-        break;
-      }
-      const data = await res.json();
-      if(data.records) all = all.concat(data.records);
-      offset = data.offset||'';
-      attempts=0;
-    }catch(e){
-      if(e.name==='AbortError') break;
-      if(attempts<2){
-        attempts++;
         await new Promise(r=>setTimeout(r, 1000));
         continue;
       }
@@ -1457,17 +1361,14 @@ async function fetchRoomingData(forceReload=false){
       if(sel && sel.value) tripId=sel.value;
     }
     const now = Date.now();
-    // FIX trip mismatch: kalau trip bertukar, clear data lama terus supaya tak tunjuk namelist trip lain
     if(tripId && _roomingLastTripId && tripId!==_roomingLastTripId){
       console.log('TRIP CHANGED', _roomingLastTripId, '->', tripId, 'clear old data');
       allRoomingRecords = [];
-      allRoomingJemaah = [];
-      try{
-        const cont=document.getElementById('namelistContainer');
-        if(cont) cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400">Memuat jemaah untuk trip baru...</div>';
-        const grid=document.getElementById('roomingGrid');
-        if(grid) grid.innerHTML='<div class="col-span-2 p-6 text-center text-[11px] text-slate-400">Memuat bilik...</div>';
-      }catch(e){}
+      // Jangan clear jemaah terus kalau ada cache, biar tunjuk loading dulu
+      const cont=document.getElementById('namelistContainer');
+      if(cont) cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuat jemaah untuk trip baru...</div>';
+      const grid=document.getElementById('roomingGrid');
+      if(grid) grid.innerHTML='<div class="col-span-2 p-6 text-center text-[11px] text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuatkan bilik...</div>';
     }
     const cacheValid = (now - _roomingCacheTime) < 300000;
     const canUseCache = _roomingFirstLoadDone && !forceReload && tripId && tripId===_roomingLastTripId && allRoomingJemaah.length>0 && cacheValid && !_roomingIsLoading;
@@ -1540,58 +1441,85 @@ async function fetchRoomingData(forceReload=false){
       return;
     }
     console.log('FETCH ROOMING START', tripId);
-    // FIX: Load field options dari meta dulu walaupun tiada bilik, supaya dropdown boleh edit
     try{ if(typeof fetchRoomingFieldOptionsFromMeta==='function') fetchRoomingFieldOptionsFromMeta(); }catch(e){}
-    let allRooms=null, allJems=null, allStaffRaw=null;
-    let optimizedSuccess = false;
+    
     const formulaIdExact = `SEARCH("," & "${tripId}" & ",", "," & ARRAYJOIN({TRIP} & "") & ",")`;
-    const formulasToTry = [formulaIdExact];
-    for(let formula of formulasToTry){
-      console.log('Cuba filter:', formula);
-      try{
-        const results = await Promise.all([
-          fetchAirtableWithFilter('ROOMING LIST', formula, 100),
-          fetchAirtableWithFilter('DATA JEMAAH UMRAH', formula, 100),
-          fetchAirtableWithFilter('STAFF LIST (ROOMING)', formula, 100)
-        ]);
-        if(results[0]===null || results[1]===null) continue;
-        if(results[1].length>0 || results[0].length>0){
-          [allRooms, allJems, allStaffRaw] = results;
-          optimizedSuccess = true;
-          console.log('FILTER BERJAYA:', allRooms.length, 'bilik,', allJems.length, 'jemaah');
-          break;
+    
+    // STAGE 1: Fetch JEMAAH dulu - paling penting untuk namelist, render terus
+    console.log('STAGE 1: Fetch JEMAAH dulu untuk trip', tripId);
+    let allJems = [];
+    try{
+      const jemsResult = await fetchAirtableWithFilter('DATA JEMAAH UMRAH', formulaIdExact, 100);
+      if(jemsResult && jemsResult.length>0){
+        allJems = jemsResult;
+        console.log('JEMAAH FETCH BERJAYA:', allJems.length, 'jemaah - render namelist dulu');
+        // Verify trip still same
+        const currentSel = document.getElementById('roomingTripSelect')?.value || window.selectedTripRecord?.id || '';
+        if(currentSel && currentSel!==tripId){
+          console.warn('TRIP CHANGED DURING JEMAAH FETCH, discard');
+          _roomingIsLoading = false;
+          try{ hideRoomingLoading(); }catch(e){}
+          return;
         }
-        [allRooms, allJems, allStaffRaw] = results;
-      }catch(e){ console.warn('filter error', e); }
+        allRoomingJemaah = allJems;
+        _roomingLastTripId = tripId;
+        _roomingCacheTime = Date.now();
+        _roomingFirstLoadDone = true;
+        window._roomingLastTripId = _roomingLastTripId;
+        window._roomingCacheTime = _roomingCacheTime;
+        window._roomingFirstLoadDone = true;
+        try{ buildRoomingFieldOptionsFromRecords(); }catch(e){}
+        try{ renderNamelist(); }catch(e){ console.error(e); }
+        try{ renderStaffList(); }catch(e){}
+        try{ renderLocationTabs(); }catch(e){}
+        try{ updateVisaCountBadge(); }catch(e){}
+      } else {
+        console.warn('JEMAAH 0, cuba fallback');
+        allJems = [];
+      }
+    }catch(e){
+      console.warn('JEMAAH fetch error', e);
+      allJems = [];
     }
-    if(!optimizedSuccess || !allJems || allJems.length===0){
-      console.warn('FALLBACK fetchAll + client filter');
+
+    // STAGE 2: Fetch BILIK + STAFF lepas namelist dah muncul
+    console.log('STAGE 2: Fetch BILIK + STAFF');
+    let allRooms = [];
+    let allStaffRaw = [];
+    try{
+      const [roomsResult, staffResult] = await Promise.all([
+        fetchAirtableWithFilter('ROOMING LIST', formulaIdExact, 100),
+        fetchAirtableWithFilter('STAFF LIST (ROOMING)', formulaIdExact, 100)
+      ]);
+      allRooms = roomsResult||[];
+      allStaffRaw = staffResult||[];
+      console.log('BILIK FETCH BERJAYA:', allRooms.length, 'bilik,', allStaffRaw.length, 'staff');
+    }catch(e){
+      console.warn('BILIK fetch error, cuba fallback', e);
       try{
-        const [roomsAll, jemsAll, staffAll] = await Promise.all([
+        const [roomsAll, staffAll] = await Promise.all([
           fetchAirtableAll('ROOMING LIST', 100),
-          fetchAirtableAll('DATA JEMAAH UMRAH', 100),
           fetchAirtableAll('STAFF LIST (ROOMING)', 100)
         ]);
-        console.log('Fallback total:', roomsAll.length, 'rooms,', jemsAll.length, 'jemaah');
         allRooms = roomsAll.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
-        allJems = jemsAll.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
         allStaffRaw = staffAll.filter(r=>{ const tf=r.fields['TRIP']||[]; return Array.isArray(tf)?tf.includes(tripId):String(tf).includes(tripId); });
-        console.log('Filtered:', allRooms.length, 'rooms,', allJems.length, 'jemaah');
-      }catch(e){
-        console.error('Fallback error', e);
-        allRooms = allRooms||[]; allJems = allJems||[]; allStaffRaw = allStaffRaw||[];
+      }catch(e2){
+        console.error('Fallback bilik error', e2);
+        allRooms = []; allStaffRaw = [];
       }
     }
-    // FIX race condition: kalau user tukar trip lagi masa fetch, jangan guna data lama
-    const currentSel = document.getElementById('roomingTripSelect')?.value || window.selectedTripRecord?.id || '';
-    if(currentSel && currentSel!==tripId){
-      console.warn('TRIP CHANGED DURING FETCH, discard', tripId, 'current', currentSel);
+
+    // Final race check
+    const currentSelFinal = document.getElementById('roomingTripSelect')?.value || window.selectedTripRecord?.id || '';
+    if(currentSelFinal && currentSelFinal!==tripId){
+      console.warn('TRIP CHANGED DURING BILIK FETCH, discard', tripId, 'current', currentSelFinal);
       _roomingIsLoading = false;
       try{ hideRoomingLoading(); }catch(e){}
       return;
     }
+
     allRoomingRecords = allRooms||[];
-    allRoomingJemaah = allJems||[];
+    if(allJems && allJems.length>0) allRoomingJemaah = allJems;
     _roomingLastTripId = tripId;
     _roomingCacheTime = Date.now();
     _roomingFirstLoadDone = true;
@@ -1632,8 +1560,6 @@ async function fetchRoomingData(forceReload=false){
 }
 
 
-
-
 function hideRoomingLoading(){
   const el=document.querySelector('.rooming-loading, #roomingLoading');
   if(el) el.style.display='none';
@@ -1647,35 +1573,25 @@ function hideRoomingLoading(){
   }
 }
 
-
 function populateRoomingTripDropdown(){
   const sel=document.getElementById('roomingTripSelect'); if(!sel) return;
-  let trips=[...(window.allTripUmrahRecords||window.allTripRecords||window.allTrips||[])];
-  if(selectedRoomingHijriFilter) trips=trips.filter(t=> getTripHijriForRooming(t)===selectedRoomingHijriFilter);
+  let trips=[...(window.allTripUmrahRecords||window.allTripRecords||window.allTrips||(typeof allTripUmrahRecords!=='undefined'?allTripUmrahRecords:[]))];
+  // Filter by hijri if selected
+  if(selectedRoomingHijriFilter){
+    trips=trips.filter(t=> getTripHijriForRooming(t)===selectedRoomingHijriFilter);
+  }
   try{ renderRoomingHijriTabs(); }catch(e){}
-  const currentId=window.selectedTripRecord?.id||'';
+
+  const currentId=window.selectedTripRecord?.id||localStorage.getItem('effah_active_trip_id')||localStorage.getItem('effah_last_selected_trip')||localStorage.getItem('selectedTripId')||'';
   if(trips.length===0){
-    sel.innerHTML='<option value="">Sila pilih trip</option><option value="" disabled>Sedang memuatkan...</option>';
-    let r=parseInt(sel.dataset.retries||'0'); if(r<10){ sel.dataset.retries=r+1; setTimeout(()=>{ if(typeof fetchTripUmrahData==='function') fetchTripUmrahData(); populateRoomingTripDropdown(); }, 900); }
+    sel.innerHTML='<option value="">Sedang memuatkan senarai trip...</option>';
+    let retries=parseInt(sel.dataset.retries||'0'); if(retries<10){ sel.dataset.retries=retries+1; setTimeout(()=>{ if(typeof fetchTripUmrahData==='function') fetchTripUmrahData(); populateRoomingTripDropdown(); }, 900); }
     return;
   }
   trips.sort((a,b)=>(a.fields?.['Mula Pakej']||'').localeCompare(b.fields?.['Mula Pakej']||''));
-  sel.innerHTML='<option value="">Sila pilih trip</option>'+trips.map(t=>{ const raw=t.fields?.Trip||t.fields?.['TRIP NAME']||t.id; const clean=cleanTripNameForRooming(raw); return `<option value="${t.id}" ${t.id===currentId?'selected':''}>${clean}</option>`; }).join('');
-  sel.value=currentId||"";
-  if(!currentId){
-    const cont=document.getElementById('namelistContainer');
-    if(cont && !cont.innerHTML.includes('Sila pilih trip')){
-      cont.innerHTML='<div class="p-8 text-center"><div class="text-[13px] font-bold text-slate-700 mb-1">Sila pilih trip</div><div class="text-[11px] text-slate-400">Pilih trip dari dropdown di atas untuk papar senarai jemaah</div></div>';
-    }
-    const grid=document.getElementById('roomingGrid');
-    if(grid) grid.innerHTML='<div class="col-span-2 p-8 text-center border border-dashed rounded-2xl bg-white"><div class="text-[11px] text-slate-400">Sila pilih trip dahulu</div></div>';
-    const bilikEl=document.getElementById('roomingBiliks'); if(bilikEl) bilikEl.textContent='0 Bilik';
-    const occEl=document.getElementById('roomingOccupancy'); if(occEl) occEl.textContent='Sila pilih trip';
-    document.querySelectorAll('#visaCountBadge').forEach(el=> el.textContent='0');
-    document.querySelectorAll('#passportCountBadge').forEach(el=> el.textContent='0');
-  }
+  sel.innerHTML='<option value="">Pilih Trip...</option>'+trips.map(t=>{ const raw=t.fields?.Trip||t.fields?.['TRIP NAME']||t.id; const clean=cleanTripNameForRooming(raw); return `<option value="${t.id}" ${t.id===currentId?'selected':''}>${clean}</option>`; }).join('');
+  if(currentId) sel.value=currentId; else if(trips.length>0){ sel.value=trips[0].id; onRoomingTripChange(trips[0].id); }
 }
-
 function onRoomingTripChange(tripId){ if(!tripId) return; const trips=window.allTripUmrahRecords||window.allTripRecords||[]; const found=trips.find(t=>t.id===tripId); if(found) window.selectedTripRecord=found; localStorage.setItem('effah_active_trip_id',tripId); localStorage.setItem('selectedTripId',tripId); localStorage.setItem('effah_last_selected_trip',tripId); fetchRoomingData(true); }
 function isJemaahAssignedInLocation(jId, location){
   const loc = (location||activeLocation).toUpperCase();
@@ -1765,7 +1681,6 @@ function renderNamelist(){
         return false;
       });
     } else {
-      // Legacy pakej filter
       const upper = filterVal.toUpperCase();
       filtered=filtered.filter(r=>getPakejVal(r.fields).toUpperCase()===upper);
     }
@@ -1778,8 +1693,7 @@ function renderNamelist(){
       else return nameB.localeCompare(nameA);
     });
   }
-  const total=allRoomingJemaah.length;
-  // OPTIMIZED V119: precompute assigned sets O(n+m) bukan O(n*m)
+  // OPTIMIZED: Pre-compute assigned sets O(n+m) bukan O(n*m)
   const assignedAnySet = new Set();
   const assignedInLocSet = new Set();
   const assignedTanpaInLocSet = new Set();
@@ -1798,12 +1712,16 @@ function renderNamelist(){
         if(recLoc===locUpper) assignedTanpaInLocSet.add(id);
       }
     }
-  }catch(e){ console.warn('precompute fail', e); }
+  }catch(e){ console.warn('precompute assigned fail', e); }
+
+  const total=allRoomingJemaah.length;
   const belumGlobal = total - assignedAnySet.size;
+  // belumInLoc = yang tak ada di location semasa
   let belumInLoc = 0;
   for(const r of allRoomingJemaah){
     if(!assignedInLocSet.has(r.id) && !assignedTanpaInLocSet.has(r.id)) belumInLoc++;
   }
+
   const totalEl=document.getElementById('totalJemaahBadge'); if(totalEl) { totalEl.textContent=total+' Jumlah'; totalEl.style.display='none'; }
   const belumEl=document.getElementById('belumAssignBadge'); if(belumEl) { belumEl.textContent=belumInLoc+' Belum Ditetapkan di '+activeLocation; belumEl.style.display='none'; }
   const topBelum=document.getElementById('belumAssignTop'); if(topBelum) { topBelum.textContent=belumGlobal+' Belum Ditetapkan'; topBelum.style.display='none'; }
@@ -1812,114 +1730,30 @@ function renderNamelist(){
   const topAssignedBadge=document.getElementById('topAssignedBadge'); if(topAssignedBadge) topAssignedBadge.style.display='none';
   if(total===0){ cont.innerHTML='<div class="p-6 text-center text-[11px] text-slate-400">Tiada jemaah untuk trip ini</div>'; return; }
   cont.innerHTML=filtered.map((r,i)=>{
-        const name=getJemaahName(r.fields);
-    // guna Set yang dah precompute kalau ada, fallback ke function lama
-    const assignedNormalInLoc = (typeof assignedInLocSet!=='undefined' && assignedInLocSet.has) ? assignedInLocSet.has(r.id) : isJemaahAssignedInLocation(r.id, activeLocation);
-    const assignedTanpaInLoc = (typeof assignedTanpaInLocSet!=='undefined' && assignedTanpaInLocSet.has) ? assignedTanpaInLocSet.has(r.id) : allRoomingRecords.some(rec=> (rec.fields['LOKASI / CITY']||'MEKAH').toUpperCase()===activeLocation.toUpperCase() && ((rec.fields['JEMAAH TANPA KATIL']||[]).includes(r.id)));
+    const name=getJemaahName(r.fields);
+    const assignedNormalInLoc=assignedInLocSet.has(r.id);
+    const assignedTanpaInLoc=assignedTanpaInLocSet.has(r.id);
     const assignedInLoc = assignedNormalInLoc || assignedTanpaInLoc;
-    const assignedGlobal = (typeof assignedAnySet!=='undefined' && assignedAnySet.has) ? assignedAnySet.has(r.id) : isJemaahAssignedAny(r.id);
-    // FIX ghost dropdown: jangan guna opacity-60 sebab child dropdown ikut transparent, guna bg saja
+    const assignedGlobal=assignedAnySet.has(r.id);
     const rowCls=assignedInLoc?'bg-slate-100 text-slate-500':'hover:bg-slate-50';
-    // FIX: Boleh edit inline walaupun 0 bilik - kalau 0 bilik, jangan jadikan whole row clickable untuk assign, biar dropdown jadi focus
-    const hasRooms = (typeof allRoomingRecords!=='undefined' && allRoomingRecords.length>0);
-    const drag=assignedInLoc?'':(hasRooms?`onclick="selectJemaahForAssign('${r.id}')" data-jemaah-id="${r.id}" style="cursor:pointer;"`:`data-jemaah-id="${r.id}" style="cursor:default;"`);
+    const drag=assignedInLoc?'':`onclick="selectJemaahForAssign('${r.id}')" data-jemaah-id="${r.id}" style="cursor:pointer;"`;
     let statusIcon = assignedInLoc? `<button onclick="removeJemaahFromCurrentLoc('${r.id}')" class="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-[10px]" title="Keluarkan dari ${activeLocation}">✕</button>` : `<button onclick="quickAssign('${r.id}')" class="w-5 h-5 rounded-full border bg-slate-100 hover:bg-slate-200 text-[10px]">+</button>`;
     if(!assignedInLoc && assignedGlobal) statusIcon = `<button onclick="quickAssign('${r.id}')" class="w-5 h-5 rounded-full border bg-amber-100 hover:bg-amber-200 text-[10px]" title="Sudah ada di lokasi lain, boleh tambah di ${activeLocation} juga">+</button>`;
     const fbArr = getBoardArray(r.fields);
-    const fb = fbArr[0] || '-';
-    const fbDisplay = fbArr.length ? fbArr.join(', ') : '-';
-    const pk = getPakejVal(r.fields) || '-';
-    const trChecked = isTrainChecked(r.fields);
-    const insArr = getInsuranArray(r.fields);
-    let fbCls = 'bg-white border-slate-200';
-    // Determine class based on first or combined
-    if(fbArr.some(x=>x.includes('MEKAH'))) fbCls='bg-orange-100 border-orange-200 text-orange-800';
-    else if(fbArr.some(x=>x.includes('MADINAH'))) fbCls='bg-blue-100 border-blue-200 text-blue-800';
-    else if(fbArr.includes('FULLBOARD')) fbCls='bg-emerald-100 border-emerald-200 text-emerald-800';
-    else if(fbArr.length===0) fbCls='bg-white border-dashed border-slate-300 text-slate-400';
-    const boardOptions = (roomingFieldOptions['BOARD BASIS'] && roomingFieldOptions['BOARD BASIS'].length>0) ? roomingFieldOptions['BOARD BASIS'] : ([]);
-    const boardOptionsWithAdd = boardOptions; // dynamic
-    const boardCheckboxes = boardOptionsWithAdd.map(opt=>{
-      const checked = fbArr.includes(opt);
-      return `<label class="flex items-center gap-1.5 px-2 py-1 hover:bg-slate-50 rounded text-[10px] cursor-pointer"><input type="checkbox" ${checked?'checked':''} onchange="toggleBoardMulti('${r.id}','${opt}')" class="w-3 h-3 accent-[#7A0C2E]"> ${opt}</label>`;
-    }).join('');
-    
-
-    const insArr2 = getInsuranArrayV2 ? getInsuranArrayV2(r.fields) : getInsuranArray(r.fields);
-      const insDisplay = insArr2.length ? insArr2.join(', ') : '- INSURAN';
-      const insCls = insArr2.length ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-slate-200 text-slate-400';
-      const insuranOptions = (roomingFieldOptions['INSURAN'] && roomingFieldOptions['INSURAN'].length>0) ? roomingFieldOptions['INSURAN'] : ([]);
-      const insCheckboxes = insuranOptions.map(opt=>{
-        const checked = insArr2.includes(opt);
-        return `<label class="flex items-center gap-1.5 px-2 py-1.5 hover:bg-slate-50 rounded text-[10px] cursor-pointer"><input type="checkbox" ${checked?'checked':''} onchange="toggleInsuranMulti('${r.id}','${opt}')" class="w-3.5 h-3.5 accent-[#7A0C2E]"> <span class="px-1.5 py-0.5 rounded-full text-[8px] ${opt==='TAKAFUL'?'bg-emerald-100':opt==='ETIQA'?'bg-amber-100':'bg-blue-100'}">${opt}</span></label>`;
-      }).join('');
-      const insToggle = `<div class="relative w-full">
-        <button onclick="event.stopPropagation(); toggleInsuranDropdown('${r.id}')" class="text-[7px] border rounded-full px-2 py-0.5 font-bold ${insCls} outline-none w-full truncate text-left flex items-center justify-between bg-white opacity-100" style="opacity:1;" title="INSURAN - klik untuk pilih">
-          <span class="truncate">${insDisplay}</span><span class="ml-1">▼</span>
-        </button>
-        <div id="insuranDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1" style="background:#ffffff !important; opacity:1 !important;">
-          ${insCheckboxes}
-          <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('INSURAN', '${r.id}')" class="w-full text-left px-2 py-1 text-[8px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded mb-1">+ Tambah Pilihan</button></div>
-          <div class="border-t border-slate-100 mt-1 pt-1 flex justify-between">
-            <button onclick="clearInsuranMulti('${r.id}'); closeInsuranDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-slate-100">Padam</button>
-            <button onclick="closeInsuranDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-[#7A0C2E] text-white">OK</button>
-          </div>
-        </div>
-      </div>`;
-
-        return `<div ${drag} class="grid grid-cols-12 items-center px-1.5 py-1.5 text-[11px] border-b border-slate-50 ${rowCls}">
-      <div class="col-span-1 text-slate-400 text-[10px]">${String(i+1).padStart(2,'0')}</div>
-      <div class="col-span-3 font-medium truncate text-[10px] ${assignedInLoc?'text-slate-500 italic':''}" title="${name}">${name}</div>
-      <div class="col-span-2 flex items-center gap-0.5 relative">
-        <div class="relative w-full">
-          <button onclick="event.stopPropagation(); toggleBoardDropdown('${r.id}')" class="text-[7px] border rounded-full px-2 py-0.5 font-bold ${fbCls} outline-none w-full truncate text-left flex items-center justify-between bg-white opacity-100" style="opacity:1; isolation:isolate;" title="BOARD BASIS - klik untuk pilih 2">
-            <span class="truncate">${fbDisplay}</span><span class="ml-1">▼</span>
-          </button>
-          <div id="boardDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1" style="background:#ffffff !important; opacity:1 !important; isolation:isolate;">
-            ${boardCheckboxes}
-            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('BOARD BASIS', '${r.id}')" class="w-full text-left px-2 py-1 text-[8px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded mb-1">+ Tambah Pilihan</button></div>
-            <div class="border-t border-slate-100 mt-1 pt-1 flex justify-between">
-              <button onclick="clearBoardMulti('${r.id}'); closeBoardDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-slate-100">Padam</button>
-              <button onclick="closeBoardDropdown('${r.id}')" class="text-[8px] px-2 py-0.5 rounded-full bg-[#7A0C2E] text-white">OK</button>
-            </div>
-            <div class="text-[7px] text-slate-400 px-2 mt-1">Boleh pilih 2: BB (MEKAH) + FB (MADINAH)</div>
-          </div>
-        </div>
+    const fb = fbArr.length>0 ? fbArr.join(', ') : '-';
+    const insArr = (typeof getInsuranArrayV2==='function' ? getInsuranArrayV2(r.fields) : getInsuranArray(r.fields));
+    const ins = insArr.length>0 ? insArr.join(', ') : '-';
+    const pakej = getPakejVal(r.fields)||'-';
+    const visa = getVisaVal(r.fields)||'-';
+    const train = isTrainChecked(r.fields) ? '✓' : '-';
+    return `<div class="flex items-center justify-between px-3 py-2 border-b border-slate-100 text-[11px] ${rowCls}" ${drag}>
+      <div class="flex-1 min-w-0">
+        <div class="font-bold truncate">${name}</div>
+        <div class="text-[9px] text-slate-500 truncate">${pakej} • ${fb} • ${visa}</div>
       </div>
-      <div class="col-span-1 text-center">
-        <input type="checkbox" ${trChecked?'checked':''} onchange="updateJemaahCheckbox('${r.id}','TRAIN',this.checked)" class="w-3.5 h-3.5 accent-[#7A0C2E] rounded" title="TRAIN">
-      </div>
-      <div class="col-span-2 flex items-center gap-0.5 flex-wrap justify-center">
-        ${insToggle}
-      </div>
-      <div class="col-span-1 flex items-center gap-0.5 relative">
-        <div class="relative w-full cell-dropdown-wrapper">
-          <button onclick="event.stopPropagation(); toggleCellDropdown('pakejDrop-${r.id}')" class="text-[7px] border border-slate-200 rounded-full px-2 py-0.5 bg-white w-full max-w-[70px] truncate font-bold text-[7px] text-left flex items-center justify-between ${pk==='-'?'text-slate-400':'text-slate-700'}" title="PAKEJ">
-            <span class="truncate">${pk||'-'}</span><span class="ml-1">▼</span>
-          </button>
-          <div id="pakejDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[180px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1 max-h-60 overflow-y-auto">
-            ${(roomingFieldOptions['PAKEJ']||[]).map(o=>`<button onclick="event.stopPropagation(); updateJemaahField('${r.id}','PAKEJ','${o}'); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${pk===o?'bg-slate-900 text-white font-bold':''}">${o}</button>`).join('')}
-            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('PAKEJ', '${r.id}')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Tambah Pilihan</button></div>
-          </div>
-        </div>
-      </div>
-      <div class="col-span-2 flex items-center justify-center relative">
-        <div class="relative w-full cell-dropdown-wrapper">
-          <button onclick="event.stopPropagation(); toggleCellDropdown('visaDrop-${r.id}')" class="text-[7px] border border-slate-300 rounded-full px-2 py-0.5 bg-white w-full max-w-[70px] truncate font-bold text-[7px] ${getVisaClass(getVisaVal(r.fields))} text-left flex items-center justify-between" title="STATUS VISA">
-            <span class="truncate">${getVisaVal(r.fields)||'- VISA'}</span><span class="ml-1">▼</span>
-          </button>
-          <div id="visaDrop-${r.id}" data-cell-dropdown class="hidden absolute left-0 top-full mt-1 w-[190px] bg-white border border-slate-200 rounded-xl shadow-xl z-[9999] p-1 max-h-60 overflow-y-auto">
-            <button onclick="event.stopPropagation(); updateJemaahField('${r.id}','STATUS VISA',''); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${!getVisaVal(r.fields)?'bg-slate-900 text-white font-bold':''}">- VISA</button>
-            ${(roomingFieldOptions['STATUS VISA']||[]).map(o=>`<button onclick="event.stopPropagation(); updateJemaahField('${r.id}','STATUS VISA','${o}'); closeAllCellDropdowns(); renderNamelist();" class="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 rounded text-[10px] ${getVisaVal(r.fields)===o?'bg-slate-900 text-white font-bold':''}">${o}</button>`).join('')}
-            <div class="border-t border-slate-100 mt-1 pt-1"><button onclick="event.stopPropagation(); handleAddNewRoomingOption('STATUS VISA', '${r.id}')" class="w-full text-left px-2 py-1 text-[9px] font-bold text-[#7A0C2E] hover:bg-rose-50 rounded">+ Tambah Pilihan</button></div>
-          </div>
-        </div>
-      </div>
+      <div class="flex items-center gap-2 ml-2">${statusIcon}</div>
     </div>`;
   }).join('');
-  makeNamelistSticky();
-  const sortIconEl=document.getElementById('sortIcon');
-  if(sortIconEl) sortIconEl.textContent = roomingSortActive ? (roomingSortDir==='asc'?'↑ A-Z':'↓ Z-A') : '↕';
 }
 
 
@@ -2074,13 +1908,7 @@ function renderRoomingGrid(){
   const totalStaff = staffFromText + staffFromLinked;
   const occEl=document.getElementById('roomingOccupancy'); if(occEl) occEl.textContent=`${totalJFull} Jemaah + ${totalStaff} Staff • ${activeLocation}`;
   renderRoomingOverview(rooms);
-  if(rooms.length===0){ 
-    grid.innerHTML=`<div class="col-span-2 p-6 text-center text-[11px] border border-dashed rounded-2xl bg-white">Tiada bilik untuk <b>${activeLocation}</b><br><button onclick="openNewRoomModal()" class="mt-2.5 px-3 py-1.5 bg-[#7A0C2E] text-white rounded-full text-[11px]">+ Bilik Baru untuk ${activeLocation}</button><div class="mt-2 text-[10px] text-slate-400">Boleh edit maklumat jemaah di Namelist kiri walaupun tiada bilik lagi</div></div>`; 
-    // FIX: Walaupun 0 bilik, pastikan field options ada supaya inline edit boleh
-    try{ buildRoomingFieldOptionsFromRecords(); }catch(e){}
-    try{ renderNamelist(); }catch(e){}
-    return; 
-  }
+  if(rooms.length===0){ grid.innerHTML=`<div class="col-span-2 p-6 text-center text-[11px] border border-dashed rounded-2xl bg-white">Tiada bilik untuk <b>${activeLocation}</b><br><button onclick="openNewRoomModal()" class="mt-2.5 px-3 py-1.5 bg-[#7A0C2E] text-white rounded-full text-[11px]">+ Bilik Baru untuk ${activeLocation}</button></div>`; return; }
   grid.innerHTML=rooms.map((rec, roomIdx)=>{
     const f=rec.fields; const roomId=f['Room ID / Nama Bilik']||generateRoomIdFromCap(f['KAPASITI']); const pakej=f['PAKEJ / HOTEL']||'EKONOMI'; const cap=f['KAPASITI']||4; const hotel=f['HOTEL NAME']||''; const staffForRoom=getStaffForRoom(rec.id); const staffArr=staffForRoom.map(s=>s.name); const jIds=f['JEMAAH']||[]; const count=jIds.length+staffArr.length;
     const jSlots=jIds.map(jId=>{ 
@@ -2210,7 +2038,7 @@ function renderStaffList(){
 
 
 
-function setActiveLocation(loc){ activeLocation=loc.toUpperCase(); localStorage.setItem('effah_active_location',activeLocation); const el=document.getElementById('copyTargetLoc'); if(el) el.textContent=activeLocation; renderLocationTabs(); renderRoomingGrid(); renderNamelist(); renderStaffList(); try{ updateVisaCountBadge(); }catch(e){} }
+function setActiveLocation(loc){ activeLocation=loc.toUpperCase(); localStorage.setItem('effah_active_location',activeLocation); const el=document.getElementById('copyTargetLoc'); if(el) el.textContent=activeLocation; renderLocationTabs(); renderRoomingGrid(); renderNamelist(); renderStaffList(); }
 function _stopAutoScroll(){ if(_autoScrollInterval){ clearInterval(_autoScrollInterval); _autoScrollInterval=null; } }
 function _startAutoScroll(){
   if(_autoScrollInterval) return;
@@ -4198,22 +4026,27 @@ async function downloadAllVisas(){
 async function downloadAllPassports(){
   return _downloadAllDocs('PASSPORT COPY', 'Passports');
 }
-
 async function _downloadAllDocs(fieldName, label){
+
+  const btn=document.getElementById('btnDownloadVisas');
+  const originalText=btn?.innerHTML;
   try{
-    const searchNames = fieldName.includes('VISA') ? ['VISA COPY'] : ['PASSPORT COPY'];
-    let withDocs = allRoomingJemaah.filter(j=>{
-      const f=j.fields||{};
-      if(f[fieldName] && Array.isArray(f[fieldName]) && f[fieldName].length>0) return true;
-      const atts = getFieldAttachments(f, searchNames);
-      return atts && atts.length>0;
-    });
-    if(withDocs.length===0){
-      alert(`Tiada ${fieldName} dalam trip ini. Total jemaah: ${allRoomingJemaah.length}`);
+    // Filter jemaah with VISA COPY
+    let withVisa = allRoomingJemaah.filter(j=> j.fields && j.fields[fieldName] && Array.isArray(j.fields[fieldName]) && j.fields[fieldName].length>0);
+    if(withVisa.length===0){
+      alert(`Tiada ${fieldName} dalam trip ini.\n\nPastikan field ${fieldName} ada attachment PDF/Image.`);
       return;
     }
-    withDocs = withDocs.sort((a,b)=> getJemaahName(a.fields).toUpperCase().localeCompare(getJemaahName(b.fields).toUpperCase()));
+    // Sort by NAMA
+    withVisa = withVisa.sort((a,b)=>{
+      const na=getJemaahName(a.fields).toUpperCase();
+      const nb=getJemaahName(b.fields).toUpperCase();
+      return na.localeCompare(nb);
+    });
+
+    // Create progress modal
     window._visaDownloadCancelled=false;
+    window._visaAbortController=new AbortController();
     let modal=document.getElementById('visaDownloadModal');
     if(!modal){
       modal=document.createElement('div');
@@ -4222,7 +4055,7 @@ async function _downloadAllDocs(fieldName, label){
       modal.innerHTML=`
         <div class="bg-white rounded-2xl p-5 max-w-md w-full shadow-2xl">
           <div class="flex justify-between items-center mb-3">
-            <h3 class="font-bold text-[13px]" id="visaModalTitle">Downloading ${label}... (${withDocs.length})</h3>
+            <h3 class="font-bold text-[13px]" id="visaModalTitle">Downloading ${label}...</h3>
             <button id="visaCancelBtn" onclick="cancelVisaDownload()" class="px-3 py-1 bg-red-50 border border-red-200 text-red-600 rounded-full text-[10px] font-bold hover:bg-red-100">✕ Cancel</button>
           </div>
           <div class="w-full bg-slate-100 rounded-full h-3 mb-3 overflow-hidden"><div id="visaProgressBar" class="h-3 bg-emerald-600 rounded-full transition-all" style="width:0%"></div></div>
@@ -4239,107 +4072,219 @@ async function _downloadAllDocs(fieldName, label){
     } else {
       modal.classList.remove('hidden');
       window._visaDownloadCancelled=false;
-      const c1=document.getElementById('visaCancelBtn');
-      const c2=document.getElementById('visaCancelBtn2');
-      const cl=document.getElementById('visaCloseBtn');
-      if(c1) c1.classList.remove('hidden');
-      if(c2) c2.classList.remove('hidden');
-      if(cl) cl.classList.add('hidden');
+      window._visaAbortController=new AbortController();
+      const cancelBtn=document.getElementById('visaCancelBtn');
+      const cancelBtn2=document.getElementById('visaCancelBtn2');
+      const closeBtn=document.getElementById('visaCloseBtn');
+      if(cancelBtn) cancelBtn.classList.remove('hidden');
+      if(cancelBtn2) cancelBtn2.classList.remove('hidden');
+      if(closeBtn) closeBtn.classList.add('hidden');
       document.getElementById('visaProgressLog').innerHTML='';
       document.getElementById('visaProgressBar').style.width='0%';
+      const titleEl=document.getElementById('visaModalTitle'); if(titleEl) titleEl.textContent=`Downloading ${label}...`;
     }
+
     const updateProgress=(curr,total,name,log)=>{
       const pct=Math.round(curr/total*100);
-      const bar=document.getElementById('visaProgressBar');
-      const txt=document.getElementById('visaProgressText');
-      const nm=document.getElementById('visaProgressName');
-      if(bar) bar.style.width=pct+'%';
-      if(txt) txt.textContent=curr+' / '+total+' ('+pct+'%)';
-      if(nm) nm.textContent=name||'-';
+      document.getElementById('visaProgressBar').style.width=pct+'%';
+      document.getElementById('visaProgressText').textContent=curr+' / '+total+' ('+pct+'%)';
+      document.getElementById('visaProgressName').textContent=name||'-';
       if(log){
         const logEl=document.getElementById('visaProgressLog');
-        if(logEl){
-          const div=document.createElement('div');
-          div.textContent=log;
-          logEl.appendChild(div);
-          logEl.scrollTop=logEl.scrollHeight;
-        }
+        const div=document.createElement('div');
+        div.textContent=log;
+        logEl.appendChild(div);
+        logEl.scrollTop=logEl.scrollHeight;
       }
     };
+
+    if(btn){ btn.setAttribute('data-original', btn.innerHTML); btn.disabled=true; btn.innerHTML='⏳ Loading pdf-lib...'; }
+
     const pdfLib=await loadPdfLib();
     const {PDFDocument}=pdfLib;
     const mergedPdf=await PDFDocument.create();
+
     let successCount=0;
-    for(let i=0;i<withDocs.length;i++){
-      if(window._visaDownloadCancelled) throw new Error('Cancelled by user');
-      const jRec=withDocs[i];
+    let failList=[];
+
+    for(let i=0;i<withVisa.length;i++){
+      if(window._visaDownloadCancelled){ throw new Error('Cancelled by user'); }
+      const jRec=withVisa[i];
       const nama=getJemaahName(jRec.fields);
-      updateProgress(i, withDocs.length, nama, `Fetching: ${nama}`);
-      let atts = jRec.fields[fieldName];
-      if(!atts || !Array.isArray(atts) || atts.length===0) atts = getFieldAttachments(jRec.fields, searchNames) || [];
-      for(let att of atts){
-        if(!att.url) continue;
+      const mId=jRec.fields['M_ID']||jRec.fields['NO KP']||'';
+      updateProgress(i, withVisa.length, nama, `Fetching: ${nama}`);
+
+      const attachments=jRec.fields[fieldName]||[];
+      // Take all attachments for this jemaah (could be 1-3 files)
+      for(let attIdx=0; attIdx<attachments.length; attIdx++){
+        const att=attachments[attIdx];
+        if(!att||!att.url) continue;
+        const url=att.url;
+        const filename=att.filename||'';
+        const isPdf = filename.toLowerCase().endsWith('.pdf') || (att.type && att.type.includes('pdf'));
+
         try{
-          const buffer=await fetchWithRetry(att.url);
-          const isPdf=(att.filename||'').toLowerCase().endsWith('.pdf')||(att.type||'').includes('pdf');
+          if(btn) btn.innerHTML=`⏳ ${i+1}/${withVisa.length} ${nama.substring(0,12)}...`;
+          const buffer=await fetchWithRetry(url);
+          
           if(isPdf){
-            const srcPdf=await PDFDocument.load(buffer, {ignoreEncryption:true});
-            const pages=await mergedPdf.copyPages(srcPdf, srcPdf.getPageIndices());
-            pages.forEach(p=> mergedPdf.addPage(p));
+            try{
+              const srcPdf=await PDFDocument.load(buffer, {ignoreEncryption:true});
+              const srcPages = srcPdf.getPages();
+              // Standard size - A4 (595.28 x 841.89) or Letter (612 x 792) - using A4 as requested
+              const A4_WIDTH = 595.28;
+              const A4_HEIGHT = 841.89;
+              // If user wants Letter: const LETTER_WIDTH=612, LETTER_HEIGHT=792
+              
+              for(let pIdx=0; pIdx<srcPdf.getPageCount(); pIdx++){
+                const srcPage = srcPages[pIdx];
+                const {width: origW, height: origH} = srcPage.getSize();
+                
+                // Copy page
+                const [copiedPage] = await mergedPdf.copyPages(srcPdf, [pIdx]);
+                
+                // Standardize: if original not A4, create new A4 page and scale embed
+                const needsResize = Math.abs(origW - A4_WIDTH) > 5 || Math.abs(origH - A4_HEIGHT) > 5;
+                
+                if(needsResize){
+                  // Create new A4 page and embed copied page scaled to fit
+                  const newPage = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT]);
+                  // Calculate scale to fit with margin
+                  const margin = 20;
+                  const availW = A4_WIDTH - margin*2;
+                  const availH = A4_HEIGHT - 40; // leave footer space
+                  const scale = Math.min(availW/origW, availH/origH);
+                  const drawW = origW * scale;
+                  const drawH = origH * scale;
+                  const x = (A4_WIDTH - drawW)/2;
+                  const y = (A4_HEIGHT - drawH)/2 + 10;
+                  
+                  // Embed the copied page as XObject
+                  const embeddedPage = await mergedPdf.embedPage(copiedPage);
+                  newPage.drawPage(embeddedPage, {x, y, width: drawW, height: drawH});
+                  // Footer
+                  newPage.drawText(`${i+1}. ${nama} ${mId? '('+mId+')':''} - ${filename} p${pIdx+1}`, {x:30, y:15, size:7, color: pdfLib.rgb(0.3,0.3,0.3)});
+                } else {
+                  // Already A4-ish, just add with footer
+                  const newPage = mergedPdf.addPage(copiedPage);
+                  // Add footer overlay - draw on top
+                  try{
+                    newPage.drawText(`${i+1}. ${nama} ${mId? '('+mId+')':''} - ${filename} p${pIdx+1}`, {x:30, y:15, size:7, color: pdfLib.rgb(0.3,0.3,0.3)});
+                  }catch(e){}
+                }
+              }
+              successCount++;
+              updateProgress(i+1, withVisa.length, nama, `✓ PDF ${filename} - ${srcPdf.getPageCount()} pages → A4 standardized`);
+            }catch(pdfErr){
+              console.error('PDF load failed', filename, pdfErr);
+              failList.push(`${nama} - ${filename}: PDF corrupt`);
+              updateProgress(i+1, withVisa.length, nama, `✗ PDF failed ${filename}`);
+            }
           } else {
-            let img;
-            if((att.filename||'').toLowerCase().endsWith('.png')) img=await mergedPdf.embedPng(buffer);
-            else img=await mergedPdf.embedJpg(buffer);
-            const page=mergedPdf.addPage([595.28, 841.89]);
-            const {width,height}=img.scale(1);
-            const scale=Math.min(595.28/width, 841.89/height)*0.95;
-            page.drawImage(img, {x:(595.28-width*scale)/2, y:(841.89-height*scale)/2, width:width*scale, height:height*scale});
+            // Image - JPG/PNG
+            try{
+              let img;
+              const lower=filename.toLowerCase();
+              if(lower.endsWith('.png')){
+                img=await mergedPdf.embedPng(buffer);
+              } else {
+                img=await mergedPdf.embedJpg(buffer);
+              }
+              // Standardize to A4 (or Letter) - user requested A4/Letter fit
+              const A4_WIDTH = 595.28;
+              const A4_HEIGHT = 841.89;
+              const page=mergedPdf.addPage([A4_WIDTH, A4_HEIGHT]); // A4 standardized
+              const {width, height}=page.getSize();
+              // Scale image to fit A4 with margins - maintain aspect ratio
+              const margin = 30;
+              const footerSpace = 30;
+              const availW = width - margin*2;
+              const availH = height - margin*2 - footerSpace;
+              const imgDims=img.scaleToFit(availW, availH);
+              page.drawImage(img, {x: (width-imgDims.width)/2, y: (height-imgDims.height)/2 + footerSpace/2 + 5, width: imgDims.width, height: imgDims.height});
+              // Footer with name + border
+              page.drawText(`${i+1}. ${nama} ${mId? '('+mId+')':''} - ${filename}`, {x:30, y:15, size:7, color: pdfLib.rgb(0.3,0.3,0.3)});
+              // Optional thin border for neat look
+              try{
+                page.drawRectangle({x: margin-5, y: footerSpace, width: availW+10, height: availH+10, borderColor: pdfLib.rgb(0.9,0.9,0.9), borderWidth: 0.5});
+              }catch(e){}
+              successCount++;
+              updateProgress(i+1, withVisa.length, nama, `✓ Image ${filename}`);
+            }catch(imgErr){
+              console.error('Image embed failed', filename, imgErr);
+              failList.push(`${nama} - ${filename}: Image failed`);
+              updateProgress(i+1, withVisa.length, nama, `✗ Image failed ${filename}`);
+            }
           }
-          successCount++;
-        }catch(e){ console.warn('fail', e); }
+        }catch(fetchErr){
+          console.error('Fetch failed', url, fetchErr);
+          failList.push(`${nama} - ${filename}: Fetch failed ${fetchErr.message}`);
+          updateProgress(i+1, withVisa.length, nama, `✗ Fetch failed ${filename}`);
+        }
       }
     }
-    if(successCount===0){
-      alert('PDF kosong - attachment gagal');
-      return;
-    }
+
+    updateProgress(withVisa.length, withVisa.length, 'Merging PDF...', 'Compiling final PDF...');
+    if(btn) btn.innerHTML='⏳ Compiling PDF...';
+
     const pdfBytes=await mergedPdf.save();
     const blob=new Blob([pdfBytes], {type:'application/pdf'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url;
-    a.download=`${label}_${activeLocation||'MEKAH'}_${new Date().toISOString().slice(0,10)}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(()=>URL.revokeObjectURL(url), 5000);
-    updateProgress(withDocs.length, withDocs.length, 'Done!', `Saved ${successCount} files`);
+    let rawTripName = window.selectedTripRecord?.fields?.['TRIP NAME'] || window.selectedTripRecord?.fields?.['NAMA TRIP'] || window.selectedTripRecord?.fields?.['Name'] || '';
+    if(!rawTripName || rawTripName.startsWith('rec')){
+      const sel = document.getElementById('roomingTripSelect');
+      if(sel && sel.options[sel.selectedIndex]){
+        rawTripName = sel.options[sel.selectedIndex].textContent.trim();
+      }
+    }
+    if(!rawTripName || rawTripName.startsWith('rec')){
+      rawTripName = localStorage.getItem('effah_active_trip_name') || localStorage.getItem('effah_trip_name') || 'TRIP';
+    }
+    let tripName = rawTripName.replace(/[^a-zA-Z0-9 \-_]/g,'').replace(/\s+/g,'_').substring(0,50);
+    if(!tripName || tripName.startsWith('rec')) tripName = 'TRIP';
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2,'0');
+    const mm = String(now.getMonth()+1).padStart(2,'0');
+    const yy = String(now.getFullYear()).slice(-2);
+    const dateStr = `${dd}-${mm}-${yy}`;
+    const fileName=`${label.toUpperCase()}_${tripName}_${dateStr}.pdf`;
+    
+    // Download
+    const link=document.createElement('a');
+    link.href=URL.createObjectURL(blob);
+    link.download=fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(()=>URL.revokeObjectURL(link.href), 10000);
+
+    document.getElementById('visaProgressLog').innerHTML+=`<div class="text-emerald-600 font-bold mt-2">✓ Done! ${successCount} files merged, ${failList.length} failed</div>`;
+    if(failList.length>0){
+      document.getElementById('visaProgressLog').innerHTML+=`<div class="text-red-500">${failList.join('<br>')}</div>`;
+    }
+    updateProgress(withVisa.length, withVisa.length, `Saved: ${fileName}`, `Total size: ${(blob.size/1024/1024).toFixed(2)} MB`);
+
     setTimeout(()=>{
       const m=document.getElementById('visaDownloadModal');
       if(m) m.classList.add('hidden');
-    }, 3000);
-    try{ updateVisaCountBadge(); }catch(e){}
+    }, 4000);
+
+    if(btn){ btn.disabled=false; btn.innerHTML=originalText; }
+
+    if(failList.length>0){
+      console.warn('Failed visas', failList);
+      alert(`Selesai! ${successCount} visa berjaya, ${failList.length} gagal.\n\nGagal:\n${failList.slice(0,10).join('\n')}${failList.length>10?'\n...and '+(failList.length-10)+' more':''}`);
+    } else {
+      console.log(`Download All ${label} OK: ${fileName} ${(blob.size/1024/1024).toFixed(2)}MB`);
+    }
+
   }catch(e){
-    console.error(e);
-    alert('Ralat: '+e.message);
+    console.error('downloadAllVisas error', e);
+    alert(`Gagal download ${label}: `+e.message);
     const m=document.getElementById('visaDownloadModal');
     if(m) m.classList.add('hidden');
+    if(btn){ btn.disabled=false; btn.innerHTML=originalText; }
   }
 }
-function cancelVisaDownload(){
-  window._visaDownloadCancelled=true;
-  try{ window._visaAbortController?.abort(); }catch(e){}
-  const m=document.getElementById('visaDownloadModal');
-  if(m) m.classList.add('hidden');
-}
-function closeVisaModal(){
-  const m=document.getElementById('visaDownloadModal');
-  if(m) m.classList.add('hidden');
-  window._visaDownloadCancelled=false;
-}
-function downloadAllVisas(){ return _downloadAllDocs('VISA COPY', 'Visas'); }
-function downloadAllPassports(){ return _downloadAllDocs('PASSPORT COPY', 'Passports'); }
-
 
 
 
@@ -4573,26 +4518,30 @@ function getFieldAttachments(jFields, names){
   }
   return null;
 }
-
 function updateVisaCountBadge(){
   try{
+    const visaNames=['VISA COPY','VISA','VISA_COPY'];
+    const passNames=['PASSPORT COPY','PASSPORT','PASSPORT_COPY','PASSPORT SCAN'];
     let visaCount=0, passCount=0;
-    if(allRoomingJemaah && allRoomingJemaah.length>0){
-      visaCount = allRoomingJemaah.filter(j=>{
-        const f=j.fields||{};
-        return (f['VISA COPY'] && Array.isArray(f['VISA COPY']) && f['VISA COPY'].length>0) || getFieldAttachments(f, ['VISA COPY']);
-      }).length;
-      passCount = allRoomingJemaah.filter(j=>{
-        const f=j.fields||{};
-        return (f['PASSPORT COPY'] && Array.isArray(f['PASSPORT COPY']) && f['PASSPORT COPY'].length>0) || getFieldAttachments(f, ['PASSPORT COPY']);
-      }).length;
-      console.log(`Badge count - allRoomingJemaah:${allRoomingJemaah.length} Visa:${visaCount} Passport:${passCount} (same all locations)`);
+    (allRoomingJemaah||[]).forEach(j=>{
+      if(getFieldAttachments(j.fields||{}, visaNames)) visaCount++;
+      if(getFieldAttachments(j.fields||{}, passNames)) passCount++;
+    });
+    console.log(`Badge count - allRoomingJemaah: ${allRoomingJemaah?.length} Visa:${visaCount} Passport:${passCount}`);
+    // Also check direct if available
+    if(window._allJemaahDirect && window._allJemaahDirect.length>0){
+      const dv = window._allJemaahDirect.filter(r=> getFieldAttachments(r.fields||{}, visaNames)).length;
+      const dp = window._allJemaahDirect.filter(r=> getFieldAttachments(r.fields||{}, passNames)).length;
+      console.log(`Badge direct: ${window._allJemaahDirect.length} Visa:${dv} Passport:${dp}`);
+      if(dv>visaCount) visaCount=dv;
+      if(dp>passCount) passCount=dp;
     }
-    document.querySelectorAll('#visaCountBadge').forEach(el=> el.textContent=visaCount);
-    document.querySelectorAll('#passportCountBadge').forEach(el=> el.textContent=passCount);
+    const vBadge=document.getElementById('visaCountBadge');
+    const pBadge=document.getElementById('passportCountBadge');
+    if(vBadge) vBadge.textContent=visaCount;
+    if(pBadge) pBadge.textContent=passCount;
   }catch(e){ console.error('updateVisaCountBadge error', e); }
 }
-
 async function updatePassportCountFromDirectFetch(){
   try{
     const base=window.AIRTABLE_BASE_ID||localStorage.getItem('effah_api_base')||localStorage.getItem('effah_base_id');
@@ -4746,9 +4695,10 @@ window.handleRoomSlotClick = function(roomId){
   }
 };
 
-// Re-override renderNamelist - FIX inline edit when 0 bilik
+// Re-override renderNamelist cleanly
 (function(){
   const orig = window.renderNamelist;
+  // Save original if not saved
   if(!window._origRenderNamelistV120 && typeof orig === 'function' && !orig.toString().includes('V120')){
     window._origRenderNamelistV120 = orig;
   }
@@ -4757,26 +4707,30 @@ window.handleRoomSlotClick = function(roomId){
       if(window._origRenderNamelistV120) window._origRenderNamelistV120();
       else if(typeof orig === 'function') orig();
     }catch(e){ console.error('orig renderNamelist error', e); }
-    // V31 FIX: Jangan override draggable lagi, biar inline dropdown jadi primary bila 0 bilik
     try{
       const cont = document.getElementById('namelistContainer');
       if(!cont) return;
-      const hasRooms = (typeof allRoomingRecords!=='undefined' && allRoomingRecords.length>0);
-      if(!hasRooms){
-        // Bila 0 bilik, highlight selected untuk inline edit, bukan untuk assign
-        cont.querySelectorAll('[data-jemaah-id]').forEach(el=>{
-          el.style.cursor='default';
-        });
-        return;
-      }
-      // Bila ada bilik, baru enable click untuk assign
-      cont.querySelectorAll('[data-jemaah-id]').forEach(el=>{
-        const id = el.getAttribute('data-jemaah-id');
-        if(!id) return;
+      cont.querySelectorAll('[draggable="true"]').forEach(el=>{
+        const dragAttr = el.getAttribute('ondragstart')||'';
+        if(!dragAttr) return;
+        const isStaff = dragAttr.includes('dragStaff');
+        const m = dragAttr.match(/'([^']+)'/);
+        if(!m) return;
+        const id = m[1];
+        el.removeAttribute('draggable');
+        el.removeAttribute('ondragstart');
+        el.removeAttribute('ondragend');
+        el.style.cursor='pointer';
+        // Highlight if selected
         if(window._selectedJemaahId === id || window._selectedStaffId === id){
           el.classList.add('ring-2','ring-emerald-500','bg-emerald-50');
           el.style.background='#ecfdf5';
         }
+        el.onclick = function(e){
+          e.preventDefault(); e.stopPropagation();
+          if(isStaff) selectStaffForAssign(id);
+          else selectJemaahForAssign(id);
+        };
       });
     }catch(e){ console.error('V120 namelist patch error', e); }
   };

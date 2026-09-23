@@ -711,19 +711,15 @@ async function cleanBlankOptions(fieldName, auto=false){
   try{
     const base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_base_id')||'appSsn4JyQD4DnYu0';
     const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
-    if(!base||!pat){ console.warn('No base/pat for clean'); return false; }
-    console.log(`V87 Cleaning blank for ${fieldName}...`);
-    
-    // Force fresh fetch directly from API (not cache)
-    const resTables = await fetch(`https://api.airtable.com/v0/meta/bases/${base}/tables`, {headers:{Authorization:`Bearer ${pat}`}});
-    if(!resTables.ok){
-      console.error('Failed to fetch tables for clean', resTables.status);
-      return false;
+    if(!base||!pat){ return false; }
+    // FIX: Guna cache kalau ada, jangan fetch meta berulang kali - ini yang buat slow
+    if(_jemaahMetaCache && _jemaahMetaCache.fields && (Date.now() - (_jemaahMetaCache._time||0)) < 600000){
+      // Use cached
+    } else {
+      await fetchJemaahMetaOptionsFromMeta();
     }
-    const data = await resTables.json();
-    const tables = data.tables||[];
-    const targetTable = tables.find(t=> t.name.trim()==='DATA JEMAAH UMRAH') || tables.find(t=> t.name.toUpperCase().includes('DATA JEMAAH UMRAH')) || tables.find(t=> t.name.toUpperCase().includes('JEMAAH'));
-    if(!targetTable){ console.error('Table not found for clean'); return false; }
+    const targetTable = _jemaahMetaCache;
+    if(!targetTable){ return false; }
     
     const targetField = targetTable.fields.find(f=> f.name.toUpperCase()===fieldName.toUpperCase());
     if(!targetField){ console.error(`Field ${fieldName} not found`); return false; }
@@ -810,8 +806,7 @@ async function autoCleanBlankOnLoad(){
       await cleanBlankOptions(fname, true);
       await new Promise(r=> setTimeout(r, 600));
     }
-    console.log('V87 Auto-clean done');
-  }catch(e){ console.warn('V87 auto-clean error', e); }
+      }catch(e){ console.warn('V87 auto-clean error', e); }
 }
 setTimeout(autoCleanBlankOnLoad, 2000);
 setTimeout(autoCleanBlankOnLoad, 6000);
@@ -882,9 +877,9 @@ async function fetchJemaahMetaOptionsFromMeta(){
     });
     console.log('✅ Jemaah V78 loaded', Object.keys(jemaahMetaFieldsByName).length, 'fields');
     const p = jemaahMetaFieldsByName['PAKEJ'];
-    if(p) console.log('Sample PAKEJ:', { id: p.id, id_len: p.id.length, type: p.type, choices: (p.options?.choices||[]).map(c=> ({id: c.id, len: c.id.length, name: c.name})) });
+    if(p) // removed sample log
     const ins = jemaahMetaFieldsByName['INSURAN'];
-    if(ins) console.log('Sample INSURAN:', { id: ins.id, id_len: ins.id.length, type: ins.type, choices: (ins.options?.choices||[]).map(c=> ({id: c.id, len: c.id.length, name: c.name})) });
+    if(ins) // removed sample log
     
     _jemaahMetaFetching=false;
     return jemaahFieldOptions;
@@ -899,23 +894,19 @@ async function fetchJemaahMetaOptionsFromMeta(){
 
 async function cleanBlankOptions(fieldName){
   try{
-    const base = window.AIRTABLE_BASE_ID||localStorage.getItem('effah_base_id')||'appSsn4JyQD4DnYu0';
-    const pat = window.AIRTABLE_PAT||localStorage.getItem('effah_api_pat');
-    if(!base||!pat) return;
-    console.log(`V84 Cleaning blank options for ${fieldName}...`);
-    _jemaahMetaCache = null;
-    await fetchJemaahMetaOptionsFromMeta();
+    if(_jemaahMetaCache && _jemaahMetaCache.fields && (Date.now() - (_jemaahMetaCache._time||0)) < 600000){
+      // use cache
+    } else {
+      await fetchJemaahMetaOptionsFromMeta();
+    }
     if(!_jemaahMetaCache) return;
     const targetField = _jemaahMetaCache.fields.find(f=> f.name.toUpperCase()===fieldName.toUpperCase());
     if(!targetField) return;
     const choices = targetField.options?.choices||[];
     const blankChoices = choices.filter(c=> !c.name || c.name.trim()==='');
     const realChoices = choices.filter(c=> c.name && c.name.trim()!=='');
-    console.log(`Found ${blankChoices.length} blank choices in ${fieldName}:`, blankChoices.map(c=> c.id));
-    console.log(`Real choices: ${realChoices.length}`, realChoices.map(c=> c.name));
-    if(blankChoices.length===0){
-      console.log(`No blank choices in ${fieldName} - already clean`);
-      return true;
+            if(blankChoices.length===0){
+            return true;
     }
     // V84: Keep only real choices with real 17-char IDs, filter out blank completely
     const realChoicesWithId = realChoices.filter(c=> c.id && c.id.length===17 && c.name && c.name.trim()!=='').map(c=> ({id: c.id, name: c.name}));
